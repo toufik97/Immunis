@@ -243,6 +243,39 @@ export const ReviewFlagSchema = z
     status: z.string().min(1)
   })
   .passthrough();
+export const ValidityDoseSchema = z
+  .object({
+    dose: z.number().int().min(1),
+    days: z.number().optional(),
+    weeks: z.number().optional(),
+    months: z.number().optional(),
+    years: z.number().optional()
+  })
+  .passthrough();
+
+export const ValidityBoosterSchema = z
+  .object({
+    dose: z.number().int().min(4),
+    label: z.string(),
+    min_age: DurationSchema,
+    min_interval: DurationSchema
+  })
+  .passthrough();
+
+export const ValiditySchema = z
+  .object({
+    primary: z
+      .object({
+        min_ages: z.array(ValidityDoseSchema).min(1),
+        min_interval: DurationSchema
+      })
+      .passthrough(),
+    boosters: z.array(ValidityBoosterSchema).min(1)
+  })
+  .passthrough();
+
+// Also add Validity to the exported types at the very bottom:
+export type Validity = z.infer<typeof ValiditySchema>;
 
 export const DtpProgramPolicySchema = z
   .object({
@@ -250,7 +283,8 @@ export const DtpProgramPolicySchema = z
     booster_policies: z.array(BoosterPolicySchema).min(1),
     protocols: z.array(ProtocolSchema).min(1),
     catchup_rules: z.array(CatchupRuleSchema).min(1),
-    review_flags: z.array(ReviewFlagSchema).optional()
+    review_flags: z.array(ReviewFlagSchema).optional(),
+    validity: ValiditySchema // <-- ADD THIS LINE
   })
   .passthrough();
 

@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { evaluateDtpDoses } from "../src/dtp-validity";
+import { loadSchedulePack } from "../src/load-schedule-pack";
+
+const pack = loadSchedulePack("MA");
+const validity = pack.programs.dtp.validity;
 
 describe("DTP Dose Validity", () => {
   const birthDate = "2025-01-01";
@@ -8,7 +12,7 @@ describe("DTP Dose Validity", () => {
     const history = [
       { administeredOn: "2025-03-01", productGroupId: "PENTA" as const }
     ];
-    const results = evaluateDtpDoses(history, birthDate);
+    const results = evaluateDtpDoses(history, birthDate, validity);
     
     expect(results[0].valid).toBe(true);
     expect(results[0].doseNumber).toBe(1);
@@ -18,7 +22,7 @@ describe("DTP Dose Validity", () => {
     const history = [
       { administeredOn: "2025-02-01", productGroupId: "PENTA" as const }
     ];
-    const results = evaluateDtpDoses(history, birthDate);
+    const results = evaluateDtpDoses(history, birthDate, validity);
     
     expect(results[0].valid).toBe(false);
     expect(results[0].reasons).toContain("INVALID_AGE_DOSE_1_TOO_EARLY");
@@ -29,7 +33,7 @@ describe("DTP Dose Validity", () => {
       { administeredOn: "2025-02-01", productGroupId: "PENTA" as const }, // Invalid (too early)
       { administeredOn: "2025-03-01", productGroupId: "PENTA" as const }  // Valid (becomes dose 1)
     ];
-    const results = evaluateDtpDoses(history, birthDate);
+    const results = evaluateDtpDoses(history, birthDate, validity);
     
     const validDoses = results.filter((r) => r.valid).length;
     expect(validDoses).toBe(1);
@@ -44,7 +48,7 @@ describe("DTP Dose Validity", () => {
       { administeredOn: "2025-03-01", productGroupId: "PENTA" as const },
       { administeredOn: "2025-03-15", productGroupId: "PENTA" as const } // Only 14 days later
     ];
-    const results = evaluateDtpDoses(history, birthDate);
+    const results = evaluateDtpDoses(history, birthDate, validity);
     
     expect(results[0].valid).toBe(true);
     expect(results[1].valid).toBe(false);

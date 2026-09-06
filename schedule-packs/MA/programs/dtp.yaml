@@ -25,6 +25,31 @@ booster_policies:
       min_interval_after_booster_1:
         years: 4
 
+validity:
+  primary:
+    min_ages:
+      - dose: 1
+        months: 2
+      - dose: 2
+        months: 3
+      - dose: 3
+        months: 4
+    min_interval:
+      days: 28
+  boosters:
+    - dose: 4
+      label: booster_1
+      min_age:
+        months: 18
+      min_interval:
+        months: 6
+    - dose: 5
+      label: booster_2
+      min_age:
+        years: 5
+      min_interval:
+        years: 4
+
 protocols:
   - id: DTP_PRIMARY_3_PENTA_4W
     label_fr: 3 doses Penta à 4 semaines d'intervalle

@@ -26,7 +26,7 @@ const history: ImmunizationRecord[] = [
 // Load the full schedule pack
 const pack = loadSchedulePack("MA");
 
-const doseResults = evaluateDtpDoses(history, patient.birthDate);
+const doseResults = evaluateDtpDoses(history, patient.birthDate, pack.programs.dtp.validity);
 const validDoseResults = doseResults.filter((dose) => dose.valid);
 const validDoses = validDoseResults.length;
 
