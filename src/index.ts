@@ -1,15 +1,16 @@
-import { ageInMonthsAt } from "./dates";
+import { ageInMonthsAt, parseDate } from "./dates";
 import { evaluateDtpDoses } from "./dtp-validity";
 import { loadDtpPolicy } from "./load-dtp-policy";
 import { selectDtpCatchupRuleFromPolicy } from "./rule-matcher";
+import { buildDtpPlan } from "./dtp-plan";
 
 import type { ImmunizationRecord, Patient } from "./types";
 
 const patient: Patient = {
-  birthDate: "2025-01-01"
+  birthDate: "2026-01-01"
 };
 
-const evaluationDate = new Date("2026-09-04");
+const evaluationDate = parseDate("2026-09-04");
 
 /**
  * Test history:
@@ -25,22 +26,24 @@ const evaluationDate = new Date("2026-09-04");
  * Age at dose: 2 months
  * Expected: VALID as dose 1
  */
-const history: ImmunizationRecord[] = [
-  {
-    administeredOn: "2025-02-01",
-    productGroupId: "PENTA"
-  },
-  {
-    administeredOn: "2025-03-01",
-    productGroupId: "PENTA"
-  }
-];
+const history: ImmunizationRecord[] = [];
 
 const policy = loadDtpPolicy();
 
 const doseResults = evaluateDtpDoses(history, patient.birthDate);
 
-const validDoses = doseResults.filter((dose) => dose.valid).length;
+const validDoseResults = doseResults.filter((dose) => dose.valid);
+
+const validDoses = validDoseResults.length;
+
+const validDoseDates = validDoseResults.map(
+  (dose) => dose.administeredOn
+);
+
+const lastValidDoseDate =
+  validDoseDates.length > 0
+    ? validDoseDates[validDoseDates.length - 1]
+    : null;
 
 const ageMonths = ageInMonthsAt(patient.birthDate, evaluationDate);
 
@@ -50,8 +53,14 @@ const rule = selectDtpCatchupRuleFromPolicy(
   validDoses
 );
 
-console.log("Morocco DTP engine prototype - YAML policy");
-console.log("-------------------------------------------");
+const plan = buildDtpPlan(rule, {
+  birthDate: patient.birthDate,
+  evaluationDate,
+  lastValidDoseDate
+});
+
+console.log("Morocco DTP engine prototype - Protocol scheduler");
+console.log("-------------------------------------------------");
 console.log("Loaded policy:", policy.program.id);
 console.log("Catch-up rules loaded:", policy.catchup_rules.length);
 console.log();
@@ -67,6 +76,24 @@ for (const dose of doseResults) {
 
 console.log();
 console.log("Valid DTP-containing doses:", validDoses);
+console.log("Last valid dose date:", lastValidDoseDate);
 console.log();
+
 console.log("Selected catch-up rule:");
 console.log(rule);
+console.log();
+
+console.log("DTP visit plan:");
+
+for (const visit of plan.visits) {
+  console.log(visit);
+}
+
+if (plan.warnings.length > 0) {
+  console.log();
+  console.log("Warnings:");
+
+  for (const warning of plan.warnings) {
+    console.log("-", warning);
+  }
+}
