@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
-    "check:pack": "tsx src/check-schedule-pack.ts"
+    "check:pack": "tsx src/check-schedule-pack.ts",
+    "test": "vitest run",
+    "test:watch": "vitest run --watch"
   },
   "keywords": [],
   "author": "",
@@ -14,7 +16,8 @@
   "devDependencies": {
     "@types/node": "^26.4.1",
     "tsx": "^4.23.13",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^2.1.9"
   },
   "dependencies": {
     "date-fns": "^4.4.0",
