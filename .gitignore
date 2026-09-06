@@ -4,3 +4,16 @@ coverage/
 .env
 *.log
 .DS_Store
+
+# Ignore everything inside the docs folder
+docs/*
+
+# But make an exception for the morocco folder
+!docs/morocco/
+
+# Ignore everything inside docs/morocco
+docs/morocco/*
+
+# But make an exception for the draft folder
+!docs/morocco/draft/
+!docs/morocco/draft/*
