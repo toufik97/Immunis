@@ -1,0 +1,23 @@
+{
+  "name": "vaccinati-3rd-attempt",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "date-fns": "^4.4.0",
+    "yaml": "^2.9.0",
+    "zod": "^4.5.4"
+  }
+}

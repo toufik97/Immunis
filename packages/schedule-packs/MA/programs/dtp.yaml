@@ -1,0 +1,513 @@
+# schedule-packs/MA/programs/dtp.yaml
+
+program:
+  id: DTP_PROGRAM
+  label_fr: DTC / Penta
+  description_fr: >
+    Programme diphtérie, tétanos, coqueluche.
+    Les doses Penta et DTC sont comptées comme doses DTP.
+  counter: DTP_CONTAINING_DOSES
+
+  primary_series:
+    required_valid_doses: 3
+
+  booster_policy: STANDARD_DTP_BOOSTERS
+
+booster_policies:
+  - id: STANDARD_DTP_BOOSTERS
+    label_fr: Rappels DTC standard
+
+    booster_1:
+      product_group: DTC
+      min_age:
+        months: 18
+      min_interval_after_primary_completion:
+        months: 6
+
+    booster_2:
+      product_group: DTC
+      min_age:
+        years: 5
+      min_interval_after_booster_1:
+        years: 4
+
+protocols:
+  - id: DTP_PRIMARY_3_PENTA_4W
+    label_fr: 3 doses Penta à 4 semaines d'intervalle
+    type: primary_series
+
+    steps:
+      - seq: 1
+        product_group: PENTA
+        timing: earliest
+
+      - seq: 2
+        product_group: PENTA
+        min_interval:
+          weeks: 4
+
+      - seq: 3
+        product_group: PENTA
+        min_interval:
+          weeks: 4
+
+  - id: DTP_PRIMARY_2PENTA_1DTC_4W
+    label_fr: 2 doses Penta + 1 dose DTC à 4 semaines d'intervalle
+    type: primary_series
+
+    steps:
+      - seq: 1
+        product_group: PENTA
+        timing: earliest
+
+      - seq: 2
+        product_group: PENTA
+        min_interval:
+          weeks: 4
+
+      - seq: 3
+        product_group: DTC
+        min_interval:
+          weeks: 4
+
+  - id: DTP_PRIMARY_3DTC
+    label_fr: 3 doses DTC
+    type: primary_series
+    confidence: draft
+
+    steps:
+      - seq: 1
+        product_group: DTC
+        timing: earliest
+
+      - seq: 2
+        product_group: DTC
+        min_interval:
+          weeks: 4
+
+      - seq: 3
+        product_group: DTC
+        min_interval:
+          months: 6
+
+  - id: DTP_ADD_2_PENTA_4W
+    label_fr: Ajouter 2 doses Penta à 4 semaines d'intervalle
+    type: primary_completion
+
+    steps:
+      - seq: 1
+        product_group: PENTA
+        timing: earliest
+
+      - seq: 2
+        product_group: PENTA
+        min_interval:
+          weeks: 4
+
+  - id: DTP_ADD_1_PENTA
+    label_fr: Ajouter 1 dose Penta
+    type: primary_completion
+
+    steps:
+      - seq: 1
+        product_group: PENTA
+        timing: earliest
+
+  - id: DTP_1PENTA_THEN_DTC_1M
+    label_fr: 1 Penta puis 1 DTC un mois plus tard
+    type: primary_completion
+    notes:
+      - Used when child has 1 previous valid DTP dose and is 18 months to <3 years.
+      - Booster 1 should be scheduled 6 months after completion of primary series.
+
+    steps:
+      - seq: 1
+        product_group: PENTA
+        timing: earliest
+
+      - seq: 2
+        product_group: DTC
+        min_interval:
+          months: 1
+
+  - id: DTP_1PENTA_THEN_DTC_6M
+    label_fr: 1 Penta puis 1 DTC six mois plus tard
+    type: primary_completion_and_booster_1
+    notes:
+      - Used when child has 2 previous valid DTP doses and is 18 months to <3 years.
+      - Penta completes primary series.
+      - DTC after 6 months is interpreted as booster 1.
+
+    steps:
+      - seq: 1
+        product_group: PENTA
+        role: primary_completion
+        timing: earliest
+
+      - seq: 2
+        product_group: DTC
+        role: booster_1
+        min_interval:
+          months: 6
+
+  - id: DTP_2DTC_1M
+    label_fr: 2 doses DTC à un mois d'intervalle
+    type: primary_completion
+    notes:
+      - Used when child has 1 previous valid DTP dose and is 3 years to <7 years.
+      - Booster 1 should be scheduled 6 months after completion.
+
+    steps:
+      - seq: 1
+        product_group: DTC
+        timing: earliest
+
+      - seq: 2
+        product_group: DTC
+        min_interval:
+          months: 1
+
+  - id: DTP_2DTC_6M
+    label_fr: 2 doses DTC à six mois d'intervalle
+    type: primary_completion_and_booster_1
+    confidence: needs_validation
+    notes:
+      - Used when child has 2 previous valid DTP doses and is 3 years to <7 years.
+      - Interpretation likely: first DTC completes primary series, second DTC is booster 1.
+      - Needs validation.
+
+    steps:
+      - seq: 1
+        product_group: DTC
+        role: primary_completion
+        timing: earliest
+
+      - seq: 2
+        product_group: DTC
+        role: booster_1
+        min_interval:
+          months: 6
+
+catchup_rules:
+  # --------------------------------------------------
+  # 0 previous valid DTP-containing dose
+  # --------------------------------------------------
+
+  - id: MA-DTP-CU-0D-LT12M
+    label_fr: 0 dose, moins de 12 mois
+    when:
+      age:
+        to_before:
+          months: 12
+      counter:
+        id: DTP_CONTAINING_DOSES
+        equals: 0
+    then:
+      action: start_protocol
+      protocol: DTP_PRIMARY_3_PENTA_4W
+      booster_policy: STANDARD_DTP_BOOSTERS
+    source: RAT-2025
+    confidence: official
+
+  - id: MA-DTP-CU-0D-12M-LT3Y
+    label_fr: 0 dose, 12 mois à moins de 3 ans
+    when:
+      age:
+        from:
+          months: 12
+        to_before:
+          years: 3
+      counter:
+        id: DTP_CONTAINING_DOSES
+        equals: 0
+    then:
+      action: start_protocol
+      protocol: DTP_PRIMARY_2PENTA_1DTC_4W
+      booster_policy: STANDARD_DTP_BOOSTERS
+    source: RAT-2025
+    confidence: official
+
+  - id: MA-DTP-CU-0D-3Y-LT7Y
+    label_fr: 0 dose, 3 ans à moins de 7 ans
+    when:
+      age:
+        from:
+          years: 3
+        to_before:
+          years: 7
+      counter:
+        id: DTP_CONTAINING_DOSES
+        equals: 0
+    then:
+      action: start_protocol
+      protocol: DTP_PRIMARY_3DTC
+      booster_policy: STANDARD_DTP_BOOSTERS
+    source: WEB-2020, RAT-2025
+    confidence: draft
+
+  # --------------------------------------------------
+  # 1 previous valid DTP-containing dose
+  # --------------------------------------------------
+
+  - id: MA-DTP-CU-1D-LT18M
+    label_fr: 1 dose, moins de 18 mois
+    when:
+      age:
+        to_before:
+          months: 18
+      counter:
+        id: DTP_CONTAINING_DOSES
+        equals: 1
+    then:
+      action: start_protocol
+      protocol: DTP_ADD_2_PENTA_4W
+      booster_policy: STANDARD_DTP_BOOSTERS
+    source: RAT-2025
+    confidence: official
+
+  - id: MA-DTP-CU-1D-18M-LT3Y
+    label_fr: 1 dose, 18 mois à moins de 3 ans
+    when:
+      age:
+        from:
+          months: 18
+        to_before:
+          years: 3
+      counter:
+        id: DTP_CONTAINING_DOSES
+        equals: 1
+    then:
+      action: start_protocol
+      protocol: DTP_1PENTA_THEN_DTC_1M
+      booster_policy: STANDARD_DTP_BOOSTERS
+    source: RAT-2025
+    confidence: official
+
+  - id: MA-DTP-CU-1D-3Y-LT7Y
+    label_fr: 1 dose, 3 ans à moins de 7 ans
+    when:
+      age:
+        from:
+          years: 3
+        to_before:
+          years: 7
+      counter:
+        id: DTP_CONTAINING_DOSES
+        equals: 1
+    then:
+      action: start_protocol
+      protocol: DTP_2DTC_1M
+      booster_policy: STANDARD_DTP_BOOSTERS
+    source: RAT-2025
+    confidence: official
+
+  # --------------------------------------------------
+  # 2 previous valid DTP-containing doses
+  # --------------------------------------------------
+
+  - id: MA-DTP-CU-2D-LT18M
+    label_fr: 2 doses, moins de 18 mois
+    when:
+      age:
+        to_before:
+          months: 18
+      counter:
+        id: DTP_CONTAINING_DOSES
+        equals: 2
+    then:
+      action: start_protocol
+      protocol: DTP_ADD_1_PENTA
+      booster_policy: STANDARD_DTP_BOOSTERS
+    source: RAT-2025
+    confidence: official
+
+  - id: MA-DTP-CU-2D-18M-LT3Y
+    label_fr: 2 doses, 18 mois à moins de 3 ans
+    when:
+      age:
+        from:
+          months: 18
+        to_before:
+          years: 3
+      counter:
+        id: DTP_CONTAINING_DOSES
+        equals: 2
+    then:
+      action: start_protocol
+      protocol: DTP_1PENTA_THEN_DTC_6M
+      booster_policy: STANDARD_DTP_BOOSTERS
+    source: RAT-2025
+    confidence: official
+
+  - id: MA-DTP-CU-2D-3Y-LT7Y
+    label_fr: 2 doses, 3 ans à moins de 7 ans
+    when:
+      age:
+        from:
+          years: 3
+        to_before:
+          years: 7
+      counter:
+        id: DTP_CONTAINING_DOSES
+        equals: 2
+    then:
+      action: start_protocol
+      protocol: DTP_2DTC_6M
+      booster_policy: STANDARD_DTP_BOOSTERS
+    source: RAT-2025
+    confidence: needs_validation
+
+  # --------------------------------------------------
+  # 3 previous valid DTP-containing doses
+  # --------------------------------------------------
+
+  - id: MA-DTP-CU-3D-LT18M
+    label_fr: 3 doses, moins de 18 mois
+    when:
+      age:
+        to_before:
+          months: 18
+      counter:
+        id: DTP_CONTAINING_DOSES
+        equals: 3
+    then:
+      action: schedule_future
+      future_dose: DTP_BOOSTER_1
+      product_group: DTC
+      earliest_date_formula: >
+        max(
+          patient.birth_date + 18 months,
+          last_primary_dose_date + 6 months
+        )
+      missing_required_date_behavior: NEEDS_REVIEW
+    source: RAT-2025, inferred
+    confidence: draft
+
+  - id: MA-DTP-CU-3D-18M-LT7Y
+    label_fr: 3 doses, 18 mois à moins de 7 ans
+    when:
+      age:
+        from:
+          months: 18
+        to_before:
+          years: 7
+      counter:
+        id: DTP_CONTAINING_DOSES
+        equals: 3
+    then:
+      action: give_if_due
+      dose: DTP_BOOSTER_1
+      product_group: DTC
+      earliest_date_formula: >
+        max(
+          patient.birth_date + 18 months,
+          last_primary_dose_date + 6 months
+        )
+      missing_required_date_behavior: NEEDS_REVIEW
+    source: RAT-2025
+    confidence: official
+
+  # --------------------------------------------------
+  # 4 previous valid DTP-containing doses
+  # --------------------------------------------------
+
+  - id: MA-DTP-CU-4D-LT5Y
+    label_fr: 4 doses, moins de 5 ans
+    when:
+      age:
+        to_before:
+          years: 5
+      counter:
+        id: DTP_CONTAINING_DOSES
+        equals: 4
+    then:
+      action: schedule_future
+      future_dose: DTP_BOOSTER_2
+      product_group: DTC
+      earliest_date_formula: >
+        max(
+          patient.birth_date + 5 years,
+          last_booster_1_date + 4 years
+        )
+      missing_required_date_behavior: NEEDS_REVIEW
+    source: inferred
+    confidence: needs_validation
+
+  - id: MA-DTP-CU-4D-5Y-LT7Y
+    label_fr: 4 doses, 5 ans à moins de 7 ans
+    when:
+      age:
+        from:
+          years: 5
+        to_before:
+          years: 7
+      counter:
+        id: DTP_CONTAINING_DOSES
+        equals: 4
+    then:
+      action: give_if_due
+      dose: DTP_BOOSTER_2
+      product_group: DTC
+      earliest_date_formula: >
+        max(
+          patient.birth_date + 5 years,
+          last_booster_1_date + 4 years
+        )
+      missing_required_date_behavior: NEEDS_REVIEW
+    source: RAT-2025
+    confidence: official
+
+  # --------------------------------------------------
+  # 5 previous valid DTP-containing doses
+  # --------------------------------------------------
+
+  - id: MA-DTP-CU-5D-LT7Y
+    label_fr: 5 doses, moins de 7 ans
+    when:
+      age:
+        to_before:
+          years: 7
+      counter:
+        id: DTP_CONTAINING_DOSES
+        gte: 5
+    then:
+      action: complete
+    source: RAT-2025
+    confidence: official
+
+review_flags:
+  - id: DTP-REVIEW-001
+    topic: Penta maximum age
+    question: >
+      Is Penta allowed up to <3 years in all catch-up cases,
+      and never after 3 years?
+    status: needs_validation
+
+  - id: DTP-REVIEW-002
+    topic: Td after 7 years
+    question: >
+      Does Td count toward the 5-dose DTC/Td requirement?
+      What about pertussis protection after 7 years?
+    status: needs_validation
+
+  - id: DTP-REVIEW-003
+    topic: 2 previous doses, 3 to <7 years
+    question: >
+      Confirm that DTP_2DTC_6M means:
+      first DTC completes primary series,
+      second DTC is booster 1.
+    status: needs_validation
+
+  - id: DTP-REVIEW-004
+    topic: Invalid early dose
+    question: >
+      If a DTP/Penta dose was given too early,
+      should it be ignored and repeated?
+    status: needs_validation
+
+  - id: DTP-REVIEW-005
+    topic: 4 doses under 5 years
+    question: >
+      Confirm waiting logic for second booster:
+      max(5 years, booster 1 + 4 years).
+    status: needs_validation
