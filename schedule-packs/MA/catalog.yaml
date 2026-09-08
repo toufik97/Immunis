@@ -1,5 +1,3 @@
-# schedule-packs/MA/catalog.yaml
-
 meta:
   country: MA
   pack_id: MA-PNI
@@ -10,149 +8,66 @@ meta:
 antigens:
   - id: DIPHTHERIA
     label_fr: Diphtérie
-
   - id: TETANUS
     label_fr: Tétanos
-
   - id: PERTUSSIS
     label_fr: Coqueluche
-
   - id: HIB
     label_fr: Haemophilus influenzae type b
-
   - id: HB
     label_fr: Hépatite B
-
   - id: POLIO_ORAL
     label_fr: Poliomyélite orale
-
   - id: POLIO_INACTIVATED
     label_fr: Poliomyélite inactivée
-
   - id: PCV
     label_fr: Pneumocoque
-
   - id: ROTAVIRUS
     label_fr: Rotavirus
-
   - id: MEASLES
     label_fr: Rougeole
-
   - id: RUBELLA
     label_fr: Rubéole
-
   - id: BCG
     label_fr: Tuberculose / BCG
 
 product_groups:
   - id: HB_MONO
     label_fr: Hépatite B monovalent
-    satisfies_antigens:
-      - HB
-
+    satisfies_antigens: [HB]
   - id: BCG
     label_fr: BCG
-    satisfies_antigens:
-      - BCG
-
+    satisfies_antigens: [BCG]
   - id: VPO
     label_fr: VPO
-    satisfies_antigens:
-      - POLIO_ORAL
-
+    satisfies_antigens: [POLIO_ORAL]
   - id: VPI
     label_fr: VPI
-    satisfies_antigens:
-      - POLIO_INACTIVATED
-
+    satisfies_antigens: [POLIO_INACTIVATED]
   - id: PENTA
     label_fr: Pentavalent
-    satisfies_antigens:
-      - DIPHTHERIA
-      - TETANUS
-      - PERTUSSIS
-      - HIB
-      - HB
-
-    age_limits:
-      # Official catch-up table uses Penta in some cases before 3 years.
-      catchup_max_age:
-        value:
-          years: 3
-        exclusive: true
-        confidence: official
-        source: RAT-2025
-
-      # Routine Penta is normally 2, 3, 4 months.
-      routine_max_age:
-        value:
-          months: 4
-        confidence: needs_validation
-
+    satisfies_antigens: [DIPHTHERIA, TETANUS, PERTUSSIS, HIB, HB]
   - id: DTC
     label_fr: DTC
-    satisfies_antigens:
-      - DIPHTHERIA
-      - TETANUS
-      - PERTUSSIS
-
-    age_limits:
-      max_age:
-        value:
-          years: 7
-        exclusive: true
-        confidence: official
-        source: RAT-2025
-
+    satisfies_antigens: [DIPHTHERIA, TETANUS, PERTUSSIS]
   - id: TD
     label_fr: Td
-    satisfies_antigens:
-      - DIPHTHERIA
-      - TETANUS
-
-    age_limits:
-      min_age:
-        value:
-          years: 7
-        confidence: needs_validation
-
-    notes:
-      - Pertussis protection after 7 years needs validation.
-      - Official 2025 document says use Td.
-      - Webinar 2020 mentions acellular pertussis after 7 years.
-
+    satisfies_antigens: [DIPHTHERIA, TETANUS]
   - id: PCV_PRIMOVAX
     label_fr: PrimoVax13 / PCV13-TT
-    satisfies_antigens:
-      - PCV
-
+    satisfies_antigens: [PCV]
   - id: PCV_PREVENAR
     label_fr: Prevenar 13
-    satisfies_antigens:
-      - PCV
-
+    satisfies_antigens: [PCV]
   - id: ROTAVIRUS
     label_fr: Rotavirus
-    satisfies_antigens:
-      - ROTAVIRUS
-
+    satisfies_antigens: [ROTAVIRUS]
   - id: RR
     label_fr: RR
-    satisfies_antigens:
-      - MEASLES
-      - RUBELLA
-
+    satisfies_antigens: [MEASLES, RUBELLA]
   - id: RRO
     label_fr: RRO
-    satisfies_antigens:
-      - MEASLES
-      - RUBELLA
-      # Mumps not currently tracked as a separate antigen in MVP.
-
+    satisfies_antigens: [MEASLES, RUBELLA]
   - id: VAR
     label_fr: VAR
-    satisfies_antigens:
-      - MEASLES
-    confidence: needs_validation
-    notes:
-      - Does VAR count for rubella? Needs validation.
+    satisfies_antigens: [MEASLES]

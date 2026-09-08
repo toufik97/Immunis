@@ -1,47 +1,72 @@
-export type ProductGroupId =
-  | "PENTA"
-  | "DTC"
-  | "TD"
-  | "HB_MONO"
-  | "BCG"
-  | "VPO"
-  | "VPI"
-  | "PCV_PRIMOVAX"
-  | "PCV_PREVENAR"
-  | "ROTAVIRUS"
-  | "RR"
-  | "RRO"
-  | "VAR"
-  | "UNKNOWN";
-
 export interface Patient {
-  birthDate: string; // format: YYYY-MM-DD
+  birthDate: string;
 }
 
 export interface ImmunizationRecord {
-  administeredOn: string; // format: YYYY-MM-DD
-  productGroupId: ProductGroupId;
+  administeredOn: string;
+  productGroupId: string;
+  overridden?: boolean;
 }
 
-export type DtpAction =
-  | { type: "start_protocol"; protocol: string }
-  | { type: "schedule_future"; futureDose: "DTP_BOOSTER_1" | "DTP_BOOSTER_2" }
-  | { type: "give_if_due"; dose: "DTP_BOOSTER_1" | "DTP_BOOSTER_2" }
-  | { type: "complete" }
-  | { type: "needs_review"; reason: string };
+export type ProgramStatus =
+  | "NEEDS_PRIMARY"
+  | "NEEDS_BOOSTER"
+  | "COMPLETE"
+  | "NOT_NEEDED";
 
-export type RuleConfidence =
-  | "official"
-  | "draft"
-  | "needs_validation";
+export interface AntigenNeed {
+  programId: string;
+  antigenTargets: string[];
+  counterId: string;
+  validDosesReceived: number;
+  dosesNeeded: number;
+  status: ProgramStatus;
+  matchedRuleId: string | null;
+  action: string | null;
+  boosterSequence: number | null;
+  boosterPolicyId: string | null;
+  warnings: string[];
+}
 
-export interface DtpCatchupRule {
-  id: string;
-  labelFr: string;
-  ageFromMonths?: number;
-  ageToBeforeMonths?: number;
-  validDosesEquals?: number;
-  validDosesGte?: number;
-  action: DtpAction;
-  confidence: RuleConfidence;
+export interface SlotProduct {
+  productGroupId: string;
+  coveredProgramIds: string[];
+}
+
+export interface PrimarySlotPlan {
+  slot: number;
+  products: SlotProduct[];
+}
+
+export interface BoosterPlan {
+  programId: string;
+  productGroupId: string;
+  boosterSequence: number;
+  role: string;
+}
+
+export interface ProductSelectionResult {
+  primarySlots: PrimarySlotPlan[];
+  boosterPlans: BoosterPlan[];
+  reasoning: string[];
+  warnings: string[];
+  strategy: string;
+}
+
+export interface PlannedVisit {
+  visitNumber: number;
+  date: string;
+  products: string[];
+  antigensCovered: string[];
+  role: string;
+  status: "DUE_NOW" | "DUE_FUTURE";
+}
+
+export interface VisitPlan {
+  visits: PlannedVisit[];
+  warnings: string[];
+}
+
+export interface DoseCounts {
+  [counterId: string]: number;
 }

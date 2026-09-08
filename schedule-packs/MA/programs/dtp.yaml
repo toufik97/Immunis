@@ -4,11 +4,45 @@ program:
   description_fr: >
     Programme diphtérie, tétanos, coqueluche.
     Les doses Penta et DTC sont comptées comme doses DTP.
+    Le choix du produit (Penta ou DTC) est délégué au sélecteur de produits.
+  antigen_targets:
+    - DIPHTHERIA
+    - TETANUS
+    - PERTUSSIS
   counter: DTP_CONTAINING_DOSES
-  primary_series:
-    required_valid_doses: 3
-  booster_policy: STANDARD_DTP_BOOSTERS
 
+primary_series:
+  required_valid_doses: 3
+
+  dose_validity:
+    - dose: 1
+      min_age:
+        months: 2
+      min_interval_from_previous: null
+
+    - dose: 2
+      min_age:
+        months: 3
+      min_interval_from_previous:
+        weeks: 4
+
+    - dose: 3
+      min_age:
+        months: 4
+      min_interval_from_previous:
+        conditional:
+          - when:
+              age_at_previous_dose:
+                to_before:
+                  months: 12
+            interval:
+              weeks: 4
+          - when:
+              age_at_previous_dose:
+                from:
+                  months: 12
+            interval:
+              months: 6 
 booster_policies:
   - id: STANDARD_DTP_BOOSTERS
     label_fr: Rappels DTC standard
@@ -25,168 +59,6 @@ booster_policies:
       min_interval_after_booster_1:
         years: 4
 
-validity:
-  primary:
-    min_ages:
-      - dose: 1
-        months: 2
-      - dose: 2
-        months: 3
-      - dose: 3
-        months: 4
-    min_interval:
-      days: 28
-  boosters:
-    - dose: 4
-      label: booster_1
-      min_age:
-        months: 18
-      min_interval:
-        months: 6
-    - dose: 5
-      label: booster_2
-      min_age:
-        years: 5
-      min_interval:
-        years: 4
-
-protocols:
-  - id: DTP_PRIMARY_3_PENTA_4W
-    label_fr: 3 doses Penta à 4 semaines d'intervalle
-    type: primary_series
-    steps:
-      - seq: 1
-        product_group: PENTA
-        timing: earliest
-      - seq: 2
-        product_group: PENTA
-        min_interval:
-          weeks: 4
-      - seq: 3
-        product_group: PENTA
-        min_interval:
-          weeks: 4
-
-  - id: DTP_PRIMARY_2PENTA_1DTC_4W
-    label_fr: 2 doses Penta + 1 dose DTC à 4 semaines d'intervalle
-    type: primary_series
-    steps:
-      - seq: 1
-        product_group: PENTA
-        timing: earliest
-      - seq: 2
-        product_group: PENTA
-        min_interval:
-          weeks: 4
-      - seq: 3
-        product_group: DTC
-        min_interval:
-          weeks: 4
-
-  - id: DTP_PRIMARY_3DTC
-    label_fr: 3 doses DTC
-    type: primary_series
-    confidence: draft
-    steps:
-      - seq: 1
-        product_group: DTC
-        timing: earliest
-      - seq: 2
-        product_group: DTC
-        min_interval:
-          weeks: 4
-      - seq: 3
-        product_group: DTC
-        min_interval:
-          months: 6
-
-  - id: DTP_ADD_2_PENTA_4W
-    label_fr: Ajouter 2 doses Penta à 4 semaines d'intervalle
-    type: primary_completion
-    steps:
-      - seq: 1
-        product_group: PENTA
-        timing: earliest
-      - seq: 2
-        product_group: PENTA
-        min_interval:
-          weeks: 4
-
-  - id: DTP_ADD_1_PENTA
-    label_fr: Ajouter 1 dose Penta
-    type: primary_completion
-    steps:
-      - seq: 1
-        product_group: PENTA
-        timing: earliest
-
-  - id: DTP_1PENTA_THEN_DTC_1M
-    label_fr: 1 Penta puis 1 DTC un mois plus tard
-    type: primary_completion
-    notes: |
-      Used when child has 1 previous valid DTP dose and is 18 months to <3 years.
-      Booster 1 should be scheduled 6 months after completion of primary series.
-    steps:
-      - seq: 1
-        product_group: PENTA
-        timing: earliest
-      - seq: 2
-        product_group: DTC
-        min_interval:
-          months: 1
-
-  - id: DTP_1PENTA_THEN_DTC_6M
-    label_fr: 1 Penta puis 1 DTC six mois plus tard
-    type: primary_completion_and_booster_1
-    notes: |
-      Used when child has 2 previous valid DTP doses and is 18 months to <3 years.
-      Penta completes primary series.
-      DTC after 6 months is interpreted as booster 1.
-    steps:
-      - seq: 1
-        product_group: PENTA
-        role: primary_completion
-        timing: earliest
-      - seq: 2
-        product_group: DTC
-        role: booster_1
-        min_interval:
-          months: 6
-
-  - id: DTP_2DTC_1M
-    label_fr: 2 doses DTC à un mois d'intervalle
-    type: primary_completion
-    notes: |
-      Used when child has 1 previous valid DTP dose and is 3 years to <7 years.
-      Booster 1 should be scheduled 6 months after completion.
-    steps:
-      - seq: 1
-        product_group: DTC
-        timing: earliest
-      - seq: 2
-        product_group: DTC
-        min_interval:
-          months: 1
-
-  - id: DTP_2DTC_6M
-    label_fr: 2 doses DTC à six mois d'intervalle
-    type: primary_completion_and_booster_1
-    confidence: needs_validation
-    notes: |
-      Used when child has 2 previous valid DTP doses and is 3 years to <7 years.
-      Interpretation likely: first DTC completes primary series, second DTC is booster 1.
-      Needs validation.
-    steps:
-      - seq: 1
-        product_group: DTC
-        role: primary_completion
-        timing: earliest
-      - seq: 2
-        product_group: DTC
-        role: booster_1
-        min_interval:
-          months: 6
-
 catchup_rules:
   # --------------------------------------------------
   # 0 previous valid DTP-containing dose
@@ -201,8 +73,8 @@ catchup_rules:
         id: DTP_CONTAINING_DOSES
         equals: 0
     then:
-      action: start_protocol
-      protocol: DTP_PRIMARY_3_PENTA_4W
+      action: complete_primary
+      doses_needed: 3
       booster_policy: STANDARD_DTP_BOOSTERS
     source: RAT-2025
     confidence: official
@@ -219,8 +91,8 @@ catchup_rules:
         id: DTP_CONTAINING_DOSES
         equals: 0
     then:
-      action: start_protocol
-      protocol: DTP_PRIMARY_2PENTA_1DTC_4W
+      action: complete_primary
+      doses_needed: 3
       booster_policy: STANDARD_DTP_BOOSTERS
     source: RAT-2025
     confidence: official
@@ -237,8 +109,8 @@ catchup_rules:
         id: DTP_CONTAINING_DOSES
         equals: 0
     then:
-      action: start_protocol
-      protocol: DTP_PRIMARY_3DTC
+      action: complete_primary
+      doses_needed: 3
       booster_policy: STANDARD_DTP_BOOSTERS
     source: WEB-2020, RAT-2025
     confidence: draft
@@ -256,8 +128,8 @@ catchup_rules:
         id: DTP_CONTAINING_DOSES
         equals: 1
     then:
-      action: start_protocol
-      protocol: DTP_ADD_2_PENTA_4W
+      action: complete_primary
+      doses_needed: 2
       booster_policy: STANDARD_DTP_BOOSTERS
     source: RAT-2025
     confidence: official
@@ -274,8 +146,8 @@ catchup_rules:
         id: DTP_CONTAINING_DOSES
         equals: 1
     then:
-      action: start_protocol
-      protocol: DTP_1PENTA_THEN_DTC_1M
+      action: complete_primary
+      doses_needed: 2
       booster_policy: STANDARD_DTP_BOOSTERS
     source: RAT-2025
     confidence: official
@@ -292,8 +164,8 @@ catchup_rules:
         id: DTP_CONTAINING_DOSES
         equals: 1
     then:
-      action: start_protocol
-      protocol: DTP_2DTC_1M
+      action: complete_primary
+      doses_needed: 2
       booster_policy: STANDARD_DTP_BOOSTERS
     source: RAT-2025
     confidence: official
@@ -311,8 +183,8 @@ catchup_rules:
         id: DTP_CONTAINING_DOSES
         equals: 2
     then:
-      action: start_protocol
-      protocol: DTP_ADD_1_PENTA
+      action: complete_primary
+      doses_needed: 1
       booster_policy: STANDARD_DTP_BOOSTERS
     source: RAT-2025
     confidence: official
@@ -329,8 +201,8 @@ catchup_rules:
         id: DTP_CONTAINING_DOSES
         equals: 2
     then:
-      action: start_protocol
-      protocol: DTP_1PENTA_THEN_DTC_6M
+      action: complete_primary
+      doses_needed: 1
       booster_policy: STANDARD_DTP_BOOSTERS
     source: RAT-2025
     confidence: official
@@ -347,8 +219,8 @@ catchup_rules:
         id: DTP_CONTAINING_DOSES
         equals: 2
     then:
-      action: start_protocol
-      protocol: DTP_2DTC_6M
+      action: complete_primary
+      doses_needed: 1
       booster_policy: STANDARD_DTP_BOOSTERS
     source: RAT-2025
     confidence: needs_validation
@@ -366,15 +238,9 @@ catchup_rules:
         id: DTP_CONTAINING_DOSES
         equals: 3
     then:
-      action: schedule_future
-      future_dose: DTP_BOOSTER_1
-      product_group: DTC
-      earliest_date_formula: >
-        max(
-          patient.birth_date + 18 months,
-          last_primary_dose_date + 6 months
-        )
-      missing_required_date_behavior: NEEDS_REVIEW
+      action: schedule_booster
+      booster_sequence: 1
+      booster_policy: STANDARD_DTP_BOOSTERS
     source: RAT-2025, inferred
     confidence: draft
 
@@ -390,15 +256,9 @@ catchup_rules:
         id: DTP_CONTAINING_DOSES
         equals: 3
     then:
-      action: give_if_due
-      dose: DTP_BOOSTER_1
-      product_group: DTC
-      earliest_date_formula: >
-        max(
-          patient.birth_date + 18 months,
-          last_primary_dose_date + 6 months
-        )
-      missing_required_date_behavior: NEEDS_REVIEW
+      action: give_booster_if_due
+      booster_sequence: 1
+      booster_policy: STANDARD_DTP_BOOSTERS
     source: RAT-2025
     confidence: official
 
@@ -415,15 +275,9 @@ catchup_rules:
         id: DTP_CONTAINING_DOSES
         equals: 4
     then:
-      action: schedule_future
-      future_dose: DTP_BOOSTER_2
-      product_group: DTC
-      earliest_date_formula: >
-        max(
-          patient.birth_date + 5 years,
-          last_booster_1_date + 4 years
-        )
-      missing_required_date_behavior: NEEDS_REVIEW
+      action: schedule_booster
+      booster_sequence: 2
+      booster_policy: STANDARD_DTP_BOOSTERS
     source: inferred
     confidence: needs_validation
 
@@ -439,15 +293,9 @@ catchup_rules:
         id: DTP_CONTAINING_DOSES
         equals: 4
     then:
-      action: give_if_due
-      dose: DTP_BOOSTER_2
-      product_group: DTC
-      earliest_date_formula: >
-        max(
-          patient.birth_date + 5 years,
-          last_booster_1_date + 4 years
-        )
-      missing_required_date_behavior: NEEDS_REVIEW
+      action: give_booster_if_due
+      booster_sequence: 2
+      booster_policy: STANDARD_DTP_BOOSTERS
     source: RAT-2025
     confidence: official
 
@@ -486,9 +334,7 @@ review_flags:
   - id: DTP-REVIEW-003
     topic: 2 previous doses, 3 to <7 years
     question: >
-      Confirm that DTP_2DTC_6M means:
-      first DTC completes primary series,
-      second DTC is booster 1.
+      Confirm interpretation for 2 DTC doses 6 months apart.
     status: needs_validation
 
   - id: DTP-REVIEW-004
@@ -501,6 +347,13 @@ review_flags:
   - id: DTP-REVIEW-005
     topic: 4 doses under 5 years
     question: >
-      Confirm waiting logic for second booster:
-      max(5 years, booster 1 + 4 years).
+      Confirm waiting logic for second booster.
     status: needs_validation
+
+  - id: DTP-REVIEW-006
+    topic: Dose 2 to 3 interval conflict
+    question: >
+      2020 webinar says 6 months between dose 2 and 3 for children over 1 year.
+      2025 document says 1 month interval for 12m-3y catch-up.
+      Clinician confirmed 6 months for dose 2 to 3 when child is over 1 year.
+    status: clinician_confirmed

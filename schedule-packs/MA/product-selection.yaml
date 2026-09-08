@@ -1,0 +1,39 @@
+product_selection:
+  label_fr: Sélection dynamique des produits
+  description_fr: >
+    Règles génériques de sélection de produits.
+    Le moteur ne connaît pas les vaccins par leur nom.
+    Il lit ce fichier et applique les règles.
+
+  selection:
+    mode: greedy_program_coverage
+    coverage_reward: 100
+    unneeded_program_penalty: 200
+    max_alignment_delay:
+      days: 45
+
+  eligibility:
+    - product_group: PENTA
+      max_age:
+        years: 3
+        exclusive: true
+
+    - product_group: DTC
+      max_age:
+        years: 7
+        exclusive: true
+
+  product_ranking:
+    - PENTA
+    - DTC
+    - HB_MONO
+    - VPO
+    - VPI
+    - RR
+    - RRO
+    - BCG
+    - PCV_PRIMOVAX
+    - PCV_PREVENAR
+    - ROTAVIRUS
+    - TD
+    - VAR

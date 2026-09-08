@@ -1,0 +1,69 @@
+program:
+  id: HB_PROGRAM
+  label_fr: Hépatite B
+  description_fr: >
+    Programme hépatite B.
+    Les doses Penta comptent comme doses HB.
+    Le choix du produit (Penta ou HB_MONO) est délégué au sélecteur de produits.
+  antigen_targets:
+    - HB
+  counter: HB_DOSES
+
+primary_series:
+  required_valid_doses: 3
+
+  dose_validity:
+    - dose: 1
+      min_age:
+        birth: true
+      min_interval_from_previous: null
+
+    - dose: 2
+      min_age:
+        months: 1
+      min_interval_from_previous:
+        months: 1
+
+    - dose: 3
+      min_age:
+        months: 6
+      min_interval_from_previous:
+        months: 5
+catchup_rules:
+  - id: MA-HB-CU-0D
+    label_fr: "0 dose HB, jamais vacciné"
+    when:
+      counter:
+        id: HB_DOSES
+        equals: 0
+    then:
+      action: complete_primary
+      doses_needed: 3
+    source: RAT-2025, WEB-2020
+    confidence: official
+
+  - id: MA-HB-CU-PARTIAL
+    label_fr: "Vaccination HB partielle, compléter"
+    when:
+      counter:
+        id: HB_DOSES
+        gte: 1
+    then:
+      action: complete_remaining
+    source: RAT-2025, WEB-2020
+    confidence: official
+
+review_flags:
+  - id: HB-REVIEW-001
+    topic: HB birth dose
+    question: >
+      If HB birth dose was not given within 24 hours,
+      what is the exact timing for the first catch-up dose?
+    status: needs_validation
+
+  - id: HB-REVIEW-002
+    topic: Penta counting for HB
+    question: >
+      Confirm that each Penta dose counts as one HB dose.
+      Clinician confirmed this.
+    status: clinician_confirmed

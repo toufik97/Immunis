@@ -1,0 +1,75 @@
+program:
+  id: HIB_PROGRAM
+  label_fr: Haemophilus influenzae type b
+  description_fr: >
+    Programme Haemophilus influenzae type b.
+    Les doses Penta comptent comme doses Hib.
+    Le besoin en Hib dépend de l'âge.
+  antigen_targets:
+    - HIB
+  counter: HIB_DOSES
+
+primary_series:
+  min_age_first_dose:
+    months: 6
+    
+catchup_rules:
+  - id: MA-HIB-CU-6M-12M
+    label_fr: "6 à 12 mois, 0 dose Hib"
+    when:
+      age:
+        from:
+          months: 6
+        to_before:
+          months: 12
+      counter:
+        id: HIB_DOSES
+        equals: 0
+    then:
+      action: complete_primary
+      doses_needed: 2
+      booster:
+        min_age:
+          months: 12
+        min_interval_after_last_primary:
+          months: 2
+    source: RAT-2025, WEB-2020
+    confidence: official
+
+  - id: MA-HIB-CU-1Y-5Y
+    label_fr: "1 à 5 ans, 0 dose Hib"
+    when:
+      age:
+        from:
+          years: 1
+        to_before:
+          years: 5
+      counter:
+        id: HIB_DOSES
+        equals: 0
+    then:
+      action: complete_primary
+      doses_needed: 1
+    source: RAT-2025, WEB-2020
+    confidence: official
+
+  - id: MA-HIB-CU-OVER5Y
+    label_fr: "5 ans et plus, Hib non nécessaire"
+    when:
+      age:
+        from:
+          years: 5
+    then:
+      action: none
+      doses_needed: 0
+    source: RAT-2025, WEB-2020
+    confidence: official
+
+review_flags:
+  - id: HIB-REVIEW-001
+    topic: Hib booster timing for 6-12 months catch-up
+    question: >
+      For children catching up between 6 and 12 months,
+      the booster timing is set to 12 months with 2 months interval.
+      Needs official confirmation.
+    status: needs_validation
