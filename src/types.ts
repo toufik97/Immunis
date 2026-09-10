@@ -53,13 +53,19 @@ export interface ProductSelectionResult {
   strategy: string;
 }
 
+export type VisitStatus = "DUE_NOW" | "DUE_FUTURE" | "PROJECTED";
+
 export interface PlannedVisit {
   visitNumber: number;
   date: string;
   products: string[];
   antigensCovered: string[];
   role: string;
-  status: "DUE_NOW" | "DUE_FUTURE";
+  status: VisitStatus;
+}
+
+export interface EvaluateOptions {
+  projection?: "next" | "full";
 }
 
 export interface VisitPlan {

@@ -4,7 +4,10 @@ program:
   description_fr: >
     Programme hépatite B.
     Les doses Penta comptent comme doses HB.
-    Le choix du produit (Penta ou HB_MONO) est délégué au sélecteur de produits.
+    Dans le calendrier normal du nourrisson, HB est donné
+    à la naissance puis via Penta à 2, 3 et 4 mois.
+    En rattrapage après 12 mois, la troisième dose doit être
+    administrée au moins 5 mois après la deuxième dose.
   antigen_targets:
     - HB
   counter: HB_DOSES
@@ -16,7 +19,6 @@ primary_series:
     - dose: 1
       min_age:
         birth: true
-      min_interval_from_previous: null
 
     - dose: 2
       min_age:
@@ -26,9 +28,23 @@ primary_series:
 
     - dose: 3
       min_age:
-        months: 6
+        months: 3
       min_interval_from_previous:
-        months: 5
+        conditional:
+          - when:
+              age_at_previous_dose:
+                to_before:
+                  months: 12
+            interval:
+              weeks: 4
+
+          - when:
+              age_at_previous_dose:
+                from:
+                  months: 12
+            interval:
+              months: 5
+              
 catchup_rules:
   - id: MA-HB-CU-0D
     label_fr: "0 dose HB, jamais vacciné"
@@ -55,15 +71,21 @@ catchup_rules:
 
 review_flags:
   - id: HB-REVIEW-001
-    topic: HB birth dose
+    topic: HB third dose conditional interval
     question: >
-      If HB birth dose was not given within 24 hours,
-      what is the exact timing for the first catch-up dose?
-    status: needs_validation
+      Routine infant schedule (Penta at 2, 3, 4 months) uses
+      4-week intervals, so when dose 2 was given before 12 months
+      of age the third dose requires only 4 weeks interval and
+      minimum age 4 months (16 weeks per Annex 2).
+      When dose 2 was given at 12 months or older, catch-up timing
+      applies: minimum 5 months between dose 2 and dose 3
+      (official window 5 to 12 months).
+    status: policy_interpretation
 
   - id: HB-REVIEW-002
-    topic: Penta counting for HB
+    topic: Fourth HB dose through Penta
     question: >
-      Confirm that each Penta dose counts as one HB dose.
-      Clinician confirmed this.
-    status: clinician_confirmed
+      Routine schedule may produce 4 HB doses (birth plus Penta
+      at 2, 3, 4 months). Only 3 are required. Extra doses are
+      accepted and not harmful.
+    status: needs_validation

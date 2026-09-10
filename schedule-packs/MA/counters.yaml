@@ -1,50 +1,89 @@
 counters:
   - id: DTP_CONTAINING_DOSES
     label_fr: Doses valides contenant DTC
-    counts_product_groups: [PENTA, DTC]
+    description_fr: >
+      Nombre de doses valides de vaccins contenant les antigènes
+      diphtérie, tétanos et coqueluche.
+    counts_product_groups:
+      - PENTA
+      - DTC
     only_valid_doses: true
+
+  - id: DT_CONTAINING_DOSES
+    label_fr: Doses valides contenant DT
+    description_fr: >
+      Nombre de doses valides de vaccins contenant diphtérie et tétanos.
+      Utilisé potentiellement après 7 ans avec Td.
+    counts_product_groups:
+      - PENTA
+      - DTC
+      - TD
+    only_valid_doses: true
+    confidence: needs_validation
 
   - id: HB_DOSES
     label_fr: Doses valides Hépatite B
-    counts_product_groups: [HB_MONO, PENTA]
+    description_fr: >
+      Nombre de doses valides contre l'hépatite B.
+      Les doses Penta comptent comme doses HB.
+    counts_product_groups:
+      - HB_MONO
+      - PENTA
     only_valid_doses: true
 
   - id: HIB_DOSES
     label_fr: Doses valides Hib
-    counts_product_groups: [PENTA]
+    description_fr: >
+      Nombre de doses valides contre Haemophilus influenzae type b.
+      Les doses Penta comptent comme doses Hib.
+    counts_product_groups:
+      - PENTA
     only_valid_doses: true
 
   - id: POLIO_ORAL_DOSES
     label_fr: Doses valides VPO
-    counts_product_groups: [VPO]
+    counts_product_groups:
+      - VPO
     only_valid_doses: true
 
   - id: POLIO_INACTIVATED_DOSES
     label_fr: Doses valides VPI
-    counts_product_groups: [VPI]
+    counts_product_groups:
+      - VPI
     only_valid_doses: true
 
   - id: PCV_DOSES
     label_fr: Doses valides Pneumocoque
-    counts_product_groups: [PCV_PRIMOVAX, PCV_PREVENAR]
+    counts_product_groups:
+      - PCV_PRIMOVAX
+      - PCV_PREVENAR
     only_valid_doses: true
+    product_history_aware: true
 
   - id: ROTAVIRUS_DOSES
     label_fr: Doses valides Rotavirus
-    counts_product_groups: [ROTAVIRUS]
+    counts_product_groups:
+      - ROTAVIRUS
     only_valid_doses: true
 
   - id: MEASLES_DOSES
     label_fr: Doses valides Rougeole
-    counts_product_groups: [RR, RRO, VAR]
+    counts_product_groups:
+      - RR
+      - RRO
+      - VAR
     only_valid_doses: true
+    confidence: needs_validation
 
   - id: RUBELLA_DOSES
     label_fr: Doses valides Rubéole
-    counts_product_groups: [RR, RRO]
+    counts_product_groups:
+      - RR
+      - RRO
     only_valid_doses: true
 
   - id: BCG_DOSES
     label_fr: Doses BCG
-    counts_product_groups: [BCG]
+    counts_product_groups:
+      - BCG
     only_valid_doses: true

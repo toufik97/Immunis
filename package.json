@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
-    "check:pack": "tsx src/check-schedule-pack.ts",
     "test": "vitest run",
-    "test:watch": "vitest run --watch"
+    "test:watch": "vitest run --watch",
+    "serve": "tsx src/server.ts"
   },
   "keywords": [],
   "author": "",

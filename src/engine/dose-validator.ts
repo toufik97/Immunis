@@ -14,6 +14,7 @@ export interface ValidatedDose {
   administeredOn: string;
   valid: boolean;
   reasons: string[];
+  warnings: string[];
 }
 
 export interface ValidationResult {
@@ -22,12 +23,18 @@ export interface ValidationResult {
   validDoseCount: number;
 }
 
+export interface ValidityContext {
+  rules: any[];
+  requiredValidDoses: number;
+  boosterTargets: Record<number, { minAge?: any; interval?: any }>;
+}
+
 export function validateCounterDoses(
   counterId: string,
   history: ImmunizationRecord[],
   pack: SchedulePack,
   patient: Patient,
-  doseValidityRules: any[]
+  context: ValidityContext
 ): ValidationResult {
   const birthDate = parseDate(patient.birthDate);
 
@@ -35,11 +42,7 @@ export function validateCounterDoses(
   const counter = counters.find((c: any) => c.id === counterId);
 
   if (!counter) {
-    return {
-      counterId,
-      doses: [],
-      validDoseCount: 0
-    };
+    return { counterId, doses: [], validDoseCount: 0 };
   }
 
   const productGroups: string[] = Array.isArray(counter.counts_product_groups)
@@ -59,15 +62,31 @@ export function validateCounterDoses(
   let lastValidDoseDate: Date | null = null;
   let lastValidDoseAgeMonths: number | null = null;
 
-  for (const record of relevantRecords) {
+  // CHANGE 1: indexed loop so we can look at the previous record
+  for (let i = 0; i < relevantRecords.length; i++) {
+    const record = relevantRecords[i];
     const doseDate = parseDate(record.administeredOn);
     const doseAgeMonths = ageInMonthsAt(birthDate, doseDate);
     const doseNumber = validDoseCount + 1;
     const reasons: string[] = [];
+    const warnings: string[] = [];
 
-    const validityRule = doseValidityRules?.find(
+    // CHANGE 2: G8 / E2 — same product recorded twice on the same day
+    const previousRecord = relevantRecords[i - 1];
+    if (
+      previousRecord &&
+      previousRecord.productGroupId === record.productGroupId &&
+      previousRecord.administeredOn === record.administeredOn
+    ) {
+      reasons.push("DUPLICATE_SAME_DAY");
+    }
+
+    const validityRule = context.rules?.find(
       (rule: any) => rule.dose === doseNumber
     );
+
+    // ---------- T1: floors (invalidating) ----------
+    let t1IntervalPassed = true;
 
     if (validityRule?.min_age) {
       const minAgeMonths = durationToMonths(validityRule.min_age);
@@ -91,6 +110,7 @@ export function validateCounterDoses(
 
         if (actualDays < requiredDays) {
           reasons.push(`INVALID_INTERVAL_BEFORE_DOSE_${doseNumber}`);
+          t1IntervalPassed = false;
         }
       }
     }
@@ -103,6 +123,44 @@ export function validateCounterDoses(
 
     const valid = reasons.length === 0 || isOverridden;
 
+    // ---------- T2: policy-target deviations (counted, warned) ----------
+    if (valid && doseNumber > context.requiredValidDoses) {
+      const seq = doseNumber - context.requiredValidDoses;
+      const target = context.boosterTargets?.[seq];
+
+      if (target) {
+        if (target.minAge) {
+          const targetAgeMonths = durationToMonths(target.minAge);
+
+          if (doseAgeMonths < targetAgeMonths) {
+            warnings.push(
+              `EARLY_BOOSTER_${seq}_COUNTED: administered at ${doseAgeMonths} months, policy target ${targetAgeMonths} months. Dose counted.`
+            );
+          }
+        }
+
+        if (target.interval && lastValidDoseDate && t1IntervalPassed) {
+          const targetInterval = resolveDuration(
+            target.interval,
+            lastValidDoseAgeMonths ?? 0
+          );
+
+          if (targetInterval) {
+            const requiredDays = durationToDays(targetInterval);
+            const actualDays = Math.round(
+              (doseDate.getTime() - lastValidDoseDate.getTime()) / 86400000
+            );
+
+            if (actualDays < requiredDays) {
+              warnings.push(
+                `SHORT_BOOSTER_${seq}_INTERVAL_COUNTED: interval shorter than policy target. Dose counted.`
+              );
+            }
+          }
+        }
+      }
+    }
+
     if (valid) {
       validDoseCount++;
       lastValidDoseDate = doseDate;
@@ -114,13 +172,10 @@ export function validateCounterDoses(
       productGroupId: record.productGroupId,
       administeredOn: record.administeredOn,
       valid,
-      reasons
+      reasons,
+      warnings
     });
   }
 
-  return {
-    counterId,
-    doses,
-    validDoseCount
-  };
+  return { counterId, doses, validDoseCount };
 }

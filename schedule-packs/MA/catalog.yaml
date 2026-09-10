@@ -1,73 +1,118 @@
 meta:
   country: MA
   pack_id: MA-PNI
-  version: 0.1.0
+  version: 0.2.0
   status: draft
   clinical_approval: pending
 
 antigens:
   - id: DIPHTHERIA
     label_fr: Diphtérie
+
   - id: TETANUS
     label_fr: Tétanos
+
   - id: PERTUSSIS
     label_fr: Coqueluche
+
   - id: HIB
     label_fr: Haemophilus influenzae type b
+
   - id: HB
     label_fr: Hépatite B
+
   - id: POLIO_ORAL
     label_fr: Poliomyélite orale
+
   - id: POLIO_INACTIVATED
     label_fr: Poliomyélite inactivée
+
   - id: PCV
     label_fr: Pneumocoque
+
   - id: ROTAVIRUS
     label_fr: Rotavirus
+
   - id: MEASLES
     label_fr: Rougeole
+
   - id: RUBELLA
     label_fr: Rubéole
+
   - id: BCG
     label_fr: Tuberculose / BCG
 
 product_groups:
   - id: HB_MONO
     label_fr: Hépatite B monovalent
-    satisfies_antigens: [HB]
+    satisfies_antigens:
+      - HB
+
   - id: BCG
     label_fr: BCG
-    satisfies_antigens: [BCG]
+    satisfies_antigens:
+      - BCG
+
   - id: VPO
     label_fr: VPO
-    satisfies_antigens: [POLIO_ORAL]
+    satisfies_antigens:
+      - POLIO_ORAL
+
   - id: VPI
     label_fr: VPI
-    satisfies_antigens: [POLIO_INACTIVATED]
+    satisfies_antigens:
+      - POLIO_INACTIVATED
+
   - id: PENTA
     label_fr: Pentavalent
-    satisfies_antigens: [DIPHTHERIA, TETANUS, PERTUSSIS, HIB, HB]
+    satisfies_antigens:
+      - DIPHTHERIA
+      - TETANUS
+      - PERTUSSIS
+      - HIB
+      - HB
+
   - id: DTC
     label_fr: DTC
-    satisfies_antigens: [DIPHTHERIA, TETANUS, PERTUSSIS]
+    satisfies_antigens:
+      - DIPHTHERIA
+      - TETANUS
+      - PERTUSSIS
+
   - id: TD
     label_fr: Td
-    satisfies_antigens: [DIPHTHERIA, TETANUS]
+    satisfies_antigens:
+      - DIPHTHERIA
+      - TETANUS
+
   - id: PCV_PRIMOVAX
     label_fr: PrimoVax13 / PCV13-TT
-    satisfies_antigens: [PCV]
+    satisfies_antigens:
+      - PCV
+
   - id: PCV_PREVENAR
     label_fr: Prevenar 13
-    satisfies_antigens: [PCV]
+    satisfies_antigens:
+      - PCV
+
   - id: ROTAVIRUS
     label_fr: Rotavirus
-    satisfies_antigens: [ROTAVIRUS]
+    satisfies_antigens:
+      - ROTAVIRUS
+
   - id: RR
     label_fr: RR
-    satisfies_antigens: [MEASLES, RUBELLA]
+    satisfies_antigens:
+      - MEASLES
+      - RUBELLA
+
   - id: RRO
     label_fr: RRO
-    satisfies_antigens: [MEASLES, RUBELLA]
+    satisfies_antigens:
+      - MEASLES
+      - RUBELLA
+
   - id: VAR
     label_fr: VAR
-    satisfies_antigens: [MEASLES]
+    satisfies_antigens:
+      - MEASLES

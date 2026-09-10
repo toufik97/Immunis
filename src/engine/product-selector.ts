@@ -24,7 +24,9 @@ export function selectProducts(
   const selectionConfig: any = productSelection.selection ?? {};
   const eligibilityRules: any[] = productSelection.eligibility ?? [];
   const ranking: string[] = productSelection.product_ranking ?? [];
-
+  
+  const preferences: any[] = productSelection.preferences ?? [];
+  
   const coverageReward = Number(selectionConfig.coverage_reward ?? 100);
   const unneededPenalty = Number(selectionConfig.unneeded_program_penalty ?? 200);
 
@@ -118,7 +120,8 @@ export function selectProducts(
         const score =
           coveredNeeded.length * coverageReward -
           coveredUnneeded.length * unneededPenalty +
-          rankBonus;
+          rankBonus +
+          preferenceBonus(product.id, neededNow, preferences);
 
         if (score > bestScore) {
           bestScore = score;
@@ -215,7 +218,7 @@ export function selectProducts(
   };
 }
 
-function isProductEligible(
+export function isProductEligible(
   productGroupId: string,
   ageMonths: number,
   eligibilityRules: any[]
@@ -253,7 +256,7 @@ function isProductEligible(
   return true;
 }
 
-function productCoversProgram(product: any, need: AntigenNeed): boolean {
+export function productCoversProgram(product: any, need: AntigenNeed): boolean {
   const satisfies: string[] = Array.isArray(product.satisfies_antigens)
     ? product.satisfies_antigens
     : [];
@@ -261,4 +264,31 @@ function productCoversProgram(product: any, need: AntigenNeed): boolean {
   return need.antigenTargets.some(antigen =>
     satisfies.includes(antigen)
   );
+}
+function preferenceBonus(
+  productId: string,
+  neededNow: AntigenNeed[],
+  preferences: any[]
+): number {
+  let bonus = 0;
+
+  for (const pref of preferences) {
+    const when = pref?.when ?? {};
+    const then = pref?.then ?? {};
+
+    if (then.prefer_product !== productId) {
+      continue;
+    }
+
+    if (
+      when.program_needed &&
+      !neededNow.some(n => n.programId === when.program_needed)
+    ) {
+      continue;
+    }
+
+    bonus += Number(then.bonus ?? 0);
+  }
+
+  return bonus;
 }

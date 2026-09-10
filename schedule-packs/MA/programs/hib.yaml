@@ -3,23 +3,40 @@ program:
   label_fr: Haemophilus influenzae type b
   description_fr: >
     Programme Haemophilus influenzae type b.
-    Les doses Penta comptent comme doses Hib.
-    Le besoin en Hib dépend de l'âge.
+    Tout départ avant 12 mois : 3 doses de Penta à 4 semaines
+    d'intervalle (la 3ème dose tient lieu de rappel pour les
+    démarrages 6-12 mois). Après 12 mois : 1 dose suffit si
+    jamais vacciné ; aucune dose si déjà ≥1 dose.
+    Après 5 ans : aucune dose.
   antigen_targets:
     - HIB
   counter: HIB_DOSES
 
 primary_series:
-  min_age_first_dose:
-    months: 6
-    
+  required_valid_doses: 3
+
+  dose_validity:
+    - dose: 1
+      min_age:
+        months: 2
+
+    - dose: 2
+      min_age:
+        months: 3
+      min_interval_from_previous:
+        weeks: 4
+
+    - dose: 3
+      min_age:
+        months: 4
+      min_interval_from_previous:
+        weeks: 4
+
 catchup_rules:
-  - id: MA-HIB-CU-6M-12M
-    label_fr: "6 à 12 mois, 0 dose Hib"
+  - id: MA-HIB-CU-LT12M-0D
+    label_fr: "moins de 12 mois, 0 dose Hib"
     when:
       age:
-        from:
-          months: 6
         to_before:
           months: 12
       counter:
@@ -27,21 +44,30 @@ catchup_rules:
         equals: 0
     then:
       action: complete_primary
-      doses_needed: 2
-      booster:
-        min_age:
-          months: 12
-        min_interval_after_last_primary:
-          months: 2
-    source: RAT-2025, WEB-2020
+      doses_needed: 3
+    source: RAT-2025, clinician
     confidence: official
 
-  - id: MA-HIB-CU-1Y-5Y
-    label_fr: "1 à 5 ans, 0 dose Hib"
+  - id: MA-HIB-CU-LT12M-PARTIAL
+    label_fr: "moins de 12 mois, vaccination partielle"
+    when:
+      age:
+        to_before:
+          months: 12
+      counter:
+        id: HIB_DOSES
+        gte: 1
+    then:
+      action: complete_remaining
+    source: RAT-2025, clinician
+    confidence: official
+
+  - id: MA-HIB-CU-12M-5Y-0D
+    label_fr: "12 mois à 5 ans, 0 dose Hib"
     when:
       age:
         from:
-          years: 1
+          months: 12
         to_before:
           years: 5
       counter:
@@ -50,10 +76,26 @@ catchup_rules:
     then:
       action: complete_primary
       doses_needed: 1
-    source: RAT-2025, WEB-2020
+    source: RAT-2025, clinician
     confidence: official
 
-  - id: MA-HIB-CU-OVER5Y
+  - id: MA-HIB-CU-12M-5Y-GE1
+    label_fr: "12 mois à 5 ans, au moins 1 dose Hib"
+    when:
+      age:
+        from:
+          months: 12
+        to_before:
+          years: 5
+      counter:
+        id: HIB_DOSES
+        gte: 1
+    then:
+      action: complete
+    source: RAT-2025, clinician
+    confidence: official
+
+  - id: MA-HIB-CU-GE5Y
     label_fr: "5 ans et plus, Hib non nécessaire"
     when:
       age:
@@ -61,15 +103,22 @@ catchup_rules:
           years: 5
     then:
       action: none
-      doses_needed: 0
-    source: RAT-2025, WEB-2020
+    source: RAT-2025, clinician
     confidence: official
 
 review_flags:
   - id: HIB-REVIEW-001
-    topic: Hib booster timing for 6-12 months catch-up
+    topic: Hib third dose as rappel
     question: >
-      For children catching up between 6 and 12 months,
-      the booster timing is set to 12 months with 2 months interval.
-      Needs official confirmation.
+      For starters aged 6-12 months the third Penta dose (4 weeks
+      after dose 2) counts as the Hib rappel; no separate booster
+      visit is planned. SOMIPEV's 6-month dose2-dose3 preference is
+      overridden by national Penta practice.
+    status: clinician_confirmed
+
+  - id: HIB-REVIEW-002
+    topic: Hib monovalent
+    question: >
+      No Hib monovalent in active catalog; unmet-need warning is
+      emitted for 3-5 year starters. Add HIB_MONO if stock exists.
     status: needs_validation

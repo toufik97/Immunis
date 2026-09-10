@@ -5,7 +5,8 @@ import type {
   DoseCounts,
   AntigenNeed,
   ProductSelectionResult,
-  VisitPlan
+  VisitPlan,
+  EvaluateOptions
 } from "../types";
 
 import { countDoses, type DoseValidationMap } from "./dose-counter";
@@ -27,7 +28,8 @@ export function evaluatePatient(
   patient: Patient,
   history: ImmunizationRecord[],
   pack: SchedulePack,
-  evaluationDate: Date
+  evaluationDate: Date,
+  options: EvaluateOptions = {}
 ): EngineResult {
   const { counts, validations } = countDoses(history, pack, patient);
 
@@ -53,7 +55,8 @@ export function evaluatePatient(
     pack,
     patient,
     evaluationDate,
-    programLastDates
+    programLastDates,
+    options.projection ?? "next"
   );
 
   return {
