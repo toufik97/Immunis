@@ -1,10 +1,6 @@
 program:
   id: DTP_PROGRAM
   label_fr: DTC / Penta
-  description_fr: >
-    Programme diphtérie, tétanos, coqueluche.
-    Les doses Penta et DTC sont comptées comme doses DTP.
-    Le choix du produit (Penta ou DTC) est délégué au sélecteur de produits.
   antigen_targets:
     - DIPHTHERIA
     - TETANUS
@@ -37,13 +33,13 @@ primary_series:
                   months: 12
             interval:
               weeks: 4
-
           - when:
               age_at_previous_dose:
                 from:
                   months: 12
             interval:
               months: 6
+
     - dose: 4
       min_age:
         months: 12
@@ -58,9 +54,17 @@ primary_series:
           - when:
               age_at_previous_dose:
                 from:
-                  years: 2
+                  months: 24
+                to_before:
+                  months: 60
             interval:
               years: 4
+          - when:
+              age_at_previous_dose:
+                from:
+                  months: 60
+            interval:
+              years: 1
 
 booster_policies:
   - id: STANDARD_DTP_BOOSTERS
@@ -82,16 +86,20 @@ booster_policies:
           - when:
               age_at_previous_dose:
                 from:
-                  years: 2
+                  months: 24
+                to_before:
+                  months: 60
             interval:
               years: 4
+          - when:
+              age_at_previous_dose:
+                from:
+                  months: 60
+            interval:
+              years: 1
 
 catchup_rules:
-  # --------------------------------------------------
-  # 0 previous valid DTP-containing dose
-  # --------------------------------------------------
   - id: MA-DTP-CU-0D-LT12M
-    label_fr: "0 dose, moins de 12 mois"
     when:
       age:
         to_before:
@@ -103,11 +111,8 @@ catchup_rules:
       action: complete_primary
       doses_needed: 3
       booster_policy: STANDARD_DTP_BOOSTERS
-    source: RAT-2025
-    confidence: official
 
   - id: MA-DTP-CU-0D-12M-LT3Y
-    label_fr: "0 dose, 12 mois à moins de 3 ans"
     when:
       age:
         from:
@@ -121,11 +126,8 @@ catchup_rules:
       action: complete_primary
       doses_needed: 3
       booster_policy: STANDARD_DTP_BOOSTERS
-    source: RAT-2025
-    confidence: official
 
   - id: MA-DTP-CU-0D-3Y-LT7Y
-    label_fr: "0 dose, 3 ans à moins de 7 ans"
     when:
       age:
         from:
@@ -139,14 +141,8 @@ catchup_rules:
       action: complete_primary
       doses_needed: 3
       booster_policy: STANDARD_DTP_BOOSTERS
-    source: WEB-2020, RAT-2025
-    confidence: draft
 
-  # --------------------------------------------------
-  # 1 previous valid DTP-containing dose
-  # --------------------------------------------------
   - id: MA-DTP-CU-1D-LT18M
-    label_fr: "1 dose, moins de 18 mois"
     when:
       age:
         to_before:
@@ -158,11 +154,8 @@ catchup_rules:
       action: complete_primary
       doses_needed: 2
       booster_policy: STANDARD_DTP_BOOSTERS
-    source: RAT-2025
-    confidence: official
 
   - id: MA-DTP-CU-1D-18M-LT3Y
-    label_fr: "1 dose, 18 mois à moins de 3 ans"
     when:
       age:
         from:
@@ -176,11 +169,8 @@ catchup_rules:
       action: complete_primary
       doses_needed: 2
       booster_policy: STANDARD_DTP_BOOSTERS
-    source: RAT-2025
-    confidence: official
 
   - id: MA-DTP-CU-1D-3Y-LT7Y
-    label_fr: "1 dose, 3 ans à moins de 7 ans"
     when:
       age:
         from:
@@ -194,14 +184,8 @@ catchup_rules:
       action: complete_primary
       doses_needed: 2
       booster_policy: STANDARD_DTP_BOOSTERS
-    source: RAT-2025
-    confidence: official
 
-  # --------------------------------------------------
-  # 2 previous valid DTP-containing doses
-  # --------------------------------------------------
   - id: MA-DTP-CU-2D-LT18M
-    label_fr: "2 doses, moins de 18 mois"
     when:
       age:
         to_before:
@@ -213,11 +197,8 @@ catchup_rules:
       action: complete_primary
       doses_needed: 1
       booster_policy: STANDARD_DTP_BOOSTERS
-    source: RAT-2025
-    confidence: official
 
   - id: MA-DTP-CU-2D-18M-LT3Y
-    label_fr: "2 doses, 18 mois à moins de 3 ans"
     when:
       age:
         from:
@@ -231,11 +212,8 @@ catchup_rules:
       action: complete_primary
       doses_needed: 1
       booster_policy: STANDARD_DTP_BOOSTERS
-    source: RAT-2025
-    confidence: official
 
   - id: MA-DTP-CU-2D-3Y-LT7Y
-    label_fr: "2 doses, 3 ans à moins de 7 ans"
     when:
       age:
         from:
@@ -249,14 +227,8 @@ catchup_rules:
       action: complete_primary
       doses_needed: 1
       booster_policy: STANDARD_DTP_BOOSTERS
-    source: RAT-2025
-    confidence: needs_validation
 
-  # --------------------------------------------------
-  # 3 previous valid DTP-containing doses
-  # --------------------------------------------------
   - id: MA-DTP-CU-3D-LT18M
-    label_fr: "3 doses, moins de 18 mois"
     when:
       age:
         to_before:
@@ -268,11 +240,8 @@ catchup_rules:
       action: schedule_booster
       booster_sequence: 1
       booster_policy: STANDARD_DTP_BOOSTERS
-    source: RAT-2025, inferred
-    confidence: draft
 
   - id: MA-DTP-CU-3D-18M-LT7Y
-    label_fr: "3 doses, 18 mois à moins de 7 ans"
     when:
       age:
         from:
@@ -286,14 +255,8 @@ catchup_rules:
       action: give_booster_if_due
       booster_sequence: 1
       booster_policy: STANDARD_DTP_BOOSTERS
-    source: RAT-2025
-    confidence: official
 
-  # --------------------------------------------------
-  # 4 previous valid DTP-containing doses
-  # --------------------------------------------------
   - id: MA-DTP-CU-4D-LT5Y
-    label_fr: "4 doses, moins de 5 ans"
     when:
       age:
         to_before:
@@ -305,11 +268,8 @@ catchup_rules:
       action: schedule_booster
       booster_sequence: 2
       booster_policy: STANDARD_DTP_BOOSTERS
-    source: inferred
-    confidence: needs_validation
 
   - id: MA-DTP-CU-4D-5Y-LT7Y
-    label_fr: "4 doses, 5 ans à moins de 7 ans"
     when:
       age:
         from:
@@ -323,14 +283,8 @@ catchup_rules:
       action: give_booster_if_due
       booster_sequence: 2
       booster_policy: STANDARD_DTP_BOOSTERS
-    source: RAT-2025
-    confidence: official
 
-  # --------------------------------------------------
-  # 5 previous valid DTP-containing doses
-  # --------------------------------------------------
   - id: MA-DTP-CU-5D-LT7Y
-    label_fr: "5 doses, moins de 7 ans"
     when:
       age:
         to_before:
@@ -340,35 +294,18 @@ catchup_rules:
         gte: 5
     then:
       action: complete
-    source: RAT-2025
-    confidence: official
 
-review_flags:
-  - id: DTP-REVIEW-001
-    topic: Penta maximum age
-    question: >
-      Is Penta allowed up to <3 years in all catch-up cases,
-      and never after 3 years?
-    status: needs_validation
+  - id: MA-DTP-CU-GE7Y
+    when:
+      age:
+        from:
+          years: 7
+    then:
+      action: none
 
-  - id: DTP-REVIEW-002
-    topic: Td after 7 years
-    question: >
-      Does Td count toward the 5-dose DTC/Td requirement?
-      What about pertussis protection after 7 years?
-    status: needs_validation
-
-  - id: DTP-REVIEW-003
-    topic: Booster 2 interval
-    question: >
-      Routine calendar says Booster 2 at 5 years.
-      Catch-up guidance says boosters spaced at least 4 years.
-      Temporary strict 4-year rule is used.
-    status: temporary_rule
-
-  - id: DTP-REVIEW-004
-    topic: Invalid early dose
-    question: >
-      If a DTP/Penta dose was given too early,
-      should it be ignored and repeated?
-    status: needs_validation
+dose_caps:
+  - counter: DT_CONTAINING_DOSES
+    max_doses: 6
+    before_age:
+      months: 84
+    on_exceed: warn_and_stop_planning

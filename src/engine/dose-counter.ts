@@ -19,20 +19,16 @@ export function countDoses(
   const validations: DoseValidationMap = {};
 
   const counters: any[] = (pack.counters as any).counters ?? [];
+  const allPrograms: any[] = Object.values(pack.programs) as any[];
 
   for (const counter of counters) {
-    let context: ValidityContext = {
-      rules: [],
-      requiredValidDoses: 0,
-      boosterTargets: {}
-    };
+    const owner = allPrograms.find(
+      (p: any) => p.program?.counter === counter.id
+    );
 
-    for (const program of Object.values(pack.programs) as any[]) {
-      if (program.program?.counter === counter.id) {
-        context = buildValidityContext(program);
-        break;
-      }
-    }
+    const context: ValidityContext = owner
+      ? buildValidityContext(owner, allPrograms, counter.id)
+      : { rules: [], requiredValidDoses: 0, boosterTargets: {}, caps: [] };
 
     const result = validateCounterDoses(
       counter.id,
@@ -49,7 +45,25 @@ export function countDoses(
   return { counts, validations };
 }
 
-function buildValidityContext(program: any): ValidityContext {
+function collectCaps(allPrograms: any[], counterId: string): any[] {
+  const seen = new Set<string>();
+
+  return allPrograms
+    .flatMap((p: any) => p?.dose_caps ?? [])
+    .filter((c: any) => c.counter === counterId)
+    .filter((c: any) => {
+      const key = JSON.stringify(c);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function buildValidityContext(
+  program: any,
+  allPrograms: any[],
+  counterId: string
+): ValidityContext {
   const primary = program?.primary_series ?? {};
   const rules: any[] = primary.dose_validity ?? [];
   const requiredValidDoses: number = primary.required_valid_doses ?? 0;
@@ -75,5 +89,10 @@ function buildValidityContext(program: any): ValidityContext {
     }
   }
 
-  return { rules, requiredValidDoses, boosterTargets };
+  return {
+    rules,
+    requiredValidDoses,
+    boosterTargets,
+    caps: collectCaps(allPrograms, counterId)
+  };
 }

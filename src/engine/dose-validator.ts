@@ -27,6 +27,7 @@ export interface ValidityContext {
   rules: any[];
   requiredValidDoses: number;
   boosterTargets: Record<number, { minAge?: any; interval?: any }>;
+  caps: any[];
 }
 
 export function validateCounterDoses(
@@ -62,7 +63,6 @@ export function validateCounterDoses(
   let lastValidDoseDate: Date | null = null;
   let lastValidDoseAgeMonths: number | null = null;
 
-  // CHANGE 1: indexed loop so we can look at the previous record
   for (let i = 0; i < relevantRecords.length; i++) {
     const record = relevantRecords[i];
     const doseDate = parseDate(record.administeredOn);
@@ -71,7 +71,6 @@ export function validateCounterDoses(
     const reasons: string[] = [];
     const warnings: string[] = [];
 
-    // CHANGE 2: G8 / E2 — same product recorded twice on the same day
     const previousRecord = relevantRecords[i - 1];
     if (
       previousRecord &&
@@ -85,12 +84,11 @@ export function validateCounterDoses(
       (rule: any) => rule.dose === doseNumber
     );
 
-    // ---------- T1: floors (invalidating) ----------
+    // T1 floors (invalidating)
     let t1IntervalPassed = true;
 
     if (validityRule?.min_age) {
       const minAgeMonths = durationToMonths(validityRule.min_age);
-
       if (doseAgeMonths < minAgeMonths) {
         reasons.push(`INVALID_AGE_DOSE_${doseNumber}_TOO_EARLY`);
       }
@@ -116,14 +114,13 @@ export function validateCounterDoses(
     }
 
     const isOverridden = record.overridden === true;
-
     if (isOverridden && reasons.length > 0) {
       reasons.push("OVERRIDDEN_BY_HEALTHCARE_PROFESSIONAL");
     }
 
     const valid = reasons.length === 0 || isOverridden;
 
-    // ---------- T2: policy-target deviations (counted, warned) ----------
+    // T2 warnings (counted but deviating)
     if (valid && doseNumber > context.requiredValidDoses) {
       const seq = doseNumber - context.requiredValidDoses;
       const target = context.boosterTargets?.[seq];
@@ -131,7 +128,6 @@ export function validateCounterDoses(
       if (target) {
         if (target.minAge) {
           const targetAgeMonths = durationToMonths(target.minAge);
-
           if (doseAgeMonths < targetAgeMonths) {
             warnings.push(
               `EARLY_BOOSTER_${seq}_COUNTED: administered at ${doseAgeMonths} months, policy target ${targetAgeMonths} months. Dose counted.`
@@ -161,6 +157,22 @@ export function validateCounterDoses(
       }
     }
 
+    // Dose cap warnings
+    if (valid) {
+      for (const cap of context.caps ?? []) {
+        const beforeAgeMonths = durationToMonths(cap.before_age);
+        if (
+          doseAgeMonths < beforeAgeMonths &&
+          doseNumber > Number(cap.max_doses)
+        ) {
+          warnings.push(
+            `DOSE_CAP_EXCEEDED_COUNTED: dose ${doseNumber} exceeds the recommended maximum of ${cap.max_doses} doses before 7 years of age. Dose counted (not harmful), review recommended.`
+          );
+        }
+      }
+    }
+
+    // CRITICAL: only valid doses advance the counter
     if (valid) {
       validDoseCount++;
       lastValidDoseDate = doseDate;

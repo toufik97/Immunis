@@ -14,14 +14,11 @@ product_selection:
 
   eligibility:
     - product_group: PENTA
-      max_age:
-        years: 3
-        exclusive: true
-
+      max_age: { years: 3, exclusive: true }
     - product_group: DTC
-      max_age:
-        years: 7
-        exclusive: true
+      max_age: { years: 7, exclusive: true }
+    - product_group: TD
+      min_age: { years: 6 }
 
   product_ranking:
     - PENTA
@@ -37,3 +34,4 @@ product_selection:
     - ROTAVIRUS
     - TD
     - VAR
+

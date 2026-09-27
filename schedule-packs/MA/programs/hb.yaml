@@ -1,13 +1,6 @@
 program:
   id: HB_PROGRAM
   label_fr: Hépatite B
-  description_fr: >
-    Programme hépatite B.
-    Les doses Penta comptent comme doses HB.
-    Dans le calendrier normal du nourrisson, HB est donné
-    à la naissance puis via Penta à 2, 3 et 4 mois.
-    En rattrapage après 12 mois, la troisième dose doit être
-    administrée au moins 5 mois après la deuxième dose.
   antigen_targets:
     - HB
   counter: HB_DOSES
@@ -24,7 +17,27 @@ primary_series:
       min_age:
         months: 1
       min_interval_from_previous:
-        months: 1
+        conditional:
+          - when:
+              age_at_previous_dose:
+                to_before:
+                  months: 132
+            interval:
+              months: 1
+          - when:
+              age_at_previous_dose:
+                from:
+                  months: 132
+                to_before:
+                  months: 192
+            interval:
+              months: 6
+          - when:
+              age_at_previous_dose:
+                from:
+                  months: 192
+            interval:
+              months: 1
 
     - dose: 3
       min_age:
@@ -37,55 +50,145 @@ primary_series:
                   months: 12
             interval:
               weeks: 4
-
           - when:
               age_at_previous_dose:
                 from:
                   months: 12
             interval:
               months: 5
-              
+
 catchup_rules:
-  - id: MA-HB-CU-0D
-    label_fr: "0 dose HB, jamais vacciné"
+  - id: MA-HB-CU-LT11Y-0D
     when:
+      age:
+        to_before:
+          years: 11
       counter:
         id: HB_DOSES
         equals: 0
     then:
       action: complete_primary
       doses_needed: 3
-    source: RAT-2025, WEB-2020
-    confidence: official
 
-  - id: MA-HB-CU-PARTIAL
-    label_fr: "Vaccination HB partielle, compléter"
+  - id: MA-HB-CU-LT11Y-1D
     when:
+      age:
+        to_before:
+          years: 11
       counter:
         id: HB_DOSES
-        gte: 1
+        equals: 1
     then:
-      action: complete_remaining
-    source: RAT-2025, WEB-2020
-    confidence: official
+      action: complete_primary
+      doses_needed: 2
 
-review_flags:
-  - id: HB-REVIEW-001
-    topic: HB third dose conditional interval
-    question: >
-      Routine infant schedule (Penta at 2, 3, 4 months) uses
-      4-week intervals, so when dose 2 was given before 12 months
-      of age the third dose requires only 4 weeks interval and
-      minimum age 4 months (16 weeks per Annex 2).
-      When dose 2 was given at 12 months or older, catch-up timing
-      applies: minimum 5 months between dose 2 and dose 3
-      (official window 5 to 12 months).
-    status: policy_interpretation
+  - id: MA-HB-CU-LT11Y-2D
+    when:
+      age:
+        to_before:
+          years: 11
+      counter:
+        id: HB_DOSES
+        equals: 2
+    then:
+      action: complete_primary
+      doses_needed: 1
 
-  - id: HB-REVIEW-002
-    topic: Fourth HB dose through Penta
-    question: >
-      Routine schedule may produce 4 HB doses (birth plus Penta
-      at 2, 3, 4 months). Only 3 are required. Extra doses are
-      accepted and not harmful.
-    status: needs_validation
+  - id: MA-HB-CU-LT11Y-GE3
+    when:
+      age:
+        to_before:
+          years: 11
+      counter:
+        id: HB_DOSES
+        gte: 3
+    then:
+      action: complete
+
+  - id: MA-HB-CU-11Y-16Y-0D
+    when:
+      age:
+        from:
+          years: 11
+        to_before:
+          years: 16
+      counter:
+        id: HB_DOSES
+        equals: 0
+    then:
+      action: complete_primary
+      doses_needed: 2
+
+  - id: MA-HB-CU-11Y-16Y-1D
+    when:
+      age:
+        from:
+          years: 11
+        to_before:
+          years: 16
+      counter:
+        id: HB_DOSES
+        equals: 1
+    then:
+      action: complete_primary
+      doses_needed: 1
+
+  - id: MA-HB-CU-11Y-16Y-GE2
+    when:
+      age:
+        from:
+          years: 11
+        to_before:
+          years: 16
+      counter:
+        id: HB_DOSES
+        gte: 2
+    then:
+      action: complete
+
+  - id: MA-HB-CU-GE16Y-0D
+    when:
+      age:
+        from:
+          years: 16
+      counter:
+        id: HB_DOSES
+        equals: 0
+    then:
+      action: complete_primary
+      doses_needed: 3
+
+  - id: MA-HB-CU-GE16Y-1D
+    when:
+      age:
+        from:
+          years: 16
+      counter:
+        id: HB_DOSES
+        equals: 1
+    then:
+      action: complete_primary
+      doses_needed: 2
+
+  - id: MA-HB-CU-GE16Y-2D
+    when:
+      age:
+        from:
+          years: 16
+      counter:
+        id: HB_DOSES
+        equals: 2
+    then:
+      action: complete_primary
+      doses_needed: 1
+
+  - id: MA-HB-CU-GE16Y-GE3
+    when:
+      age:
+        from:
+          years: 16
+      counter:
+        id: HB_DOSES
+        gte: 3
+    then:
+      action: complete

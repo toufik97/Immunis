@@ -47,7 +47,8 @@ describe("Group B — catch-up matrix", () => {
     const r = run("2018-10-01", [], "2026-04-01");
     const n = need(r, "DTP_PROGRAM");
     expect(n.status).toBe("NOT_NEEDED");
-    expect(n.warnings.length).toBeGreaterThan(0);
+    expect(n.warnings).toEqual([]);
+    expect(n.matchedRuleId).toBe("MA-DTP-CU-GE7Y");
   });
 
   it("B7: 10m, P@2m → P now, P+4w", () => {

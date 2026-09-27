@@ -1,0 +1,206 @@
+program:
+  id: DT_PROGRAM
+  label_fr: Diphtérie-Tétanos (Td)
+  antigen_targets:
+    - DIPHTHERIA
+    - TETANUS
+  counter: DT_CONTAINING_DOSES
+
+primary_series:
+  required_valid_doses: 5
+  booster_policy: DT_BOOSTERS
+
+  dose_validity:
+    - dose: 1
+      min_age:
+        months: 2
+
+    - dose: 2
+      min_age:
+        months: 3
+      min_interval_from_previous:
+        weeks: 4
+
+    - dose: 3
+      min_age:
+        months: 4
+      min_interval_from_previous:
+        conditional:
+          - when:
+              age_at_previous_dose:
+                to_before:
+                  months: 12
+            interval:
+              weeks: 4
+          - when:
+              age_at_previous_dose:
+                from:
+                  months: 12
+            interval:
+              months: 6
+
+    - dose: 4
+      min_age:
+        months: 12
+      min_interval_from_previous:
+        conditional:
+          - when:
+              age_at_previous_dose:
+                to_before:
+                  months: 84
+            interval:
+              months: 6
+          - when:
+              age_at_previous_dose:
+                from:
+                  months: 84
+            interval:
+              years: 1
+
+    - dose: 5
+      min_age:
+        years: 4
+      min_interval_from_previous:
+        conditional:
+          - when:
+              age_at_previous_dose:
+                from:
+                  months: 24
+                to_before:
+                  months: 60
+            interval:
+              years: 4
+          - when:
+              age_at_previous_dose:
+                from:
+                  months: 60
+            interval:
+              years: 1
+
+booster_policies:
+  - id: DT_BOOSTERS
+    label_fr: Rappels Td
+
+    booster_1:
+      product_group: TD
+      min_age:
+        months: 18
+      min_interval_after_primary_completion:
+        conditional:
+          - when:
+              age_at_previous_dose:
+                to_before:
+                  months: 84
+            interval:
+              months: 6
+          - when:
+              age_at_previous_dose:
+                from:
+                  months: 84
+            interval:
+              years: 1
+
+    booster_2:
+      product_group: TD
+      min_age:
+        years: 4
+      min_interval_after_booster_1:
+        conditional:
+          - when:
+              age_at_previous_dose:
+                from:
+                  months: 24
+                to_before:
+                  months: 60
+            interval:
+              years: 4
+          - when:
+              age_at_previous_dose:
+                from:
+                  months: 60
+            interval:
+              years: 1
+
+catchup_rules:
+  - id: MA-DT-CU-GE7Y-0D
+    when:
+      age:
+        from:
+          years: 7
+      counter:
+        id: DT_CONTAINING_DOSES
+        equals: 0
+    then:
+      action: complete_primary
+      doses_needed: 5
+      booster_policy: DT_BOOSTERS
+
+  - id: MA-DT-CU-GE7Y-1D
+    when:
+      age:
+        from:
+          years: 7
+      counter:
+        id: DT_CONTAINING_DOSES
+        equals: 1
+    then:
+      action: complete_primary
+      doses_needed: 4
+      booster_policy: DT_BOOSTERS
+
+  - id: MA-DT-CU-GE7Y-2D
+    when:
+      age:
+        from:
+          years: 7
+      counter:
+        id: DT_CONTAINING_DOSES
+        equals: 2
+    then:
+      action: complete_primary
+      doses_needed: 3
+      booster_policy: DT_BOOSTERS
+
+  - id: MA-DT-CU-GE7Y-3D
+    when:
+      age:
+        from:
+          years: 7
+      counter:
+        id: DT_CONTAINING_DOSES
+        equals: 3
+    then:
+      action: complete_primary
+      doses_needed: 2
+      booster_policy: DT_BOOSTERS
+
+  - id: MA-DT-CU-GE7Y-4D
+    when:
+      age:
+        from:
+          years: 7
+      counter:
+        id: DT_CONTAINING_DOSES
+        equals: 4
+    then:
+      action: complete_primary
+      doses_needed: 1
+      booster_policy: DT_BOOSTERS
+
+  - id: MA-DT-CU-GE7Y-GE5
+    when:
+      age:
+        from:
+          years: 7
+      counter:
+        id: DT_CONTAINING_DOSES
+        gte: 5
+    then:
+      action: complete
+
+dose_caps:
+  - counter: DT_CONTAINING_DOSES
+    max_doses: 6
+    before_age:
+      months: 84
+    on_exceed: warn_and_stop_planning

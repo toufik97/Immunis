@@ -136,20 +136,24 @@ export function resolveDuration(
       continue;
     }
 
-    if (ageCondition.to_before) {
-      const limit = durationToMonths(ageCondition.to_before);
-
-      if (contextAgeMonths < limit) {
-        return condition.interval as Duration;
-      }
-    }
+    let matches = true;
 
     if (ageCondition.from) {
       const limit = durationToMonths(ageCondition.from);
-
-      if (contextAgeMonths >= limit) {
-        return condition.interval as Duration;
+      if (contextAgeMonths < limit) {
+        matches = false;
       }
+    }
+
+    if (ageCondition.to_before) {
+      const limit = durationToMonths(ageCondition.to_before);
+      if (contextAgeMonths >= limit) {
+        matches = false;
+      }
+    }
+
+    if (matches) {
+      return condition.interval as Duration;
     }
   }
 
