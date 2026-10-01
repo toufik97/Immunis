@@ -128,6 +128,13 @@ export function validateCounterDoses(
         reasons.push(`INVALID_AGE_DOSE_${doseNumber}_TOO_EARLY`);
       }
     }
+    
+    if (validityRule?.max_age) {
+      const maxAgeMonths = durationToMonths(validityRule.max_age);
+      if (doseAgeMonths >= maxAgeMonths) {
+        reasons.push(`INVALID_AGE_DOSE_${doseNumber}_TOO_LATE`);
+      }
+    }
 
     if (validityRule?.min_interval_from_previous && lastValidDoseDate) {
       const interval = resolveDuration(

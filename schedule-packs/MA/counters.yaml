@@ -60,11 +60,10 @@ counters:
     only_valid_doses: true
     product_history_aware: true
 
-  - id: ROTAVIRUS_DOSES
-    label_fr: Doses valides Rotavirus
+  - id: ROTA_DOSES
+    label_fr: Doses rotavirus
     counts_product_groups:
-      - ROTAVIRUS
-    only_valid_doses: true
+      - ROTAVIRUS   # <--- MUST be exactly this, matching catalog.yaml
 
   - id: MEASLES_DOSES
     label_fr: Doses valides Rougeole

@@ -32,7 +32,13 @@ Products shorthand: P = PENTA, D = DTC, H = HB_MONO.
 | G12 | Penta-for-Hib is emergent from coverage scoring + same-visit unification, not from a forcing rule. If a monovalent Hib product ever enters the catalog, preference rules must be re-designed then (SOMIPEV prefers monovalent when other antigens are in order) | 📌 |
 | G13 | Three-tier validity model: T1 floors (in `dose_validity`) invalidate; T2 targets (in `booster_policies`) produce per-dose WARNINGS on counted doses; T3 planning (booster_policies + catch-up rules) sets future dates. Reasons = invalidating; warnings = counted-but-deviating | 📌 |
 | G14 | Routine-window exception: the 4-year booster-to-booster interval applies only when booster 1 was given at ≥ 2 years (catch-up context). When booster 1 was in the routine window (< 2 years), the calendar pattern (booster 2 at 5 years, ~42-month gap) is accepted with no warning | 📌 |
-
+| G26 | Rotavirus: 3 doses co-administered with Penta/VPO visits; 4-week
+      minimum interval; 24-month age limit enforced three ways: recorded
+      dose at >=24m INVALID (T1 safety floor), planned dose falling at
+      >=24m not planned (AGE_LIMIT_PREVENTS_DOSE warning), catch-up rules
+      silent none at >=24m. No dose-count reduction by age for late comers.
+      Provisional: series crossing the limit (ROTA-REVIEW-001/002). |
+Group R rows = tests R1–R6.
 ---
 
 ## 1. Group A — Dose validity (per-antigen splitting)
@@ -252,3 +258,4 @@ document. Any future engine or YAML change must update this document first.
 - CONF-006 → RESOLVED (DT program + handoff + Category C + cap).
 - CONF-010 NEW: pregnancy-specific Td rules deferred to maternal module.
 - CONF-011 NEW: pertussis above 7y dropped; override allowed if product exists.
+

@@ -1,0 +1,94 @@
+program:
+  id: ROTA_PROGRAM
+  label_fr: Rotavirus
+  description_fr: >
+    Programme rotavirus.
+    3 doses co-administrées avec Penta1/VPO1, Penta2/VPO2, Penta3/VPO3.
+    Intervalle minimum 4 semaines.
+    Limite d'âge 24 mois : aucune dose recommandée ni validée
+    à partir de 24 mois. Les retardataires continuent la série
+    à 4 semaines d'intervalle jusqu'à complétion (pas de
+    réduction du nombre de doses selon l'âge).
+  antigen_targets:
+    - ROTAVIRUS
+  counter: ROTA_DOSES
+
+primary_series:
+  required_valid_doses: 3
+
+  dose_validity:
+    - dose: 1
+      min_age:
+        months: 2
+      max_age:
+        months: 24
+
+    - dose: 2
+      min_age:
+        months: 3
+      min_interval_from_previous:
+        weeks: 4
+      max_age:
+        months: 24
+
+    - dose: 3
+      min_age:
+        months: 4
+      min_interval_from_previous:
+        weeks: 4
+      max_age:
+        months: 24
+
+catchup_rules:
+  - id: MA-ROTA-CU-LT24M-0D
+    when:
+      age: { to_before: { months: 24 } }
+      counter: { id: ROTA_DOSES, equals: 0 }
+    then:
+      action: complete_primary
+      doses_needed: 3
+
+  - id: MA-ROTA-CU-LT24M-1D
+    when:
+      age: { to_before: { months: 24 } }
+      counter: { id: ROTA_DOSES, equals: 1 }
+    then:
+      action: complete_primary
+      doses_needed: 2
+
+  - id: MA-ROTA-CU-LT24M-2D
+    when:
+      age: { to_before: { months: 24 } }
+      counter: { id: ROTA_DOSES, equals: 2 }
+    then:
+      action: complete_primary
+      doses_needed: 1
+
+  - id: MA-ROTA-CU-LT24M-GE3
+    when:
+      age: { to_before: { months: 24 } }
+      counter: { id: ROTA_DOSES, gte: 3 }
+    then:
+      action: complete
+
+  - id: MA-ROTA-CU-GE24M
+    when:
+      age: { from: { months: 24 } }
+    then:
+      action: none
+
+review_flags:
+  - id: ROTA-REVIEW-001
+    topic: Series crossing the 24-month limit
+    question: >
+      A starter near 24 months receives only the doses that fall
+      before 24 months; the series is truncated, never completed
+      past the limit (e.g., 23-month starter = 1 dose).
+    status: clinician_confirmed
+
+  - id: ROTA-REVIEW-002
+    topic: Recorded dose at or beyond 24 months
+    question: >
+      Treated as INVALID (hard per-dose stop: "24 months, no more
+      doses").
+    status: clinician_confirmed

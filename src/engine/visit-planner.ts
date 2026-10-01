@@ -12,6 +12,7 @@ import {
   addDurationToDate,
   ageInMonthsAt,
   durationToDays,
+  durationToMonths,
   resolveDuration,
   type Duration
 } from "./duration";
@@ -97,9 +98,41 @@ export function planVisits(
         }
       }
 
+      const feasibleProgramIds = slotProduct.coveredProgramIds.filter(
+        (programId: string) => {
+          const programNeed = needsById[programId];
+          const program: any = programs[programId];
+          const doseValidity: any[] =
+            program?.primary_series?.dose_validity ?? [];
+          const absoluteDoseNumber =
+            (programNeed?.validDosesReceived ?? 0) + slot.slot;
+          const rule = doseValidity.find(
+            (r: any) => r.dose === absoluteDoseNumber
+          );
+
+          if (!rule?.max_age) return true;
+
+          const limitMonths = durationToMonths(rule.max_age);
+          const ageAtPlanned = ageInMonthsAt(birthDate, earliest);
+
+          if (ageAtPlanned >= limitMonths) {
+            warnings.push(
+              `AGE_LIMIT_PREVENTS_DOSE: ${programId} dose ${absoluteDoseNumber} would fall at ${ageAtPlanned} months (limit ${limitMonths} months). Not planned.`
+            );
+            return false;
+          }
+
+          return true;
+        }
+      );
+
+      if (feasibleProgramIds.length === 0) {
+        continue;
+      }
+
       productDates.push({
         productGroupId: slotProduct.productGroupId,
-        coveredProgramIds: slotProduct.coveredProgramIds,
+        coveredProgramIds: feasibleProgramIds,
         date: earliest
       });
     }
@@ -474,7 +507,7 @@ function calculateEarliestPrimaryDate(
     const targetDate = addDurationToDate(birthDate, rule.target_min_age);
     if (targetDate > earliest) earliest = targetDate;
   }
-  
+
   if (rule.min_interval_from_previous && lastDate) {
     const lastAgeMonths = ageInMonthsAt(birthDate, lastDate);
     const interval = resolveDuration(rule.min_interval_from_previous, lastAgeMonths);

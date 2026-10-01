@@ -23,7 +23,9 @@ product_selection:
       max_age: { years: 8, exclusive: true }
     - product_group: VPI
       max_age: { years: 8, exclusive: true }
-
+    - product_group: ROTAVIRUS
+      max_age: { months: 24, exclusive: true }
+      
   product_ranking:
     - PENTA
     - DTC
