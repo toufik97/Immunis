@@ -199,7 +199,10 @@ export function selectProducts(
 
     boosterPlans.push({
       programId: need.programId,
-      productGroupId: boosterConfig.product_group,
+      productGroupId:
+        typeof boosterConfig.product_group === "string"
+          ? boosterConfig.product_group
+          : "",
       boosterSequence,
       role: `booster_${boosterSequence}`
     });
@@ -291,4 +294,37 @@ function preferenceBonus(
   }
 
   return bonus;
+}
+
+export function resolveBoosterProduct(
+  config: any,
+  ageMonthsAtDose: number
+): string | null {
+  const pg = config?.product_group;
+
+  if (typeof pg === "string") {
+    return pg;
+  }
+
+  if (pg?.conditional) {
+    for (const branch of pg.conditional) {
+      const c = branch?.when?.age_at_dose;
+      if (!c) continue;
+
+      let matches = true;
+
+      if (c.from && ageMonthsAtDose < durationToMonths(c.from)) {
+        matches = false;
+      }
+      if (c.to_before && ageMonthsAtDose >= durationToMonths(c.to_before)) {
+        matches = false;
+      }
+
+      if (matches) {
+        return branch.product ?? null;
+      }
+    }
+  }
+
+  return null;
 }

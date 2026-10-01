@@ -2,46 +2,37 @@ import { describe, it, expect } from "vitest";
 import { run, count, need, doses, expectVisit, rec } from "./helpers";
 
 describe("Group T — Td pathway above 7 years (D1-D7)", () => {
-  it("T1: 7y6m never vaccinated → DT primary 5 TD + HB 3; DTP hands off silently", () => {
+  it("T1: 7y6m never vaccinated → 3 primary + 2 projected boosters; HB 3", () => {
     const r = run("2018-10-01", [], "2026-04-01");
     const dtp = need(r, "DTP_PROGRAM");
     expect(dtp.status).toBe("NOT_NEEDED");
     expect(dtp.warnings).toEqual([]);
-    expect(need(r, "DT_PROGRAM").dosesNeeded).toBe(5);
+    expect(need(r, "DT_PROGRAM").dosesNeeded).toBe(3);
     expect(need(r, "HB_PROGRAM").dosesNeeded).toBe(3);
     expectVisit(r, 0, "2026-04-01", ["TD", "HB_MONO"], "DUE_NOW");
+    expect(r.visitPlan.visits.length).toBe(3);
   });
 
-  it("T2: adult 26y never vaccinated → DT 5-dose schema projected; HB 3 doses 0-1-6", () => {
+  it("T2: adult 26y never vaccinated → exactly 2 projected boosters (5 doses total)", () => {
     const r = run("2000-01-01", [], "2026-04-01", "full");
-    expect(need(r, "DT_PROGRAM").dosesNeeded).toBe(5);
+    expect(need(r, "DT_PROGRAM").dosesNeeded).toBe(3);
     const projected = r.visitPlan.visits.filter(v => v.status === "PROJECTED");
+    expect(projected.length).toBe(2);
     expect(projected.map(v => v.role)).toContain("booster_1");
     expect(projected.map(v => v.role)).toContain("booster_2");
     expect(need(r, "HB_PROGRAM").dosesNeeded).toBe(3);
   });
 
-  it("T3: primed at 6y with DTC → DT needs 1 more primary dose", () => {
-    const before = run("2019-06-01", [
-      rec("2025-06-01", "DTC"),
-      rec("2025-07-01", "DTC"),
-      rec("2026-01-01", "DTC")
-    ], "2026-04-01");
-    expect(need(before, "DTP_PROGRAM").status).toBe("NEEDS_BOOSTER");
-    expect(need(before, "DTP_PROGRAM").boosterSequence).toBe(1);
-
+  it("T3: 4 doses at ≥7y → DT booster 2 due, given as TD", () => {
     const after = run("2019-06-01", [
       rec("2025-06-01", "DTC"),
       rec("2025-07-01", "DTC"),
       rec("2026-01-01", "DTC"),
       rec("2026-07-05", "DTC")
     ], "2026-08-01");
-    
     const dt = need(after, "DT_PROGRAM");
-    expect(dt.status).toBe("NEEDS_PRIMARY");
-    expect(dt.dosesNeeded).toBe(1);
-    
-    // FIX: Check that TD is included (HB_MONO will also be there)
+    expect(dt.status).toBe("NEEDS_BOOSTER");
+    expect(dt.boosterSequence).toBe(2);
     expect(
       after.visitPlan.visits.some(v => v.products.includes("TD"))
     ).toBe(true);
@@ -72,13 +63,13 @@ describe("Group T — Td pathway above 7 years (D1-D7)", () => {
     expect(need(r, "HB_PROGRAM").dosesNeeded).toBe(3);
   });
 
-  it("T7: 8y with 2 infant Penta doses → DT completes to 5 (3 missing)", () => {
+  it("T7: 8y with 2 infant Penta doses → DT needs 1 more primary dose", () => {
     const r = run("2018-04-01", [
       rec("2018-06-01", "PENTA"),
       rec("2018-07-01", "PENTA")
     ], "2026-04-01");
     expect(count(r, "DT_CONTAINING_DOSES")).toBe(2);
-    expect(need(r, "DT_PROGRAM").dosesNeeded).toBe(3);
+    expect(need(r, "DT_PROGRAM").dosesNeeded).toBe(1);
   });
 
   it("T8: cap stops planning before 7y once 6 doses recorded", () => {
@@ -93,5 +84,16 @@ describe("Group T — Td pathway above 7 years (D1-D7)", () => {
     const dtp = need(r, "DTP_PROGRAM");
     expect(dtp.dosesNeeded).toBe(0);
     expect(dtp.warnings.join(" ")).toContain("DOSE_CAP_REACHED_PLANNING_STOPPED");
+  });
+
+  it("T9: DTP booster 1 falling after 7th birthday is planned as TD, not DTC", () => {
+    const r = run("2019-06-01", [
+      rec("2025-06-01", "DTC"),
+      rec("2025-07-01", "DTC"),
+      rec("2026-01-01", "DTC")
+    ], "2026-04-01");
+    const v = r.visitPlan.visits.find(x => x.role.includes("booster_1"))!;
+    expect(v.products).toContain("TD");
+    expect(v.products).not.toContain("DTC");
   });
 });

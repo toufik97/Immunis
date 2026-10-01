@@ -218,3 +218,37 @@ with the G14 routine-window exception.
 
 Encode Groups A–F plus G11–G14 as automated Vitest tests directly from this
 document. Any future engine or YAML change must update this document first.
+## Addendum — Td pathway & engine invariants (2026-09)
+
+### New global rules
+| G15 | No upper age limit (D1). DT_PROGRAM owns DIPHTHERIA+TETANUS from 7y;
+      DTP hands off at 7y via MA-DTP-CU-GE7Y (action: none, no warning).
+      Pertussis dropped above 7y (D4); product override allowed. |
+| G16 | Soft cap: max 6 DT-containing doses before 7y (SOMIPEV). Recorded
+      excess counts with DOSE_CAP_EXCEEDED_COUNTED; planning stops with
+      DOSE_CAP_REACHED_PLANNING_STOPPED. 7th/8th lifetime dose not harmful;
+      recommended max 6 (D7). |
+| G17 | HB bands: <11y 3 doses; 11–15y 2 doses (0, 6m); ≥16y 3 doses (0,1,6m) (D6). |
+| G18 | Engine invariant: conditional branches evaluate `from` AND `to_before`
+      together. Branch matches iff age ≥ from AND age < to_before.
+      Booster 2 floors: previous dose <24m → none (calendar 5y);
+      24–60m → 4y; ≥60m → 1y (Category C). |
+
+### Group T (Td pathway) — implemented as tests T1–T8
+| T1 | 7y6m, 0 doses | DT needs 5, HB needs 3, visit 1 = TD + HB_MONO, DTP silent |
+| T2 | 26y, 0 doses | DT 5-dose schema with projected boosters; HB 3 doses |
+| T3 | primed at 6y | DTP booster 1 before 7y; after 4th dose DT completes primary with TD |
+| T4 | 7 doses before 7y | 7th counts with DOSE_CAP_EXCEEDED_COUNTED |
+| T5 | 11y10m, 0 doses | HB needs 2 |
+| T6 | 16y+, 0 doses | HB needs 3 |
+| T7 | 8y, 2 infant Penta | DT completes to 5 (3 missing) |
+| T8 | 6 doses before 7y | planning stopped with DOSE_CAP_REACHED_PLANNING_STOPPED |
+
+### Updated expectations
+- B6: ≥7y → NOT_NEEDED, zero warnings, matched rule MA-DTP-CU-GE7Y.
+- B13/B15/D1: routine-window booster 2 = 5y (no interval floor when previous <24m).
+
+### Conflict register
+- CONF-006 → RESOLVED (DT program + handoff + Category C + cap).
+- CONF-010 NEW: pregnancy-specific Td rules deferred to maternal module.
+- CONF-011 NEW: pertussis above 7y dropped; override allowed if product exists.

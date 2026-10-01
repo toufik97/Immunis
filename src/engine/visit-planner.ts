@@ -15,7 +15,11 @@ import {
   resolveDuration,
   type Duration
 } from "./duration";
-import { isProductEligible, productCoversProgram } from "./product-selector";
+import {
+  isProductEligible,
+  productCoversProgram,
+  resolveBoosterProduct
+} from "./product-selector";
 
 interface RawVisit {
   date: Date;
@@ -177,10 +181,16 @@ export function planVisits(
       );
     }
 
+    const boosterProduct =
+      resolveBoosterProduct(
+        boosterConfig,
+        ageInMonthsAt(birthDate, visitDate)
+      ) ?? booster.productGroupId;
+
     rawVisits.push({
       date: visitDate,
-      productGroupId: booster.productGroupId,
-      antigens: getProductAntigens(productGroups, booster.productGroupId),
+      productGroupId: boosterProduct,
+      antigens: getProductAntigens(productGroups, boosterProduct),
       role: booster.role,
       programIds: [booster.programId],
       projected: false
@@ -423,10 +433,16 @@ function projectFutureBoosters(
         }
       }
 
+      const projectedProduct =
+        resolveBoosterProduct(config, ageInMonthsAt(birthDate, date)) ??
+        (typeof config.product_group === "string"
+          ? config.product_group
+          : "");
+
       visits.push({
         date,
-        productGroupId: config.product_group,
-        antigens: getProductAntigens(productGroups, config.product_group),
+        productGroupId: projectedProduct,
+        antigens: getProductAntigens(productGroups, projectedProduct),
         role: `booster_${seq}`,
         programIds: [programId],
         projected: true

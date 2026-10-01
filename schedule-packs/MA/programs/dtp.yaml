@@ -71,14 +71,36 @@ booster_policies:
     label_fr: Rappels DTC standard
 
     booster_1:
-      product_group: DTC
+      product_group:
+        conditional:
+          - when:
+              age_at_dose:
+                to_before:
+                  years: 7
+            product: DTC
+          - when:
+              age_at_dose:
+                from:
+                  years: 7
+            product: TD
       min_age:
         months: 18
       min_interval_after_primary_completion:
         months: 6
 
     booster_2:
-      product_group: DTC
+      product_group:
+        conditional:
+          - when:
+              age_at_dose:
+                to_before:
+                  years: 7
+            product: DTC
+          - when:
+              age_at_dose:
+                from:
+                  years: 7
+            product: TD
       min_age:
         years: 5
       min_interval_after_booster_1:
@@ -97,7 +119,7 @@ booster_policies:
                   months: 60
             interval:
               years: 1
-
+              
 catchup_rules:
   - id: MA-DTP-CU-0D-LT12M
     when:
