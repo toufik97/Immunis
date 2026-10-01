@@ -5,6 +5,7 @@ import {
   type ValidationResult,
   type ValidityContext
 } from "./dose-validator";
+import { durationToMonths } from "./duration";
 
 export interface DoseValidationMap {
   [counterId: string]: ValidationResult;
@@ -28,7 +29,13 @@ export function countDoses(
 
     const context: ValidityContext = owner
       ? buildValidityContext(owner, allPrograms, counter.id)
-      : { rules: [], requiredValidDoses: 0, boosterTargets: {}, caps: [] };
+      : {
+          rules: [],
+          requiredValidDoses: 0,
+          boosterTargets: {},
+          caps: [],
+          doseZero: null
+        };
 
     const result = validateCounterDoses(
       counter.id,
@@ -89,10 +96,19 @@ function buildValidityContext(
     }
   }
 
+  // POLIO FEATURE 1: read the dose_zero block from YAML
+  const doseZero = primary.dose_zero
+    ? {
+        productGroups: (primary.dose_zero.product_groups ?? []) as string[],
+        maxAgeMonths: durationToMonths(primary.dose_zero.max_age)
+      }
+    : null;
+
   return {
     rules,
     requiredValidDoses,
     boosterTargets,
-    caps: collectCaps(allPrograms, counterId)
+    caps: collectCaps(allPrograms, counterId),
+    doseZero
   };
 }

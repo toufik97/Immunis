@@ -37,15 +37,12 @@ export function addDurationToDate(date: Date, duration?: Duration | null): Date 
   if (duration.days) {
     result = addDays(result, duration.days);
   }
-
   if (duration.weeks) {
     result = addWeeks(result, duration.weeks);
   }
-
   if (duration.months) {
     result = addMonths(result, duration.months);
   }
-
   if (duration.years) {
     result = addYears(result, duration.years);
   }
@@ -57,29 +54,15 @@ export function durationToMonths(duration?: Duration | null): number {
   if (!duration) {
     return 0;
   }
-
   if (duration.birth) {
     return 0;
   }
 
   let months = 0;
-
-  if (duration.days) {
-    months += duration.days / 30.44;
-  }
-
-  if (duration.weeks) {
-    months += duration.weeks / 4.345;
-  }
-
-  if (duration.months) {
-    months += duration.months;
-  }
-
-  if (duration.years) {
-    months += duration.years * 12;
-  }
-
+  if (duration.days) months += duration.days / 30.44;
+  if (duration.weeks) months += duration.weeks / 4.345;
+  if (duration.months) months += duration.months;
+  if (duration.years) months += duration.years * 12;
   return Math.round(months * 10) / 10;
 }
 
@@ -87,29 +70,15 @@ export function durationToDays(duration?: Duration | null): number {
   if (!duration) {
     return 0;
   }
-
   if (duration.birth) {
     return 0;
   }
 
   let days = 0;
-
-  if (duration.days) {
-    days += duration.days;
-  }
-
-  if (duration.weeks) {
-    days += duration.weeks * 7;
-  }
-
-  if (duration.months) {
-    days += Math.round(duration.months * 30.44);
-  }
-
-  if (duration.years) {
-    days += Math.round(duration.years * 365.25);
-  }
-
+  if (duration.days) days += duration.days;
+  if (duration.weeks) days += duration.weeks * 7;
+  if (duration.months) days += Math.round(duration.months * 30.44);
+  if (duration.years) days += Math.round(duration.years * 365.25);
   return days;
 }
 
@@ -136,6 +105,7 @@ export function resolveDuration(
       continue;
     }
 
+    // AND-logic: both bounds must hold for a branch to match
     let matches = true;
 
     if (ageCondition.from) {

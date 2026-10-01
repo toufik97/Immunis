@@ -469,6 +469,12 @@ function calculateEarliestPrimaryDate(
     if (minAgeDate > earliest) earliest = minAgeDate;
   }
 
+  // POLIO FEATURE 2: never plan before the recommended target age
+  if (rule.target_min_age) {
+    const targetDate = addDurationToDate(birthDate, rule.target_min_age);
+    if (targetDate > earliest) earliest = targetDate;
+  }
+  
   if (rule.min_interval_from_previous && lastDate) {
     const lastAgeMonths = ageInMonthsAt(birthDate, lastDate);
     const interval = resolveDuration(rule.min_interval_from_previous, lastAgeMonths);

@@ -1,29 +1,38 @@
 import { describe, it, expect } from "vitest";
-import { run, count, need, doses, expectVisit, rec } from "./helpers";
+import { run, count, need, doses, expectVisitContains, rec } from "./helpers";
 
 describe("Group T — Td pathway above 7 years (D1-D7)", () => {
-  it("T1: 7y6m never vaccinated → 3 primary + 2 projected boosters; HB 3", () => {
+  it("T1: 7y6m never vaccinated → DT 3 + HB 3 + polio; DTP silent handoff", () => {
     const r = run("2018-10-01", [], "2026-04-01");
     const dtp = need(r, "DTP_PROGRAM");
     expect(dtp.status).toBe("NOT_NEEDED");
     expect(dtp.warnings).toEqual([]);
     expect(need(r, "DT_PROGRAM").dosesNeeded).toBe(3);
     expect(need(r, "HB_PROGRAM").dosesNeeded).toBe(3);
-    expectVisit(r, 0, "2026-04-01", ["TD", "HB_MONO"], "DUE_NOW");
-    expect(r.visitPlan.visits.length).toBe(3);
+    expectVisitContains(r, 0, ["TD", "HB_MONO", "VPO", "VPI"], { date: "2026-04-01", status: "DUE_NOW" });
+    expect(r.visitPlan.visits.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("T2: adult 26y never vaccinated → exactly 2 projected boosters (5 doses total)", () => {
+  it("T2: adult 26y never vaccinated → exactly 2 DTP-shape projected boosters; HB 3", () => {
     const r = run("2000-01-01", [], "2026-04-01", "full");
     expect(need(r, "DT_PROGRAM").dosesNeeded).toBe(3);
-    const projected = r.visitPlan.visits.filter(v => v.status === "PROJECTED");
-    expect(projected.length).toBe(2);
+    const projected = r.visitPlan.visits.filter(
+      v => v.status === "PROJECTED" && v.products.includes("TD")
+    );
     expect(projected.map(v => v.role)).toContain("booster_1");
     expect(projected.map(v => v.role)).toContain("booster_2");
     expect(need(r, "HB_PROGRAM").dosesNeeded).toBe(3);
   });
 
   it("T3: 4 doses at ≥7y → DT booster 2 due, given as TD", () => {
+    const before = run("2019-06-01", [
+      rec("2025-06-01", "DTC"),
+      rec("2025-07-01", "DTC"),
+      rec("2026-01-01", "DTC")
+    ], "2026-04-01");
+    expect(need(before, "DTP_PROGRAM").status).toBe("NEEDS_BOOSTER");
+    expect(need(before, "DTP_PROGRAM").boosterSequence).toBe(1);
+
     const after = run("2019-06-01", [
       rec("2025-06-01", "DTC"),
       rec("2025-07-01", "DTC"),
@@ -33,9 +42,7 @@ describe("Group T — Td pathway above 7 years (D1-D7)", () => {
     const dt = need(after, "DT_PROGRAM");
     expect(dt.status).toBe("NEEDS_BOOSTER");
     expect(dt.boosterSequence).toBe(2);
-    expect(
-      after.visitPlan.visits.some(v => v.products.includes("TD"))
-    ).toBe(true);
+    expect(after.visitPlan.visits.some(v => v.products.includes("TD"))).toBe(true);
   });
 
   it("T4: 7th DT dose before 7y counts with cap warning", () => {

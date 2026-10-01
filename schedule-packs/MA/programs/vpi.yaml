@@ -1,0 +1,60 @@
+program:
+  id: VPI_PROGRAM
+  label_fr: Poliomyélite inactivée (VPI)
+  antigen_targets:
+    - POLIO_INACTIVATED
+  counter: POLIO_INACTIVATED_DOSES
+
+primary_series:
+  required_valid_doses: 2
+
+  dose_validity:
+    - dose: 1
+      min_age:
+        months: 4
+
+    - dose: 2
+      min_interval_from_previous:
+        weeks: 4
+      target_min_age:
+        months: 9
+
+catchup_rules:
+  - id: MA-VPI-CU-LT8Y-0D
+    when:
+      age: { to_before: { years: 8 } }
+      counter: { id: POLIO_INACTIVATED_DOSES, equals: 0 }
+    then:
+      action: complete_primary
+      doses_needed: 2
+
+  - id: MA-VPI-CU-LT8Y-1D
+    when:
+      age: { to_before: { years: 8 } }
+      counter: { id: POLIO_INACTIVATED_DOSES, equals: 1 }
+    then:
+      action: complete_primary
+      doses_needed: 1
+
+  - id: MA-VPI-CU-LT8Y-GE2
+    when:
+      age: { to_before: { years: 8 } }
+      counter: { id: POLIO_INACTIVATED_DOSES, gte: 2 }
+    then:
+      action: complete
+
+  - id: MA-VPI-CU-GE8Y
+    when:
+      age: { from: { years: 8 } }
+    then:
+      action: none
+
+review_flags:
+  - id: VPI-REVIEW-001
+    topic: VPI2 early administration
+    question: >
+      VPI2 target is 9 months; a dose given earlier with >=4 weeks
+      interval counts with warning (no restart, no extra dose).
+      Future UI must block entry before 9 months unless overridden
+      by a healthcare professional (CONF-004).
+    status: clinician_confirmed

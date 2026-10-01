@@ -28,6 +28,7 @@ export interface ValidityContext {
   requiredValidDoses: number;
   boosterTargets: Record<number, { minAge?: any; interval?: any }>;
   caps: any[];
+  doseZero: { productGroups: string[]; maxAgeMonths: number } | null;
 }
 
 export function validateCounterDoses(
@@ -59,19 +60,53 @@ export function validateCounterDoses(
     );
 
   const doses: ValidatedDose[] = [];
+
+  // ---------- POLIO FEATURE 1: dose-zero split ----------
+  // Records given inside the dose_zero window (e.g. VPO at birth)
+  // are displayed as dose 0 and NEVER enter the 1-2-3 ladder.
+  const zeroRecords: ImmunizationRecord[] = [];
+  const countedRecords: ImmunizationRecord[] = [];
+
+  for (const record of relevantRecords) {
+    const ageAt = ageInMonthsAt(birthDate, parseDate(record.administeredOn));
+
+    if (
+      context.doseZero &&
+      context.doseZero.productGroups.includes(record.productGroupId) &&
+      ageAt < context.doseZero.maxAgeMonths
+    ) {
+      zeroRecords.push(record);
+    } else {
+      countedRecords.push(record);
+    }
+  }
+
+  for (const record of zeroRecords) {
+    doses.push({
+      doseNumber: 0,
+      productGroupId: record.productGroupId,
+      administeredOn: record.administeredOn,
+      valid: true,
+      reasons: [],
+      warnings: []
+    });
+  }
+
+  // ---------- counted doses ----------
   let validDoseCount = 0;
   let lastValidDoseDate: Date | null = null;
   let lastValidDoseAgeMonths: number | null = null;
 
-  for (let i = 0; i < relevantRecords.length; i++) {
-    const record = relevantRecords[i];
+  for (let i = 0; i < countedRecords.length; i++) {
+    const record = countedRecords[i];
     const doseDate = parseDate(record.administeredOn);
     const doseAgeMonths = ageInMonthsAt(birthDate, doseDate);
     const doseNumber = validDoseCount + 1;
     const reasons: string[] = [];
     const warnings: string[] = [];
 
-    const previousRecord = relevantRecords[i - 1];
+    // same product twice on the same day = duplicate entry
+    const previousRecord = countedRecords[i - 1];
     if (
       previousRecord &&
       previousRecord.productGroupId === record.productGroupId &&
@@ -84,7 +119,7 @@ export function validateCounterDoses(
       (rule: any) => rule.dose === doseNumber
     );
 
-    // T1 floors (invalidating)
+    // ---- T1: floors (invalidating) ----
     let t1IntervalPassed = true;
 
     if (validityRule?.min_age) {
@@ -120,7 +155,7 @@ export function validateCounterDoses(
 
     const valid = reasons.length === 0 || isOverridden;
 
-    // T2 warnings (counted but deviating)
+    // ---- T2: booster-target deviations ----
     if (valid && doseNumber > context.requiredValidDoses) {
       const seq = doseNumber - context.requiredValidDoses;
       const target = context.boosterTargets?.[seq];
@@ -157,7 +192,17 @@ export function validateCounterDoses(
       }
     }
 
-    // Dose cap warnings
+    // ---- POLIO FEATURE 2: primary target age (e.g. VPI2 at 9 months) ----
+    if (valid && validityRule?.target_min_age) {
+      const targetMonths = durationToMonths(validityRule.target_min_age);
+      if (doseAgeMonths < targetMonths) {
+        warnings.push(
+          `EARLY_DOSE_${doseNumber}_COUNTED: administered at ${doseAgeMonths} months, recommended target ${targetMonths} months. Dose counted (no restart).`
+        );
+      }
+    }
+
+    // ---- dose cap warnings ----
     if (valid) {
       for (const cap of context.caps ?? []) {
         const beforeAgeMonths = durationToMonths(cap.before_age);
@@ -172,7 +217,7 @@ export function validateCounterDoses(
       }
     }
 
-    // CRITICAL: only valid doses advance the counter
+    // ---- CRITICAL: only valid doses advance the counter ----
     if (valid) {
       validDoseCount++;
       lastValidDoseDate = doseDate;
