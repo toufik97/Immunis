@@ -1,0 +1,72 @@
+program:
+  id: BCG_PROGRAM
+  label_fr: BCG (Tuberculose)
+  description_fr: >
+    Programme BCG.
+    1 dose recommandée, au premier mois de vie (0.05ml).
+    Rattrapage si aucune dose enregistrée:
+    - moins de 1 an: 1 dose (0.05ml)
+    - de 1 an à moins de 6 ans: 1 dose (0.1ml)
+    - 6 ans et plus: aucune recommandation.
+    Le volume (0.05ml / 0.1ml) est un détail d'administration
+    affiché par l'interface selon l'âge à la date de visite.
+    Cicatrice observée sans dose enregistrée: saisir la dose
+    dans l'historique pour l'instant; le statut explicite
+    "fait ailleurs + note cicatrice" arrivera avec la base
+    de données (BCG-REVIEW-001).
+  antigen_targets:
+    - BCG
+  counter: BCG_DOSES
+
+primary_series:
+  required_valid_doses: 1
+
+  dose_validity:
+    - dose: 1
+      min_age:
+        birth: true
+
+catchup_rules:
+  - id: MA-BCG-CU-LT1Y-0D
+    when:
+      age: { to_before: { years: 1 } }
+      counter: { id: BCG_DOSES, equals: 0 }
+    then:
+      action: complete_primary
+      doses_needed: 1
+
+  - id: MA-BCG-CU-1Y-LT6Y-0D
+    when:
+      age: { from: { years: 1 }, to_before: { years: 6 } }
+      counter: { id: BCG_DOSES, equals: 0 }
+    then:
+      action: complete_primary
+      doses_needed: 1
+
+  - id: MA-BCG-CU-GE6Y
+    when:
+      age: { from: { years: 6 } }
+    then:
+      action: none
+
+  - id: MA-BCG-CU-GE1
+    when:
+      counter: { id: BCG_DOSES, gte: 1 }
+    then:
+      action: complete
+
+review_flags:
+  - id: BCG-REVIEW-001
+    topic: Scar-only immunity
+    question: >
+      Interim rule: observed scar with no recorded dose is entered
+      as a BCG history row. Persistent "administered elsewhere +
+      scar note" status deferred to the database layer.
+    status: policy_decision
+
+  - id: BCG-REVIEW-002
+    topic: Recorded dose at or beyond 6 years
+    question: >
+      Counted as valid (harmless extra, G4); the 6-year stop governs
+      recommendations only, not validity.
+    status: clinician_confirmed
