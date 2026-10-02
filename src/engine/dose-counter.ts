@@ -96,7 +96,6 @@ function buildValidityContext(
     }
   }
 
-  // POLIO FEATURE 1: read the dose_zero block from YAML
   const doseZero = primary.dose_zero
     ? {
         productGroups: (primary.dose_zero.product_groups ?? []) as string[],

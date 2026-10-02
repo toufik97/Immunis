@@ -39,7 +39,6 @@ export function validateCounterDoses(
   context: ValidityContext
 ): ValidationResult {
   const birthDate = parseDate(patient.birthDate);
-
   const counters: any[] = (pack.counters as any).counters ?? [];
   const counter = counters.find((c: any) => c.id === counterId);
 
@@ -61,9 +60,7 @@ export function validateCounterDoses(
 
   const doses: ValidatedDose[] = [];
 
-  // ---------- POLIO FEATURE 1: dose-zero split ----------
-  // Records given inside the dose_zero window (e.g. VPO at birth)
-  // are displayed as dose 0 and NEVER enter the 1-2-3 ladder.
+  // ---------- dose-zero split ----------
   const zeroRecords: ImmunizationRecord[] = [];
   const countedRecords: ImmunizationRecord[] = [];
 
@@ -105,7 +102,6 @@ export function validateCounterDoses(
     const reasons: string[] = [];
     const warnings: string[] = [];
 
-    // same product twice on the same day = duplicate entry
     const previousRecord = countedRecords[i - 1];
     if (
       previousRecord &&
@@ -119,7 +115,6 @@ export function validateCounterDoses(
       (rule: any) => rule.dose === doseNumber
     );
 
-    // ---- T1: floors (invalidating) ----
     let t1IntervalPassed = true;
 
     if (validityRule?.min_age) {
@@ -128,7 +123,7 @@ export function validateCounterDoses(
         reasons.push(`INVALID_AGE_DOSE_${doseNumber}_TOO_EARLY`);
       }
     }
-    
+
     if (validityRule?.max_age) {
       const maxAgeMonths = durationToMonths(validityRule.max_age);
       if (doseAgeMonths >= maxAgeMonths) {
@@ -162,7 +157,6 @@ export function validateCounterDoses(
 
     const valid = reasons.length === 0 || isOverridden;
 
-    // ---- T2: booster-target deviations ----
     if (valid && doseNumber > context.requiredValidDoses) {
       const seq = doseNumber - context.requiredValidDoses;
       const target = context.boosterTargets?.[seq];
@@ -199,7 +193,6 @@ export function validateCounterDoses(
       }
     }
 
-    // ---- POLIO FEATURE 2: primary target age (e.g. VPI2 at 9 months) ----
     if (valid && validityRule?.target_min_age) {
       const targetMonths = durationToMonths(validityRule.target_min_age);
       if (doseAgeMonths < targetMonths) {
@@ -209,7 +202,6 @@ export function validateCounterDoses(
       }
     }
 
-    // ---- dose cap warnings ----
     if (valid) {
       for (const cap of context.caps ?? []) {
         const beforeAgeMonths = durationToMonths(cap.before_age);
@@ -218,13 +210,12 @@ export function validateCounterDoses(
           doseNumber > Number(cap.max_doses)
         ) {
           warnings.push(
-            `DOSE_CAP_EXCEEDED_COUNTED: dose ${doseNumber} exceeds the recommended maximum of ${cap.max_doses} doses before 7 years of age. Dose counted (not harmful), review recommended.`
+            `DOSE_CAP_EXCEEDED_COUNTED: dose ${doseNumber} exceeds the recommended maximum of ${cap.max_doses} doses before age limit. Dose counted.`
           );
         }
       }
     }
 
-    // ---- CRITICAL: only valid doses advance the counter ----
     if (valid) {
       validDoseCount++;
       lastValidDoseDate = doseDate;

@@ -65,6 +65,26 @@ export function planVisits(
   const rawVisits: RawVisit[] = [];
   const plannedPrimaryByProgram: Record<string, number> = {};
 
+  const birthOffsetByProgram: Record<string, number> = {};
+
+  for (const plan of selection.birthDosePlans ?? []) {
+    const planDate = parseDate(plan.date);
+
+    rawVisits.push({
+      date: planDate,
+      productGroupId: plan.productGroupId,
+      antigens: getProductAntigens(productGroups, plan.productGroupId),
+      role: "birth_dose",
+      programIds: [plan.programId],
+      projected: false
+    });
+
+    scheduledLastByProgram[plan.programId] = planDate;
+    plannedPrimaryByProgram[plan.programId] =
+      (plannedPrimaryByProgram[plan.programId] ?? 0) + plan.offset;
+    birthOffsetByProgram[plan.programId] = plan.offset;
+  }
+
   // ---------- primary slots ----------
   for (const slot of selection.primarySlots) {
     const productDates: Array<{
@@ -82,7 +102,10 @@ export function planVisits(
 
         const program: any = programs[programId];
         const doseValidity: any[] = program?.primary_series?.dose_validity ?? [];
-        const absoluteDoseNumber = need.validDosesReceived + slot.slot;
+        const absoluteDoseNumber =
+          need.validDosesReceived +
+          (birthOffsetByProgram[programId] ?? 0) +
+          slot.slot;
         const rule = doseValidity.find((r: any) => r.dose === absoluteDoseNumber);
         const lastDate = scheduledLastByProgram[programId] ?? null;
 
@@ -105,7 +128,9 @@ export function planVisits(
           const doseValidity: any[] =
             program?.primary_series?.dose_validity ?? [];
           const absoluteDoseNumber =
-            (programNeed?.validDosesReceived ?? 0) + slot.slot;
+            (programNeed?.validDosesReceived ?? 0) +
+            (birthOffsetByProgram[programId] ?? 0) +
+            slot.slot;
           const rule = doseValidity.find(
             (r: any) => r.dose === absoluteDoseNumber
           );

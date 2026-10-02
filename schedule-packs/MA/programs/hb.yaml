@@ -7,7 +7,13 @@ program:
 
 primary_series:
   required_valid_doses: 3
-
+  
+  birth_dose:
+    product_group: HB_MONO
+    counts_as_dose: 1
+    plan_if_age_below:
+      weeks: 4
+  
   dose_validity:
     - dose: 1
       min_age:

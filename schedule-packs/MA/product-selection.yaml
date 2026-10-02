@@ -19,15 +19,13 @@ product_selection:
       max_age: { years: 7, exclusive: true }
     - product_group: TD
       min_age: { years: 6 }
-    - product_group: VPO
-      max_age: { years: 8, exclusive: true }
     - product_group: VPI
       max_age: { years: 8, exclusive: true }
     - product_group: ROTAVIRUS
       max_age: { months: 24, exclusive: true }
     - product_group: BCG
       max_age: { years: 6, exclusive: true }
-            
+
   product_ranking:
     - PENTA
     - DTC

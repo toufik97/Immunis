@@ -9,7 +9,12 @@ primary_series:
   required_valid_doses: 3
   booster_policy: VPO_BOOSTERS
 
-  dose_zero:
+  birth_dose:
+    product_group: VPO
+    counts_as_dose: 0
+    plan_if_age_below:
+      weeks: 4
+  dose_zero:             # <--- ADD THIS BLOCK
     product_groups:
       - VPO
     max_age:
@@ -103,34 +108,31 @@ booster_policies:
               years: 1
 
 catchup_rules:
-  - id: MA-VPO-CU-LT8Y-0D
+  - id: MA-VPO-CU-0D
     when:
-      age: { to_before: { years: 8 } }
       counter: { id: POLIO_ORAL_DOSES, equals: 0 }
     then:
       action: complete_primary
       doses_needed: 3
       booster_policy: VPO_BOOSTERS
 
-  - id: MA-VPO-CU-LT8Y-1D
+  - id: MA-VPO-CU-1D
     when:
-      age: { to_before: { years: 8 } }
       counter: { id: POLIO_ORAL_DOSES, equals: 1 }
     then:
       action: complete_primary
       doses_needed: 2
       booster_policy: VPO_BOOSTERS
 
-  - id: MA-VPO-CU-LT8Y-2D
+  - id: MA-VPO-CU-2D
     when:
-      age: { to_before: { years: 8 } }
       counter: { id: POLIO_ORAL_DOSES, equals: 2 }
     then:
       action: complete_primary
       doses_needed: 1
       booster_policy: VPO_BOOSTERS
 
-  - id: MA-VPO-CU-LT8Y-3D-LT18M
+  - id: MA-VPO-CU-3D-LT18M
     when:
       age: { to_before: { months: 18 } }
       counter: { id: POLIO_ORAL_DOSES, equals: 3 }
@@ -139,36 +141,29 @@ catchup_rules:
       booster_sequence: 1
       booster_policy: VPO_BOOSTERS
 
-  - id: MA-VPO-CU-LT8Y-3D-GE18M
+  - id: MA-VPO-CU-3D-GE18M
     when:
-      age: { from: { months: 18 }, to_before: { years: 8 } }
+      age: { from: { months: 18 } }
       counter: { id: POLIO_ORAL_DOSES, equals: 3 }
     then:
       action: give_booster_if_due
       booster_sequence: 1
       booster_policy: VPO_BOOSTERS
 
-  - id: MA-VPO-CU-LT8Y-4D
+  - id: MA-VPO-CU-4D
     when:
-      age: { to_before: { years: 8 } }
       counter: { id: POLIO_ORAL_DOSES, equals: 4 }
     then:
       action: give_booster_if_due
       booster_sequence: 2
       booster_policy: VPO_BOOSTERS
 
-  - id: MA-VPO-CU-LT8Y-GE5
+  - id: MA-VPO-CU-GE5
     when:
-      age: { to_before: { years: 8 } }
       counter: { id: POLIO_ORAL_DOSES, gte: 5 }
     then:
       action: complete
 
-  - id: MA-VPO-CU-GE8Y
-    when:
-      age: { from: { years: 8 } }
-    then:
-      action: none
 
 review_flags:
   - id: VPO-REVIEW-001
@@ -185,3 +180,10 @@ review_flags:
       they do not count toward the routine series). A campaign flag
       may be added later.
     status: policy_decision
+  - id: VPO-REVIEW-003
+    topic: No upper age limit for VPO
+    question: >
+      Age ceiling removed by clinician ruling: VPO recommendations
+      now follow dose count at any age (adult OPV schemas not
+      separately reviewed).
+    status: clinician_confirmed

@@ -26,4 +26,21 @@ describe("Group F — product selection (inclusion-based)", () => {
     const r = run("2024-04-01", [rec("2024-06-01", "PENTA")], "2026-04-01");
     expectVisitContains(r, 0, ["DTC", "HB_MONO"], { forbidden: ["PENTA"] });
   });
+
+  it("F4: newborn full plan never mixes DTC and PENTA in one visit", () => {
+    const r = run("2018-04-01", [], "2018-04-02", "full");
+
+    for (const v of r.visitPlan.visits) {
+      const mixes = v.products.includes("DTC") && v.products.includes("PENTA");
+      expect(mixes, `visit on ${v.date} mixes DTC and PENTA`).toBe(false);
+    }
+
+    const v4 = r.visitPlan.visits.find(v => v.date === "2018-08-01");
+    expect(v4).toBeDefined();
+    expect(v4!.products).toContain("PENTA");
+    expect(v4!.products).not.toContain("DTC");
+    expect(r.visitPlan.warnings.join(" ")).not.toContain(
+      "Same-visit antigen overlap"
+    );
+  });
 });

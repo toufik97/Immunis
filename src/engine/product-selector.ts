@@ -5,9 +5,10 @@ import type {
   ProductSelectionResult,
   PrimarySlotPlan,
   BoosterPlan,
-  SlotProduct
+  SlotProduct,
+  BirthDosePlan
 } from "../types";
-import { parseDate, ageInMonthsAt, durationToMonths } from "./duration";
+import { parseDate, formatDate, ageInMonthsAt, durationToMonths } from "./duration";
 
 export function selectProducts(
   needs: AntigenNeed[],
@@ -41,18 +42,49 @@ export function selectProducts(
       need.dosesNeeded > 0 &&
       need.antigenTargets.length > 0
   );
+  
+  const needsById: Record<string, AntigenNeed> = {};
+  for (const n of needs) {
+    needsById[n.programId] = n;
+  }
 
   const primarySlots: PrimarySlotPlan[] = [];
   const boosterPlans: BoosterPlan[] = [];
 
   const remainingByProgram: Record<string, number> = {};
-
   for (const need of primaryNeeds) {
     remainingByProgram[need.programId] = need.dosesNeeded;
   }
 
+  // ---------- birth doses (HB_MONO / VPO0 inside the first 4 weeks) ----------
+  const birthDosePlans: BirthDosePlan[] = [];
+
+  for (const need of primaryNeeds) {
+    const program: any = (pack.programs as any)[need.programId];
+    const birthDose = program?.primary_series?.birth_dose;
+    if (!birthDose) continue;
+    if (need.validDosesReceived !== 0) continue;
+
+    const windowMonths = durationToMonths(birthDose.plan_if_age_below);
+    if (ageMonths >= windowMonths) continue;
+
+    const offset = Number(birthDose.counts_as_dose ?? 1);
+
+    birthDosePlans.push({
+      programId: need.programId,
+      productGroupId: birthDose.product_group,
+      date: formatDate(evaluationDate),
+      offset
+    });
+
+    remainingByProgram[need.programId] = Math.max(
+      0,
+      need.dosesNeeded - offset
+    );
+  }
+
   const maxSlots = primaryNeeds.length
-    ? Math.max(...primaryNeeds.map(need => need.dosesNeeded))
+    ? Math.max(...primaryNeeds.map(need => remainingByProgram[need.programId]))
     : 0;
 
   for (let slot = 1; slot <= maxSlots; slot++) {
@@ -154,7 +186,57 @@ export function selectProducts(
           .join(", ")}`
       );
     }
+    // ---------- merge antigen-overlapping products within the slot ----------
+    let didMerge = true;
+    while (didMerge) {
+      didMerge = false;
 
+      outer: for (let i = 0; i < slotProducts.length; i++) {
+        for (let j = i + 1; j < slotProducts.length; j++) {
+          const a = slotProducts[i];
+          const b = slotProducts[j];
+
+          const antigensOf = (id: string): string[] => {
+            const p = productGroups.find((x: any) => x.id === id);
+            return Array.isArray(p?.satisfies_antigens)
+              ? p.satisfies_antigens
+              : [];
+          };
+
+          const shared = antigensOf(a.productGroupId).some(ag =>
+            antigensOf(b.productGroupId).includes(ag)
+          );
+          if (!shared) continue;
+
+          const unionProgramIds = Array.from(
+            new Set([...a.coveredProgramIds, ...b.coveredProgramIds])
+          );
+
+          const candidate = productGroups.find((product: any) => {
+            if (!isProductEligible(product.id, ageMonths, eligibilityRules)) {
+              return false;
+            }
+            return unionProgramIds.every((pid: string) => {
+              const nd = needsById[pid];
+              return nd ? productCoversProgram(product, nd) : false;
+            });
+          });
+
+          if (candidate) {
+            slotProducts.splice(j, 1);
+            slotProducts[i] = {
+              productGroupId: candidate.id,
+              coveredProgramIds: unionProgramIds
+            };
+            reasoning.push(
+              `Slot ${slot}: merged overlapping ${a.productGroupId}+${b.productGroupId} into ${candidate.id}`
+            );
+            didMerge = true;
+            break outer;
+          }
+        }
+      }
+    }
     if (slotProducts.length > 0) {
       primarySlots.push({
         slot,
@@ -215,6 +297,7 @@ export function selectProducts(
   return {
     primarySlots,
     boosterPlans,
+    birthDosePlans,
     reasoning,
     warnings,
     strategy: selectionConfig.mode ?? "generic_program_coverage"

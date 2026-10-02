@@ -51,6 +51,7 @@ export interface ProductSelectionResult {
   reasoning: string[];
   warnings: string[];
   strategy: string;
+  birthDosePlans: BirthDosePlan[];
 }
 
 export type VisitStatus = "DUE_NOW" | "DUE_FUTURE" | "PROJECTED";
@@ -75,4 +76,10 @@ export interface VisitPlan {
 
 export interface DoseCounts {
   [counterId: string]: number;
+}
+export interface BirthDosePlan {
+  programId: string;
+  productGroupId: string;
+  date: string;
+  offset: number;
 }

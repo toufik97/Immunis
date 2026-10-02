@@ -66,11 +66,10 @@ describe("Group P — Polio (VPO + VPI)", () => {
     expect(need(r, "VPO_PROGRAM").dosesNeeded).toBe(3);
   });
 
-  it("P8: 9y never vaccinated → silent none for both polio programs", () => {
+  it("P8: 9y never vaccinated → VPI silent none; VPO has no age limit", () => {
     const r = run("2017-01-01", [], "2026-04-01");
-    expect(need(r, "VPO_PROGRAM").status).toBe("NOT_NEEDED");
-    expect(need(r, "VPO_PROGRAM").warnings).toEqual([]);
     expect(need(r, "VPI_PROGRAM").status).toBe("NOT_NEEDED");
     expect(need(r, "VPI_PROGRAM").warnings).toEqual([]);
+    expect(need(r, "VPO_PROGRAM").dosesNeeded).toBe(3);
   });
 });
