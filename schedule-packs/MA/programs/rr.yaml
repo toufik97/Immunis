@@ -1,0 +1,61 @@
+program:
+  id: RR_PROGRAM
+  label_fr: Rougeole-Rubéole (RR)
+  description_fr: >
+    Programme rougeole-rubéole.
+    Dose 1 à 9 mois, dose 2 à 18 mois, intervalle minimum 4 semaines.
+    Rattrapage: jamais de restart; 2 doses de vaccin RR/RRO à tout âge,
+    sans limite d'âge supérieure.
+  antigen_targets:
+    - MEASLES
+    - RUBELLA
+  counter: RR_DOSES
+
+primary_series:
+  required_valid_doses: 2
+
+  dose_validity:
+    - dose: 1
+      min_age:
+        months: 9
+
+    - dose: 2
+      min_interval_from_previous:
+        weeks: 4
+      target_min_age:
+        months: 18
+
+catchup_rules:
+  - id: MA-RR-CU-0D
+    when:
+      counter: { id: RR_DOSES, equals: 0 }
+    then:
+      action: complete_primary
+      doses_needed: 2
+
+  - id: MA-RR-CU-1D
+    when:
+      counter: { id: RR_DOSES, equals: 1 }
+    then:
+      action: complete_primary
+      doses_needed: 1
+
+  - id: MA-RR-CU-GE2
+    when:
+      counter: { id: RR_DOSES, gte: 2 }
+    then:
+      action: complete
+
+review_flags:
+  - id: RR-REVIEW-001
+    topic: Dose 2 before 18 months
+    question: >
+      Recorded dose 2 given >=4 weeks after dose 1 but before 18
+      months counts with EARLY_DOSE_2_COUNTED warning.
+    status: clinician_confirmed
+
+  - id: RR-REVIEW-002
+    topic: No upper age limit
+    question: >
+      Catch-up applies at any age.
+    status: clinician_confirmed

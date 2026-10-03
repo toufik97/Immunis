@@ -57,7 +57,9 @@ product_groups:
     label_fr: VPO
     satisfies_antigens:
       - POLIO_ORAL
-
+    clinical:
+      live: true
+      
   - id: VPI
     label_fr: VPI
     satisfies_antigens:
@@ -99,20 +101,31 @@ product_groups:
     label_fr: Rotavirus
     satisfies_antigens:
       - ROTAVIRUS
-
+    clinical:
+      live: true
+      
   - id: RR
     label_fr: RR
     satisfies_antigens:
       - MEASLES
       - RUBELLA
+    clinical:
+      live: true
+      availability: current
 
   - id: RRO
     label_fr: RRO
     satisfies_antigens:
       - MEASLES
       - RUBELLA
+    clinical:
+      live: true
+      availability: legacy
 
   - id: VAR
     label_fr: VAR
     satisfies_antigens:
       - MEASLES
+    clinical:
+      live: true
+      availability: legacy

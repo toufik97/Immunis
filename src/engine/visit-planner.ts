@@ -4,7 +4,8 @@ import type {
   AntigenNeed,
   ProductSelectionResult,
   VisitPlan,
-  PlannedVisit
+  PlannedVisit,
+  ImmunizationRecord
 } from "../types";
 import {
   parseDate,
@@ -21,6 +22,7 @@ import {
   productCoversProgram,
   resolveBoosterProduct
 } from "./product-selector";
+import { createLiveSpacingAdjuster } from "./spacing";
 
 interface RawVisit {
   date: Date;
@@ -36,6 +38,7 @@ export function planVisits(
   needs: AntigenNeed[],
   pack: SchedulePack,
   patient: Patient,
+  history: ImmunizationRecord[],
   evaluationDate: Date,
   programLastDates: Record<string, string | null>,
   projection: "next" | "full" = "next"
@@ -64,12 +67,15 @@ export function planVisits(
 
   const rawVisits: RawVisit[] = [];
   const plannedPrimaryByProgram: Record<string, number> = {};
-
   const birthOffsetByProgram: Record<string, number> = {};
+  const spacingAdjuster = createLiveSpacingAdjuster(history, pack);
 
+  // ---------- birth doses ----------
   for (const plan of selection.birthDosePlans ?? []) {
-    const planDate = parseDate(plan.date);
-
+    const planDateRaw = parseDate(plan.date);
+    const spacedBirth = spacingAdjuster.adjust(plan.productGroupId, planDateRaw);
+    for (const w of spacedBirth.warnings) warnings.push(w);
+    const planDate = spacedBirth.date;
     rawVisits.push({
       date: planDate,
       productGroupId: plan.productGroupId,
@@ -78,7 +84,6 @@ export function planVisits(
       programIds: [plan.programId],
       projected: false
     });
-
     scheduledLastByProgram[plan.programId] = planDate;
     plannedPrimaryByProgram[plan.programId] =
       (plannedPrimaryByProgram[plan.programId] ?? 0) + plan.offset;
@@ -99,7 +104,6 @@ export function planVisits(
       for (const programId of slotProduct.coveredProgramIds) {
         const need = needsById[programId];
         if (!need) continue;
-
         const program: any = programs[programId];
         const doseValidity: any[] = program?.primary_series?.dose_validity ?? [];
         const absoluteDoseNumber =
@@ -115,10 +119,7 @@ export function planVisits(
           birthDate,
           evaluationDate
         );
-
-        if (programEarliest > earliest) {
-          earliest = programEarliest;
-        }
+        if (programEarliest > earliest) earliest = programEarliest;
       }
 
       const feasibleProgramIds = slotProduct.coveredProgramIds.filter(
@@ -134,57 +135,71 @@ export function planVisits(
           const rule = doseValidity.find(
             (r: any) => r.dose === absoluteDoseNumber
           );
-
           if (!rule?.max_age) return true;
-
           const limitMonths = durationToMonths(rule.max_age);
           const ageAtPlanned = ageInMonthsAt(birthDate, earliest);
-
           if (ageAtPlanned >= limitMonths) {
             warnings.push(
               `AGE_LIMIT_PREVENTS_DOSE: ${programId} dose ${absoluteDoseNumber} would fall at ${ageAtPlanned} months (limit ${limitMonths} months). Not planned.`
             );
             return false;
           }
-
           return true;
         }
       );
 
-      if (feasibleProgramIds.length === 0) {
-        continue;
-      }
+      if (feasibleProgramIds.length === 0) continue;
 
+      const spaced = spacingAdjuster.adjust(slotProduct.productGroupId, earliest);
+      for (const w of spaced.warnings) warnings.push(w);
       productDates.push({
         productGroupId: slotProduct.productGroupId,
         coveredProgramIds: feasibleProgramIds,
-        date: earliest
+        date: spaced.date
       });
     }
 
     if (productDates.length === 0) continue;
 
-    const minDate = productDates.reduce((m, c) => (c.date < m ? c.date : m), productDates[0].date);
-    const maxDate = productDates.reduce((m, c) => (c.date > m ? c.date : m), productDates[0].date);
-    const diffDays = Math.round((maxDate.getTime() - minDate.getTime()) / 86400000);
-    const useCommonDate = diffDays <= maxAlignmentDelayDays;
+    // cluster alignment (G33): far-out doses keep their own visit
+    const sortedDates = [...productDates].sort(
+      (a, b) => a.date.getTime() - b.date.getTime()
+    );
+    const clusters: Array<typeof sortedDates> = [];
+    for (const pd of sortedDates) {
+      const lastCluster = clusters[clusters.length - 1];
+      if (lastCluster) {
+        const prevDate = lastCluster[lastCluster.length - 1].date;
+        const gap = Math.round(
+          (pd.date.getTime() - prevDate.getTime()) / 86400000
+        );
+        if (gap <= maxAlignmentDelayDays) {
+          lastCluster.push(pd);
+          continue;
+        }
+      }
+      clusters.push([pd]);
+    }
 
-    for (const pd of productDates) {
-      const visitDate = useCommonDate ? maxDate : pd.date;
-
-      rawVisits.push({
-        date: visitDate,
-        productGroupId: pd.productGroupId,
-        antigens: getProductAntigens(productGroups, pd.productGroupId),
-        role: "primary",
-        programIds: pd.coveredProgramIds,
-        projected: false
-      });
-
-      for (const programId of pd.coveredProgramIds) {
-        scheduledLastByProgram[programId] = visitDate;
-        plannedPrimaryByProgram[programId] =
-          (plannedPrimaryByProgram[programId] ?? 0) + 1;
+    for (const cluster of clusters) {
+      const clusterDate = cluster.reduce(
+        (m, c) => (c.date > m ? c.date : m),
+        cluster[0].date
+      );
+      for (const pd of cluster) {
+        rawVisits.push({
+          date: clusterDate,
+          productGroupId: pd.productGroupId,
+          antigens: getProductAntigens(productGroups, pd.productGroupId),
+          role: "primary",
+          programIds: pd.coveredProgramIds,
+          projected: false
+        });
+        for (const programId of pd.coveredProgramIds) {
+          scheduledLastByProgram[programId] = clusterDate;
+          plannedPrimaryByProgram[programId] =
+            (plannedPrimaryByProgram[programId] ?? 0) + 1;
+        }
       }
     }
   }
@@ -193,19 +208,15 @@ export function planVisits(
   for (const booster of selection.boosterPlans) {
     const need = needsById[booster.programId];
     const program: any = programs[booster.programId];
-
     if (!program) {
       warnings.push(`Program not found for booster: ${booster.programId}`);
       continue;
     }
-
     const boosterPolicies: any[] = program.booster_policies ?? [];
     const boosterPolicy =
       boosterPolicies.find((p: any) => p.id === need?.boosterPolicyId) ??
       boosterPolicies[0];
-
     const boosterConfig = boosterPolicy?.[`booster_${booster.boosterSequence}`];
-
     if (!boosterConfig) {
       warnings.push(
         `Booster configuration not found for ${booster.programId} booster ${booster.boosterSequence}`
@@ -214,14 +225,11 @@ export function planVisits(
     }
 
     let visitDate = evaluationDate;
-
     if (boosterConfig.min_age) {
       const minAgeDate = addDurationToDate(birthDate, boosterConfig.min_age);
       if (minAgeDate > visitDate) visitDate = minAgeDate;
     }
-
     const lastDate = scheduledLastByProgram[booster.programId] ?? null;
-
     if (lastDate) {
       const intervalDate = boosterIntervalDate(
         boosterConfig,
@@ -229,10 +237,7 @@ export function planVisits(
         lastDate,
         birthDate
       );
-
-      if (intervalDate && intervalDate > visitDate) {
-        visitDate = intervalDate;
-      }
+      if (intervalDate && intervalDate > visitDate) visitDate = intervalDate;
     } else {
       warnings.push(
         `Missing reference date for booster ${booster.boosterSequence} in program ${booster.programId}`
@@ -244,7 +249,11 @@ export function planVisits(
         boosterConfig,
         ageInMonthsAt(birthDate, visitDate)
       ) ?? booster.productGroupId;
-
+    
+      const spacedBooster = spacingAdjuster.adjust(boosterProduct, visitDate);
+    for (const w of spacedBooster.warnings) warnings.push(w);
+    visitDate = spacedBooster.date;
+    
     rawVisits.push({
       date: visitDate,
       productGroupId: boosterProduct,
@@ -253,9 +262,10 @@ export function planVisits(
       programIds: [booster.programId],
       projected: false
     });
-
     scheduledLastByProgram[booster.programId] = visitDate;
   }
+
+
 
   // ---------- same-visit antigen overlap unification ----------
   const unified = unifySameDateConflicts(
@@ -299,7 +309,6 @@ export function planVisits(
 
   for (const visit of source) {
     const key = formatDate(visit.date);
-
     const existing =
       grouped.get(key) ??
       {
@@ -309,25 +318,21 @@ export function planVisits(
         roles: new Set<string>(),
         projected: visit.projected
       };
-
     existing.products.add(visit.productGroupId);
     for (const antigen of visit.antigens) existing.antigens.add(antigen);
     existing.roles.add(visit.role);
     if (visit.projected) existing.projected = true;
-
     grouped.set(key, existing);
   }
 
   const visits: PlannedVisit[] = [];
   let visitNumber = 1;
-
   for (const [, group] of grouped) {
     const status: PlannedVisit["status"] = group.projected
       ? "PROJECTED"
       : group.date.getTime() <= evaluationDate.getTime()
         ? "DUE_NOW"
         : "DUE_FUTURE";
-
     visits.push({
       visitNumber,
       date: formatDate(group.date),
@@ -336,7 +341,6 @@ export function planVisits(
       role: Array.from(group.roles).join("+"),
       status
     });
-
     visitNumber++;
   }
 
@@ -353,14 +357,12 @@ function unifySameDateConflicts(
   warnings: string[]
 ): RawVisit[] {
   const byDate = new Map<string, RawVisit[]>();
-
   for (const visit of rawVisits) {
     const key = formatDate(visit.date);
     byDate.set(key, [...(byDate.get(key) ?? []), visit]);
   }
 
   const result: RawVisit[] = [];
-
   for (const [, group] of byDate) {
     if (group.length < 2) {
       result.push(...group);
@@ -369,7 +371,6 @@ function unifySameDateConflicts(
 
     const seen = new Map<string, number>();
     let overlap = false;
-
     for (const visit of group) {
       for (const antigen of visit.antigens) {
         const count = (seen.get(antigen) ?? 0) + 1;
@@ -377,14 +378,12 @@ function unifySameDateConflicts(
         if (count > 1) overlap = true;
       }
     }
-
     if (!overlap) {
       result.push(...group);
       continue;
     }
 
     const unionPrograms = Array.from(new Set(group.flatMap(v => v.programIds)));
-
     const candidate = productGroups.find((product: any) => {
       if (
         !isProductEligible(
@@ -395,7 +394,6 @@ function unifySameDateConflicts(
       ) {
         return false;
       }
-
       return unionPrograms.every((programId: string) => {
         const program: any = programs[programId];
         const need = needsById[programId];
@@ -420,7 +418,6 @@ function unifySameDateConflicts(
       result.push(...group);
     }
   }
-
   return result;
 }
 
@@ -438,7 +435,6 @@ function projectFutureBoosters(
     const program: any = programs[programId];
     const policies: any[] = program?.booster_policies ?? [];
     if (policies.length === 0) continue;
-
     const policy =
       policies.find((p: any) => p.id === need.boosterPolicyId) ?? policies[0];
     if (!policy) continue;
@@ -448,7 +444,6 @@ function projectFutureBoosters(
       need.validDosesReceived + (plannedPrimaryByProgram[programId] ?? 0);
 
     let nextSeq: number | null = null;
-
     if (need.status === "NEEDS_BOOSTER") {
       nextSeq = (need.boosterSequence ?? 1) + 1;
     } else if (
@@ -458,33 +453,27 @@ function projectFutureBoosters(
     ) {
       nextSeq = 1;
     }
-
     if (!nextSeq) continue;
 
     let refDate = scheduledLastByProgram[programId] ?? null;
-
     for (let seq = nextSeq; ; seq++) {
       const config = policy[`booster_${seq}`];
       if (!config) break;
 
       let date = evaluationDate;
-
       if (config.min_age) {
         const minAgeDate = addDurationToDate(birthDate, config.min_age);
         if (minAgeDate > date) date = minAgeDate;
       }
-
       const intervalKey =
         seq === 1
           ? "min_interval_after_primary_completion"
           : "min_interval_after_booster_1";
-
       if (config[intervalKey] && refDate) {
         const interval = resolveDuration(
           config[intervalKey],
           ageInMonthsAt(birthDate, refDate)
         );
-
         if (interval) {
           const intervalDate = addDurationToDate(refDate, interval);
           if (intervalDate > date) date = intervalDate;
@@ -505,7 +494,6 @@ function projectFutureBoosters(
         programIds: [programId],
         projected: true
       });
-
       refDate = date;
       scheduledLastByProgram[programId] = date;
     }
@@ -519,30 +507,24 @@ function calculateEarliestPrimaryDate(
   evaluationDate: Date
 ): Date {
   let earliest = evaluationDate;
-
   if (!rule) return earliest;
 
   if (rule.min_age) {
     const minAgeDate = addDurationToDate(birthDate, rule.min_age);
     if (minAgeDate > earliest) earliest = minAgeDate;
   }
-
-  // POLIO FEATURE 2: never plan before the recommended target age
   if (rule.target_min_age) {
     const targetDate = addDurationToDate(birthDate, rule.target_min_age);
     if (targetDate > earliest) earliest = targetDate;
   }
-
   if (rule.min_interval_from_previous && lastDate) {
     const lastAgeMonths = ageInMonthsAt(birthDate, lastDate);
     const interval = resolveDuration(rule.min_interval_from_previous, lastAgeMonths);
-
     if (interval) {
       const intervalDate = addDurationToDate(lastDate, interval);
       if (intervalDate > earliest) earliest = intervalDate;
     }
   }
-
   return earliest;
 }
 
@@ -562,11 +544,8 @@ function boosterIntervalDate(
     seq === 1
       ? config.min_interval_after_primary_completion
       : config.min_interval_after_booster_1;
-
   if (!raw) return null;
-
   const interval = resolveDuration(raw, ageInMonthsAt(birthDate, lastDate));
   if (!interval) return null;
-
   return addDurationToDate(lastDate, interval);
 }

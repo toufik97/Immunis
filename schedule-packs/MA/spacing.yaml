@@ -1,0 +1,15 @@
+spacing_rules:
+  - id: LIVE_LIVE_28D
+    label_fr: Vaccins vivants — même jour ou 28 jours
+    description_fr: >
+      Deux vaccins vivants doivent être administrés le même jour
+      ou à au moins 28 jours d'intervalle.
+      Exception (G25): VPO × ROTAVIRUS exemptés.
+    applies_when:
+      both_live: true
+    min_gap:
+      days: 28
+    same_day_allowed: true
+    exemptions:
+      - product_a: VPO
+        product_b: ROTAVIRUS

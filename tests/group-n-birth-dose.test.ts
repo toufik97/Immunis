@@ -17,10 +17,18 @@ describe("Group N — birth doses (first 4 weeks window)", () => {
     expectVisitContains(r, 0, ["HB_MONO", "VPO", "BCG"], { date: "2026-03-15" });
   });
 
-  it("N3: 6-week-old → window passed, no birth visit; Penta absorbs HB", () => {
+  it("N3: 6-week-old → no birth doses planned; VPO1 waits for 2 months", () => {
     const r = run("2026-02-01", [], "2026-03-15");
-    expect(r.visitPlan.visits[0].products).not.toContain("HB_MONO");
-    expect(r.visitPlan.visits[0].products).not.toContain("VPO");
+    // Neither HB_MONO nor VPO may appear as a birth dose after the 4-week window
+    const birthVisits = r.visitPlan.visits.filter(v =>
+      v.role.includes("birth_dose")
+    );
+    expect(birthVisits.some(v => v.products.includes("HB_MONO"))).toBe(false);
+    expect(birthVisits.some(v => v.products.includes("VPO"))).toBe(false);
+    // VPO dose 1 is routine at 2 months: first VPO visit not before 2026-04-01
+    const vpoVisit = r.visitPlan.visits.find(v => v.products.includes("VPO"));
+    expect(vpoVisit).toBeDefined();
+    expect(vpoVisit!.date >= "2026-04-01").toBe(true);
     expect(need(r, "HB_PROGRAM").dosesNeeded).toBe(3);
   });
 

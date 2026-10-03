@@ -153,3 +153,9 @@ The engine will track *Antigens* (the disease), not just the *Product* (the bran
 - CONTRAINDICATED
 - DEFERRED
 - NEEDS_REVIEW (Used when rule is NEEDS_VALIDATION or case is too complex)
+
+## Architecture & decisions
+
+- [ADR-0001 — Product identity: three classes of product differences](../../adr/0001-product-identity-three-classes.md)
+- [Clinical test suite (living document)](../../morocco/draft/TEST-SUITE-CLINICAL.md)
+- [Conflict register](../../morocco/draft/conflict-register-combination-vaccines.md)

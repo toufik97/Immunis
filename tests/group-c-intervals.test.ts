@@ -42,6 +42,6 @@ describe("Group C — conditional intervals (resilient)", () => {
       rec("2025-03-01", "PENTA"),
       rec("2025-09-01", "PENTA")
     ], "2025-09-10");
-    expectVisitContains(r, 0, ["PENTA", "VPO", "VPI"], { date: "2025-09-29", status: "DUE_FUTURE" });
+    expectVisitContains(r, 0, ["PENTA", "VPO"], { date: "2025-10-01", status: "DUE_FUTURE" });
   });
 });

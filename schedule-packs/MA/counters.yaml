@@ -86,3 +86,10 @@ counters:
     counts_product_groups:
       - BCG
     only_valid_doses: true
+
+  - id: RR_DOSES
+    label_fr: Doses RR / RRO
+    counts_product_groups:
+      - RR
+      - RRO
+    only_valid_doses: true

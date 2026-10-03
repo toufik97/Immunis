@@ -35,7 +35,10 @@ export function selectProducts(
   const ageMonths = ageInMonthsAt(birthDate, evaluationDate);
 
   const productGroups: any[] = (pack.catalog as any).product_groups ?? [];
-
+  
+  const plannableGroups = productGroups.filter(
+    (g: any) => (g?.clinical?.availability ?? "current") !== "legacy"
+  );
   const primaryNeeds = needs.filter(
     need =>
       need.status === "NEEDS_PRIMARY" &&
@@ -103,7 +106,7 @@ export function selectProducts(
     const slotProducts: SlotProduct[] = [];
 
     while (remainingProgramIds.size > 0) {
-      const candidates = productGroups.filter(product => {
+      const candidates = plannableGroups.filter(product => {
         if (!isProductEligible(product.id, ageMonths, eligibilityRules)) {
           return false;
         }
@@ -212,7 +215,7 @@ export function selectProducts(
             new Set([...a.coveredProgramIds, ...b.coveredProgramIds])
           );
 
-          const candidate = productGroups.find((product: any) => {
+          const candidate = plannableGroups.find((product: any) => {
             if (!isProductEligible(product.id, ageMonths, eligibilityRules)) {
               return false;
             }

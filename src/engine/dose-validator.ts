@@ -60,7 +60,6 @@ export function validateCounterDoses(
 
   const doses: ValidatedDose[] = [];
 
-  // ---------- dose-zero split ----------
   const zeroRecords: ImmunizationRecord[] = [];
   const countedRecords: ImmunizationRecord[] = [];
 
@@ -89,7 +88,6 @@ export function validateCounterDoses(
     });
   }
 
-  // ---------- counted doses ----------
   let validDoseCount = 0;
   let lastValidDoseDate: Date | null = null;
   let lastValidDoseAgeMonths: number | null = null;

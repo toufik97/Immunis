@@ -62,6 +62,7 @@ export function evaluatePatient(
     antigenNeeds,
     pack,
     patient,
+    history,
     evaluationDate,
     programLastDates,
     options.projection ?? "next"
