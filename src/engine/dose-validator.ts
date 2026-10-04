@@ -5,7 +5,9 @@ import {
   ageInMonthsAt,
   durationToMonths,
   durationToDays,
-  resolveDuration
+  resolveDuration,
+  isAgeAtLeast,
+  isAgeBefore
 } from "./duration";
 
 export interface ValidatedDose {
@@ -28,7 +30,7 @@ export interface ValidityContext {
   requiredValidDoses: number;
   boosterTargets: Record<number, { minAge?: any; interval?: any }>;
   caps: any[];
-  doseZero: { productGroups: string[]; maxAgeMonths: number } | null;
+  doseZero: { productGroups: string[]; maxAge: any } | null;
 }
 
 export function validateCounterDoses(
@@ -62,11 +64,14 @@ export function validateCounterDoses(
   const countedRecords: ImmunizationRecord[] = [];
 
   for (const record of relevantRecords) {
-    const ageAt = ageInMonthsAt(birthDate, parseDate(record.administeredOn));
     if (
       context.doseZero &&
       context.doseZero.productGroups.includes(record.productGroupId) &&
-      ageAt < context.doseZero.maxAgeMonths
+      isAgeBefore(
+        birthDate,
+        parseDate(record.administeredOn),
+        context.doseZero.maxAge
+      )
     ) {
       zeroRecords.push(record);
     } else {
@@ -127,15 +132,13 @@ export function validateCounterDoses(
     let t1IntervalPassed = true;
 
     if (validityRule?.min_age) {
-      const minAgeMonths = durationToMonths(validityRule.min_age);
-      if (doseAgeMonths < minAgeMonths) {
+      if (!isAgeAtLeast(birthDate, doseDate, validityRule.min_age)) {
         reasons.push(`INVALID_AGE_DOSE_${doseNumber}_TOO_EARLY`);
       }
     }
 
     if (validityRule?.max_age) {
-      const maxAgeMonths = durationToMonths(validityRule.max_age);
-      if (doseAgeMonths >= maxAgeMonths) {
+      if (!isAgeBefore(birthDate, doseDate, validityRule.max_age)) {
         reasons.push(`INVALID_AGE_DOSE_${doseNumber}_TOO_LATE`);
       }
     }
@@ -170,7 +173,7 @@ export function validateCounterDoses(
       if (target) {
         if (target.minAge) {
           const targetAgeMonths = durationToMonths(target.minAge);
-          if (doseAgeMonths < targetAgeMonths) {
+          if (!isAgeAtLeast(birthDate, doseDate, target.minAge)) {
             warnings.push(
               `EARLY_BOOSTER_${seq}_COUNTED: administered at ${doseAgeMonths} months, policy target ${targetAgeMonths} months. Dose counted.`
             );
@@ -198,7 +201,7 @@ export function validateCounterDoses(
 
     if (valid && validityRule?.target_min_age) {
       const targetMonths = durationToMonths(validityRule.target_min_age);
-      if (doseAgeMonths < targetMonths) {
+      if (!isAgeAtLeast(birthDate, doseDate, validityRule.target_min_age)) {
         warnings.push(
           `EARLY_DOSE_${doseNumber}_COUNTED: administered at ${doseAgeMonths} months, recommended target ${targetMonths} months. Dose counted (no restart).`
         );
@@ -207,9 +210,8 @@ export function validateCounterDoses(
 
     if (valid) {
       for (const cap of context.caps ?? []) {
-        const beforeAgeMonths = durationToMonths(cap.before_age);
         if (
-          doseAgeMonths < beforeAgeMonths &&
+          isAgeBefore(birthDate, doseDate, cap.before_age) &&
           doseNumber > Number(cap.max_doses)
         ) {
           warnings.push(
@@ -236,4 +238,4 @@ export function validateCounterDoses(
   }
 
   return { counterId, doses, validDoseCount };
-}
+}

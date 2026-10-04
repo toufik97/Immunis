@@ -15,6 +15,7 @@ import {
   durationToDays,
   durationToMonths,
   resolveDuration,
+  isAgeBefore,
   type Duration
 } from "./duration";
 import {
@@ -168,7 +169,7 @@ export function planVisits(
           if (!rule?.max_age) return true;
           const limitMonths = durationToMonths(rule.max_age);
           const ageAtPlanned = ageInMonthsAt(birthDate, earliest);
-          if (ageAtPlanned >= limitMonths) {
+          if (!isAgeBefore(birthDate, earliest, rule.max_age)) {
             warnings.push(
               `AGE_LIMIT_PREVENTS_DOSE: ${programId} dose ${absoluteDoseNumber} would fall at ${ageAtPlanned} months (limit ${limitMonths} months). Not planned.`
             );
@@ -506,7 +507,8 @@ function unifySameDateConflicts(
       if (
         !isProductEligible(
           product.id,
-          ageInMonthsAt(birthDate, group[0].date),
+          birthDate,
+          group[0].date,
           productSelection.eligibility ?? []
         )
       ) {
@@ -666,4 +668,4 @@ function boosterIntervalDate(
   const interval = resolveDuration(raw, ageInMonthsAt(birthDate, lastDate));
   if (!interval) return null;
   return addDurationToDate(lastDate, interval);
-}
+}

@@ -5,7 +5,6 @@ import {
   type ValidationResult,
   type ValidityContext
 } from "./dose-validator";
-import { durationToMonths } from "./duration";
 
 export interface DoseValidationMap {
   [counterId: string]: ValidationResult;
@@ -99,7 +98,7 @@ function buildValidityContext(
   const doseZero = primary.dose_zero
     ? {
         productGroups: (primary.dose_zero.product_groups ?? []) as string[],
-        maxAgeMonths: durationToMonths(primary.dose_zero.max_age)
+        maxAge: primary.dose_zero.max_age
       }
     : null;
 
@@ -110,4 +109,4 @@ function buildValidityContext(
     caps: collectCaps(allPrograms, counterId),
     doseZero
   };
-}
+}

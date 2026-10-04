@@ -86,6 +86,39 @@ export function ageInMonthsAt(birthDate: Date, evaluationDate: Date): number {
   return differenceInMonths(evaluationDate, birthDate);
 }
 
+/**
+ * Date at which a person born on `birthDate` reaches the age `duration`.
+ * Calendar math (addMonths clamps to month end, so Jan 31 + 1 month = Feb 28/29).
+ * `birth: true` means "from birth".
+ */
+export function ageThresholdDate(
+  birthDate: Date,
+  duration?: Duration | null
+): Date {
+  if (!duration || duration.birth) {
+    return birthDate;
+  }
+  return addDurationToDate(birthDate, duration);
+}
+
+/** True when `date` is on or after the day the person turns `duration` old. */
+export function isAgeAtLeast(
+  birthDate: Date,
+  date: Date,
+  duration?: Duration | null
+): boolean {
+  return date.getTime() >= ageThresholdDate(birthDate, duration).getTime();
+}
+
+/** True when `date` is strictly before the day the person turns `duration` old. */
+export function isAgeBefore(
+  birthDate: Date,
+  date: Date,
+  duration?: Duration | null
+): boolean {
+  return date.getTime() < ageThresholdDate(birthDate, duration).getTime();
+}
+
 export function resolveDuration(
   rule: any,
   contextAgeMonths: number
@@ -128,4 +161,4 @@ export function resolveDuration(
   }
 
   return null;
-}
+}

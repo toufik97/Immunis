@@ -1,7 +1,7 @@
 import type { SchedulePack } from "../loader";
 import type { Patient, DoseCounts, AntigenNeed, AvailabilityInput } from "../types";
 import type { DoseValidationMap } from "./dose-counter";
-import { parseDate, ageInMonthsAt, durationToMonths } from "./duration";
+import { parseDate, ageInMonthsAt, isAgeAtLeast, isAgeBefore } from "./duration";
 
 export interface EvaluationContext {
   validations?: DoseValidationMap;
@@ -9,6 +9,8 @@ export interface EvaluationContext {
 }
 
 interface MatchEnv {
+  birthDate: Date;
+  evaluationDate: Date;
   ageMonths: number;
   validDoses: number;
   programCounterId: string;
@@ -100,6 +102,8 @@ export function evaluateProgram(
   };
 
   const env: MatchEnv = {
+    birthDate,
+    evaluationDate,
     ageMonths,
     validDoses: validDosesReceived,
     programCounterId: counterId,
@@ -225,13 +229,17 @@ function matchesRule(rule: any, env: MatchEnv): boolean {
   }
 
   if (when.age) {
-    if (when.age.from) {
-      const fromMonths = durationToMonths(when.age.from);
-      if (env.ageMonths < fromMonths) return false;
+    if (
+      when.age.from &&
+      !isAgeAtLeast(env.birthDate, env.evaluationDate, when.age.from)
+    ) {
+      return false;
     }
-    if (when.age.to_before) {
-      const toMonths = durationToMonths(when.age.to_before);
-      if (env.ageMonths >= toMonths) return false;
+    if (
+      when.age.to_before &&
+      !isAgeBefore(env.birthDate, env.evaluationDate, when.age.to_before)
+    ) {
+      return false;
     }
   }
 
@@ -259,4 +267,4 @@ function matchesRule(rule: any, env: MatchEnv): boolean {
   }
 
   return true;
-}
+}

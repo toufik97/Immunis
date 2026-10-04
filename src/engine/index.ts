@@ -12,7 +12,7 @@ import { countDoses, type DoseValidationMap } from "./dose-counter";
 import { evaluateAllPrograms } from "./antigen-evaluator";
 import { selectProducts } from "./product-selector";
 import { planVisits } from "./visit-planner";
-import { parseDate, ageInMonthsAt, durationToMonths } from "./duration";
+import { parseDate, isAgeBefore } from "./duration";
 
 export interface EngineResult {
   patient: Patient;
@@ -97,21 +97,19 @@ function applyDoseCaps(
   evaluationDate: Date
 ): void {
   const birthDate = parseDate(patient.birthDate);
-  const ageNow = ageInMonthsAt(birthDate, evaluationDate);
   for (const need of needs) {
     const program: any = (pack.programs as any)[need.programId];
     const caps: any[] = program?.dose_caps ?? [];
     for (const cap of caps) {
-      const beforeAgeMonths = durationToMonths(cap.before_age);
-      if (ageNow >= beforeAgeMonths) continue;
+      if (!isAgeBefore(birthDate, evaluationDate, cap.before_age)) continue;
       const validation = validations[cap.counter];
       const dosesBeforeCapAge = (validation?.doses ?? []).filter((d: any) => {
         if (!d.valid) return false;
-        const doseAge = ageInMonthsAt(
+        return isAgeBefore(
           birthDate,
-          parseDate(d.administeredOn)
+          parseDate(d.administeredOn),
+          cap.before_age
         );
-        return doseAge < beforeAgeMonths;
       }).length;
       if (dosesBeforeCapAge >= Number(cap.max_doses)) {
         need.dosesNeeded = 0;

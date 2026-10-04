@@ -8,7 +8,14 @@ import type {
   SlotProduct,
   BirthDosePlan
 } from "../types";
-import { parseDate, formatDate, ageInMonthsAt, durationToMonths } from "./duration";
+import {
+  parseDate,
+  formatDate,
+  durationToMonths,
+  ageThresholdDate,
+  isAgeAtLeast,
+  isAgeBefore
+} from "./duration";
 
 export function selectProducts(
   needs: AntigenNeed[],
@@ -32,7 +39,6 @@ export function selectProducts(
   const unneededPenalty = Number(selectionConfig.unneeded_program_penalty ?? 200);
 
   const birthDate = parseDate(patient.birthDate);
-  const ageMonths = ageInMonthsAt(birthDate, evaluationDate);
 
   const productGroups: any[] = (pack.catalog as any).product_groups ?? [];
   
@@ -68,8 +74,9 @@ export function selectProducts(
     if (!birthDose) continue;
     if (need.validDosesReceived !== 0) continue;
 
-    const windowMonths = durationToMonths(birthDose.plan_if_age_below);
-    if (ageMonths >= windowMonths) continue;
+    if (!isAgeBefore(birthDate, evaluationDate, birthDose.plan_if_age_below)) {
+      continue;
+    }
 
     const offset = Number(birthDose.counts_as_dose ?? 1);
 
@@ -107,7 +114,7 @@ export function selectProducts(
 
     while (remainingProgramIds.size > 0) {
       const candidates = plannableGroups.filter(product => {
-        if (!isProductEligible(product.id, ageMonths, eligibilityRules)) {
+        if (!isProductEligible(product.id, birthDate, evaluationDate, eligibilityRules)) {
           return false;
         }
 
@@ -228,7 +235,7 @@ export function selectProducts(
           );
 
           const candidate = plannableGroups.find((product: any) => {
-            if (!isProductEligible(product.id, ageMonths, eligibilityRules)) {
+            if (!isProductEligible(product.id, birthDate, evaluationDate, eligibilityRules)) {
               return false;
             }
             return unionProgramIds.every((pid: string) => {
@@ -319,9 +326,14 @@ export function selectProducts(
   };
 }
 
+/**
+ * Is the product allowed for a patient born on `birthDate`, given on `date`?
+ * Dates, not integer months, so week-based limits are exact.
+ */
 export function isProductEligible(
   productGroupId: string,
-  ageMonths: number,
+  birthDate: Date,
+  date: Date,
   eligibilityRules: any[]
 ): boolean {
   const rule = eligibilityRules.find(
@@ -332,23 +344,18 @@ export function isProductEligible(
     return true;
   }
 
-  if (rule.min_age) {
-    const minAgeMonths = durationToMonths(rule.min_age);
-
-    if (ageMonths < minAgeMonths) {
-      return false;
-    }
+  if (rule.min_age && !isAgeAtLeast(birthDate, date, rule.min_age)) {
+    return false;
   }
 
   if (rule.max_age) {
-    const maxAgeMonths = durationToMonths(rule.max_age);
-
     if (rule.max_age.exclusive === true) {
-      if (ageMonths >= maxAgeMonths) {
+      if (!isAgeBefore(birthDate, date, rule.max_age)) {
         return false;
       }
     } else {
-      if (ageMonths > maxAgeMonths) {
+      // inclusive limit: still eligible on the day the person turns max_age
+      if (date.getTime() > ageThresholdDate(birthDate, rule.max_age).getTime()) {
         return false;
       }
     }
@@ -425,4 +432,4 @@ export function resolveBoosterProduct(
   }
 
   return null;
-}
+}
