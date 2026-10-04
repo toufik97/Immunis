@@ -25,6 +25,7 @@ export interface AntigenNeed {
   action: string | null;
   boosterSequence: number | null;
   boosterPolicyId: string | null;
+  targetProduct?: string | null;   // <-- ADD THIS LINE
   warnings: string[];
 }
 
