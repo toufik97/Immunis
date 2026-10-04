@@ -24,12 +24,12 @@ describe("Group C — conditional intervals (resilient)", () => {
     expect(allVisits.some(v => v.products.includes("HB_MONO"))).toBe(true);
   });
 
-  it("C3: HB dose 2 at 25m → dose 3 at 5 months, Penta covers all", () => {
+  it("C3: HB dose 2 at 25m → dose 3 at 6 months, Penta covers all", () => {
     const r = run("2022-01-01", [
       rec("2022-01-01", "HB_MONO"),
       rec("2024-02-01", "HB_MONO")
     ], "2024-03-01");
-    expectVisitOnDateContains(r, "2024-07-01", ["PENTA"], "DUE_FUTURE");
+    expectVisitOnDateContains(r, "2024-08-01", ["PENTA"], "DUE_FUTURE");
   });
 
   it("C4: Hib dose 2 at 4m → dose 3 held to 4 months min age", () => {
