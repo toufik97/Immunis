@@ -90,12 +90,3 @@ export interface AvailabilityInput {
   policy?: "TRANSITION" | "CONTINUITY_FIRST" | "STOCK_DRIVEN";
   products?: string[];
 }
-
-export interface SchemaResolution {
-  programId: string;
-  schemaId: string;
-  requiredPrimaries: number;
-  boosterCount: number;
-  targetProduct: string | null;
-  assumption: string | null;
-}

@@ -13,194 +13,237 @@ program:
     - PCV
   counter: PCV_DOSES
 
-primary_series:
-  required_valid_doses: 4
-  schemas:
-    # ---- >= 60 months: silent none for healthy children ----
-    - id: PCV-GE60-NONE
-      when:
-        age: { from: { months: 60 } }
+catchup_rules:
+  # ---- >= 60 months: silent none for healthy children ----
+  - id: PCV-GE60-NONE
+    when:
+      age: { from: { months: 60 } }
+    then:
       required_primaries: 0
       booster_count: 0
 
-    # ---- history contains PrimoVax/PCV13-TT => TT schema (C2 mixed lock) ----
-    - id: PCV-TT-2-6M
-      when:
-        product_counts: { PCV_PRIMOVAX: { gte: 1 } }
-        age: { to_before: { months: 7 } }
+  # ---- history contains PrimoVax/PCV13-TT => TT schema (C2 mixed lock) ----
+  - id: PCV-TT-2-6M
+    when:
+      product_history: { PCV_PRIMOVAX: { gte: 1 } }
+      age: { to_before: { months: 7 } }
+    then:
       required_primaries: 3
       booster_count: 1
       booster_policy: PCV_B_TT_6M
-    - id: PCV-TT-7-11M
-      when:
-        product_counts: { PCV_PRIMOVAX: { gte: 1 } }
-        age: { from: { months: 7 }, to_before: { months: 12 } }
+      target_product: PCV_PRIMOVAX
+
+  - id: PCV-TT-7-11M
+    when:
+      product_history: { PCV_PRIMOVAX: { gte: 1 } }
+      age: { from: { months: 7 }, to_before: { months: 12 } }
+    then:
       required_primaries: 2
       booster_count: 1
       booster_policy: PCV_B_TT_12M
-    - id: PCV-TT-12-23M
-      when:
-        product_counts: { PCV_PRIMOVAX: { gte: 1 } }
-        age: { from: { months: 12 }, to_before: { months: 24 } }
+      target_product: PCV_PRIMOVAX
+
+  - id: PCV-TT-12-23M
+    when:
+      product_history: { PCV_PRIMOVAX: { gte: 1 } }
+      age: { from: { months: 12 }, to_before: { months: 24 } }
+    then:
       required_primaries: 2
       booster_count: 0
-    - id: PCV-TT-24-60M
-      when:
-        product_counts: { PCV_PRIMOVAX: { gte: 1 } }
-        age: { from: { months: 24 }, to_before: { months: 60 } }
+      target_product: PCV_PRIMOVAX
+
+  - id: PCV-TT-24-60M
+    when:
+      product_history: { PCV_PRIMOVAX: { gte: 1 } }
+      age: { from: { months: 24 }, to_before: { months: 60 } }
+    then:
       required_primaries: 1
       booster_count: 0
+      target_product: PCV_PRIMOVAX
 
-    # ---- 2+ Prevenar => primaries complete, booster either product (C3) ----
-    - id: PCV-PREV-DONE-B
-      when:
-        product_counts: { PCV_PREVENAR: { gte: 2 } }
-      required_primaries: 2
-      booster_count: 1
-      booster_policy: PCV_B_PREV_12M
-
-    # ---- exactly 1 Prevenar, Prevenar still available => continue Prevenar ----
-    - id: PCV-PREV1-AVAIL-2-6M
-      when:
-        product_counts: { PCV_PREVENAR: { equals: 1 }, PCV_PRIMOVAX: { equals: 0 } }
-        age: { to_before: { months: 7 } }
-        availability: { includes: PCV_PREVENAR }
+  # ---- 2+ Prevenar => primaries complete, booster either product (C3) ----
+  - id: PCV-PREV-DONE-B
+    when:
+      product_history: { PCV_PREVENAR: { gte: 2 } }
+    then:
       required_primaries: 2
       booster_count: 1
       booster_policy: PCV_B_PREV_12M
       target_product: PCV_PREVENAR
-    - id: PCV-PREV1-AVAIL-7-11M
-      when:
-        product_counts: { PCV_PREVENAR: { equals: 1 }, PCV_PRIMOVAX: { equals: 0 } }
-        age: { from: { months: 7 }, to_before: { months: 12 } }
-        availability: { includes: PCV_PREVENAR }
+
+  # ---- exactly 1 Prevenar, Prevenar still available => continue Prevenar ----
+  - id: PCV-PREV1-AVAIL-2-6M
+    when:
+      product_history: { PCV_PREVENAR: { equals: 1 }, PCV_PRIMOVAX: { equals: 0 } }
+      age: { to_before: { months: 7 } }
+      availability: { includes: PCV_PREVENAR }
+    then:
+      required_primaries: 2
+      booster_count: 1
+      booster_policy: PCV_B_PREV_12M
+      target_product: PCV_PREVENAR
+
+  - id: PCV-PREV1-AVAIL-7-11M
+    when:
+      product_history: { PCV_PREVENAR: { equals: 1 }, PCV_PRIMOVAX: { equals: 0 } }
+      age: { from: { months: 7 }, to_before: { months: 12 } }
+      availability: { includes: PCV_PREVENAR }
+    then:
       required_primaries: 2
       booster_count: 1
       booster_policy: PCV_B_PREV_18M
       target_product: PCV_PREVENAR
-    - id: PCV-PREV1-AVAIL-12-23M
-      when:
-        product_counts: { PCV_PREVENAR: { equals: 1 }, PCV_PRIMOVAX: { equals: 0 } }
-        age: { from: { months: 12 }, to_before: { months: 24 } }
-        availability: { includes: PCV_PREVENAR }
+
+  - id: PCV-PREV1-AVAIL-12-23M
+    when:
+      product_history: { PCV_PREVENAR: { equals: 1 }, PCV_PRIMOVAX: { equals: 0 } }
+      age: { from: { months: 12 }, to_before: { months: 24 } }
+      availability: { includes: PCV_PREVENAR }
+    then:
       required_primaries: 2
       booster_count: 0
       target_product: PCV_PREVENAR
-    - id: PCV-PREV1-AVAIL-24-60M
-      when:
-        product_counts: { PCV_PREVENAR: { equals: 1 }, PCV_PRIMOVAX: { equals: 0 } }
-        age: { from: { months: 24 }, to_before: { months: 60 } }
-        availability: { includes: PCV_PREVENAR }
+
+  - id: PCV-PREV1-AVAIL-24-60M
+    when:
+      product_history: { PCV_PREVENAR: { equals: 1 }, PCV_PRIMOVAX: { equals: 0 } }
+      age: { from: { months: 24 }, to_before: { months: 60 } }
+      availability: { includes: PCV_PREVENAR }
+    then:
       required_primaries: 1
       booster_count: 0
       target_product: PCV_PREVENAR
 
-    # ---- exactly 1 Prevenar, Prevenar unavailable => switch to TT schema ----
-    - id: PCV-PREV1-NOAVAIL-2-6M
-      when:
-        product_counts: { PCV_PREVENAR: { equals: 1 }, PCV_PRIMOVAX: { equals: 0 } }
-        age: { to_before: { months: 7 } }
-        availability: { excludes: PCV_PREVENAR }
+  # ---- exactly 1 Prevenar, Prevenar unavailable => switch to TT schema ----
+  - id: PCV-PREV1-NOAVAIL-2-6M
+    when:
+      product_history: { PCV_PREVENAR: { equals: 1 }, PCV_PRIMOVAX: { equals: 0 } }
+      age: { to_before: { months: 7 } }
+      availability: { excludes: PCV_PREVENAR }
+    then:
       required_primaries: 3
       booster_count: 1
       booster_policy: PCV_B_TT_6M
       target_product: PCV_PRIMOVAX
-    - id: PCV-PREV1-NOAVAIL-7-11M
-      when:
-        product_counts: { PCV_PREVENAR: { equals: 1 }, PCV_PRIMOVAX: { equals: 0 } }
-        age: { from: { months: 7 }, to_before: { months: 12 } }
-        availability: { excludes: PCV_PREVENAR }
+
+  - id: PCV-PREV1-NOAVAIL-7-11M
+    when:
+      product_history: { PCV_PREVENAR: { equals: 1 }, PCV_PRIMOVAX: { equals: 0 } }
+      age: { from: { months: 7 }, to_before: { months: 12 } }
+      availability: { excludes: PCV_PREVENAR }
+    then:
       required_primaries: 2
       booster_count: 1
       booster_policy: PCV_B_TT_12M
       target_product: PCV_PRIMOVAX
-    - id: PCV-PREV1-NOAVAIL-12-23M
-      when:
-        product_counts: { PCV_PREVENAR: { equals: 1 }, PCV_PRIMOVAX: { equals: 0 } }
-        age: { from: { months: 12 }, to_before: { months: 24 } }
-        availability: { excludes: PCV_PREVENAR }
+
+  - id: PCV-PREV1-NOAVAIL-12-23M
+    when:
+      product_history: { PCV_PREVENAR: { equals: 1 }, PCV_PRIMOVAX: { equals: 0 } }
+      age: { from: { months: 12 }, to_before: { months: 24 } }
+      availability: { excludes: PCV_PREVENAR }
+    then:
       required_primaries: 2
       booster_count: 0
       target_product: PCV_PRIMOVAX
-    - id: PCV-PREV1-NOAVAIL-24-60M
-      when:
-        product_counts: { PCV_PREVENAR: { equals: 1 }, PCV_PRIMOVAX: { equals: 0 } }
-        age: { from: { months: 24 }, to_before: { months: 60 } }
-        availability: { excludes: PCV_PREVENAR }
+
+  - id: PCV-PREV1-NOAVAIL-24-60M
+    when:
+      product_history: { PCV_PREVENAR: { equals: 1 }, PCV_PRIMOVAX: { equals: 0 } }
+      age: { from: { months: 24 }, to_before: { months: 60 } }
+      availability: { excludes: PCV_PREVENAR }
+    then:
       required_primaries: 1
       booster_count: 0
       target_product: PCV_PRIMOVAX
 
-    # ---- never vaccinated: policy default product (TT unless stock says otherwise) ----
-    - id: PCV-NEW-TT-2-6M
-      when:
-        product_counts: { _TOTAL: { equals: 0 } }
-        age: { to_before: { months: 7 } }
-        availability: { includes: PCV_PRIMOVAX }
+  # ---- never vaccinated: policy default product (TT unless stock says otherwise) ----
+  - id: PCV-NEW-TT-2-6M
+    when:
+      product_history: { _TOTAL: { equals: 0 } }
+      age: { to_before: { months: 7 } }
+      availability: { includes: PCV_PRIMOVAX }
+    then:
       required_primaries: 3
       booster_count: 1
       booster_policy: PCV_B_TT_6M
       target_product: PCV_PRIMOVAX
-    - id: PCV-NEW-TT-7-11M
-      when:
-        product_counts: { _TOTAL: { equals: 0 } }
-        age: { from: { months: 7 }, to_before: { months: 12 } }
-        availability: { includes: PCV_PRIMOVAX }
+
+  - id: PCV-NEW-TT-7-11M
+    when:
+      product_history: { _TOTAL: { equals: 0 } }
+      age: { from: { months: 7 }, to_before: { months: 12 } }
+      availability: { includes: PCV_PRIMOVAX }
+    then:
       required_primaries: 2
       booster_count: 1
       booster_policy: PCV_B_TT_12M
       target_product: PCV_PRIMOVAX
-    - id: PCV-NEW-TT-12-23M
-      when:
-        product_counts: { _TOTAL: { equals: 0 } }
-        age: { from: { months: 12 }, to_before: { months: 24 } }
-        availability: { includes: PCV_PRIMOVAX }
+
+  - id: PCV-NEW-TT-12-23M
+    when:
+      product_history: { _TOTAL: { equals: 0 } }
+      age: { from: { months: 12 }, to_before: { months: 24 } }
+      availability: { includes: PCV_PRIMOVAX }
+    then:
       required_primaries: 2
       booster_count: 0
       target_product: PCV_PRIMOVAX
-    - id: PCV-NEW-TT-24-60M
-      when:
-        product_counts: { _TOTAL: { equals: 0 } }
-        age: { from: { months: 24 }, to_before: { months: 60 } }
-        availability: { includes: PCV_PRIMOVAX }
+
+  - id: PCV-NEW-TT-24-60M
+    when:
+      product_history: { _TOTAL: { equals: 0 } }
+      age: { from: { months: 24 }, to_before: { months: 60 } }
+      availability: { includes: PCV_PRIMOVAX }
+    then:
       required_primaries: 1
       booster_count: 0
       target_product: PCV_PRIMOVAX
-    - id: PCV-NEW-PREV-2-6M
-      when:
-        product_counts: { _TOTAL: { equals: 0 } }
-        age: { to_before: { months: 7 } }
-        availability: { excludes: PCV_PRIMOVAX }
+
+  - id: PCV-NEW-PREV-2-6M
+    when:
+      product_history: { _TOTAL: { equals: 0 } }
+      age: { to_before: { months: 7 } }
+      availability: { excludes: PCV_PRIMOVAX }
+    then:
       required_primaries: 2
       booster_count: 1
       booster_policy: PCV_B_PREV_12M
       target_product: PCV_PREVENAR
-    - id: PCV-NEW-PREV-7-11M
-      when:
-        product_counts: { _TOTAL: { equals: 0 } }
-        age: { from: { months: 7 }, to_before: { months: 12 } }
-        availability: { excludes: PCV_PRIMOVAX }
+
+  - id: PCV-NEW-PREV-7-11M
+    when:
+      product_history: { _TOTAL: { equals: 0 } }
+      age: { from: { months: 7 }, to_before: { months: 12 } }
+      availability: { excludes: PCV_PRIMOVAX }
+    then:
       required_primaries: 2
       booster_count: 1
       booster_policy: PCV_B_PREV_18M
       target_product: PCV_PREVENAR
-    - id: PCV-NEW-PREV-12-23M
-      when:
-        product_counts: { _TOTAL: { equals: 0 } }
-        age: { from: { months: 12 }, to_before: { months: 24 } }
-        availability: { excludes: PCV_PRIMOVAX }
+
+  - id: PCV-NEW-PREV-12-23M
+    when:
+      product_history: { _TOTAL: { equals: 0 } }
+      age: { from: { months: 12 }, to_before: { months: 24 } }
+      availability: { excludes: PCV_PRIMOVAX }
+    then:
       required_primaries: 2
       booster_count: 0
       target_product: PCV_PREVENAR
-    - id: PCV-NEW-PREV-24-60M
-      when:
-        product_counts: { _TOTAL: { equals: 0 } }
-        age: { from: { months: 24 }, to_before: { months: 60 } }
-        availability: { excludes: PCV_PRIMOVAX }
+
+  - id: PCV-NEW-PREV-24-60M
+    when:
+      product_history: { _TOTAL: { equals: 0 } }
+      age: { from: { months: 24 }, to_before: { months: 60 } }
+      availability: { excludes: PCV_PRIMOVAX }
+    then:
       required_primaries: 1
       booster_count: 0
       target_product: PCV_PREVENAR
 
+primary_series:
+  required_valid_doses: 4
   dose_validity:
     # ---- dose 1 ----
     - dose: 1
@@ -214,7 +257,6 @@ primary_series:
       product_group: PCV_PRIMOVAX
       target_min_age:
         weeks: 10
-
     # ---- dose 2 ----
     - dose: 2
       min_interval_from_previous:
@@ -227,7 +269,6 @@ primary_series:
       product_group: PCV_PRIMOVAX
       target_min_age:
         weeks: 18
-
     # ---- dose 3 (Prevenar booster OR PrimoVax 3rd primary) ----
     - dose: 3
       min_interval_from_previous:
@@ -240,7 +281,6 @@ primary_series:
       product_group: PCV_PRIMOVAX
       target_min_age:
         months: 6
-
     # ---- dose 4 (PrimoVax booster only) ----
     - dose: 4
       min_interval_from_previous:

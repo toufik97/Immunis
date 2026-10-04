@@ -6,15 +6,13 @@ import type {
   AntigenNeed,
   ProductSelectionResult,
   VisitPlan,
-  EvaluateOptions,
-  SchemaResolution
+  EvaluateOptions
 } from "../types";
 import { countDoses, type DoseValidationMap } from "./dose-counter";
 import { evaluateAllPrograms } from "./antigen-evaluator";
 import { selectProducts } from "./product-selector";
 import { planVisits } from "./visit-planner";
 import { parseDate, ageInMonthsAt, durationToMonths } from "./duration";
-import { resolveSchemas } from "./schema-resolver";
 
 export interface EngineResult {
   patient: Patient;
@@ -24,7 +22,6 @@ export interface EngineResult {
   antigenNeeds: AntigenNeed[];
   productSelection: ProductSelectionResult;
   visitPlan: VisitPlan;
-  schemaResolutions: SchemaResolution[];
   assumptions: string[];
 }
 
@@ -38,46 +35,47 @@ export function evaluatePatient(
   // 1. Count and validate recorded doses
   const { counts, validations } = countDoses(history, pack, patient);
 
-  // 1b. Resolve product-schema variants (PCV coexistence) before needs
-  const { packView, resolutions, assumptions } = resolveSchemas(
-    pack,
-    validations,
-    patient,
-    evaluationDate,
-    options.availability
-  );
-
   // 2. What does each program still need?
   const antigenNeeds = evaluateAllPrograms(
-    packView,
+    pack,
     patient,
     counts,
-    evaluationDate
+    evaluationDate,
+    { validations, availability: options.availability }
   );
 
   // 3. Stop planning when the dose cap is reached (SOMIPEV guard)
-  applyDoseCaps(antigenNeeds, packView, validations, patient, evaluationDate);
+  applyDoseCaps(antigenNeeds, pack, validations, patient, evaluationDate);
 
   // 4. Choose products
   const productSelection = selectProducts(
     antigenNeeds,
-    packView,
+    pack,
     patient,
     evaluationDate
   );
 
   // 5. Build dated visits
-  const programLastDates = buildProgramLastDates(packView, validations);
+  const programLastDates = buildProgramLastDates(pack, validations);
   const visitPlan = planVisits(
     productSelection,
     antigenNeeds,
-    packView,
+    pack,
     patient,
     history,
     evaluationDate,
     programLastDates,
     options.projection ?? "next"
   );
+
+  // 6. Availability assumption (was emitted by the resolver; now generated here)
+  const assumptions: string[] = [];
+  if (!options.availability?.products) {
+    const policy = options.availability?.policy ?? "TRANSITION";
+    assumptions.push(
+      `PCV availability assumed by policy ${policy} (stock not connected).`
+    );
+  }
 
   return {
     patient,
@@ -87,7 +85,6 @@ export function evaluatePatient(
     antigenNeeds,
     productSelection,
     visitPlan,
-    schemaResolutions: resolutions,
     assumptions
   };
 }

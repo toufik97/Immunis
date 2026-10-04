@@ -153,6 +153,8 @@ export function selectProducts(
         const rankBonus = rankIndex === -1 ? 0 : ranking.length - rankIndex;
         
         const preferredOf = (needId: string): string | null => {
+          const n = needsById[needId];
+          if (n?.targetProduct) return n.targetProduct;
           const prog: any = (pack.programs as any)[needId];
           return prog?.primary_series?.preferred_product ?? null;
         };
