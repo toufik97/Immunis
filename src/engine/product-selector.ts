@@ -151,11 +151,21 @@ export function selectProducts(
 
         const rankIndex = ranking.indexOf(product.id);
         const rankBonus = rankIndex === -1 ? 0 : ranking.length - rankIndex;
+        
+        const preferredOf = (needId: string): string | null => {
+          const prog: any = (pack.programs as any)[needId];
+          return prog?.primary_series?.preferred_product ?? null;
+        };
+        const prefBonus = coveredNeeded.some(
+          n => preferredOf(n.programId) === product.id
+        )
+          ? 1000
+          : 0;
 
         const score =
           coveredNeeded.length * coverageReward -
           coveredUnneeded.length * unneededPenalty +
-          rankBonus +
+          rankBonus + prefBonus +
           preferenceBonus(product.id, neededNow, preferences);
 
         if (score > bestScore) {

@@ -61,7 +61,7 @@ primary_series:
                 from:
                   months: 12
             interval:
-              months: 5
+              months: 6
 
 catchup_rules:
   - id: MA-HB-CU-LT11Y-0D

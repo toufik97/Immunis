@@ -6,14 +6,15 @@ import type {
   AntigenNeed,
   ProductSelectionResult,
   VisitPlan,
-  EvaluateOptions
+  EvaluateOptions,
+  SchemaResolution
 } from "../types";
-
 import { countDoses, type DoseValidationMap } from "./dose-counter";
 import { evaluateAllPrograms } from "./antigen-evaluator";
 import { selectProducts } from "./product-selector";
 import { planVisits } from "./visit-planner";
 import { parseDate, ageInMonthsAt, durationToMonths } from "./duration";
+import { resolveSchemas } from "./schema-resolver";
 
 export interface EngineResult {
   patient: Patient;
@@ -23,6 +24,8 @@ export interface EngineResult {
   antigenNeeds: AntigenNeed[];
   productSelection: ProductSelectionResult;
   visitPlan: VisitPlan;
+  schemaResolutions: SchemaResolution[];
+  assumptions: string[];
 }
 
 export function evaluatePatient(
@@ -35,32 +38,40 @@ export function evaluatePatient(
   // 1. Count and validate recorded doses
   const { counts, validations } = countDoses(history, pack, patient);
 
+  // 1b. Resolve product-schema variants (PCV coexistence) before needs
+  const { packView, resolutions, assumptions } = resolveSchemas(
+    pack,
+    validations,
+    patient,
+    evaluationDate,
+    options.availability
+  );
+
   // 2. What does each program still need?
   const antigenNeeds = evaluateAllPrograms(
-    pack,
+    packView,
     patient,
     counts,
     evaluationDate
   );
 
   // 3. Stop planning when the dose cap is reached (SOMIPEV guard)
-  applyDoseCaps(antigenNeeds, pack, validations, patient, evaluationDate);
+  applyDoseCaps(antigenNeeds, packView, validations, patient, evaluationDate);
 
   // 4. Choose products
   const productSelection = selectProducts(
     antigenNeeds,
-    pack,
+    packView,
     patient,
     evaluationDate
   );
 
   // 5. Build dated visits
-  const programLastDates = buildProgramLastDates(pack, validations);
-
+  const programLastDates = buildProgramLastDates(packView, validations);
   const visitPlan = planVisits(
     productSelection,
     antigenNeeds,
-    pack,
+    packView,
     patient,
     history,
     evaluationDate,
@@ -75,7 +86,9 @@ export function evaluatePatient(
     doseValidations: validations,
     antigenNeeds,
     productSelection,
-    visitPlan
+    visitPlan,
+    schemaResolutions: resolutions,
+    assumptions
   };
 }
 
@@ -88,17 +101,12 @@ function applyDoseCaps(
 ): void {
   const birthDate = parseDate(patient.birthDate);
   const ageNow = ageInMonthsAt(birthDate, evaluationDate);
-
   for (const need of needs) {
     const program: any = (pack.programs as any)[need.programId];
     const caps: any[] = program?.dose_caps ?? [];
-
     for (const cap of caps) {
       const beforeAgeMonths = durationToMonths(cap.before_age);
-
-      // Cap only applies while the child is still under the cap age
       if (ageNow >= beforeAgeMonths) continue;
-
       const validation = validations[cap.counter];
       const dosesBeforeCapAge = (validation?.doses ?? []).filter((d: any) => {
         if (!d.valid) return false;
@@ -108,7 +116,6 @@ function applyDoseCaps(
         );
         return doseAge < beforeAgeMonths;
       }).length;
-
       if (dosesBeforeCapAge >= Number(cap.max_doses)) {
         need.dosesNeeded = 0;
         need.boosterSequence = null;
@@ -126,26 +133,19 @@ function buildProgramLastDates(
   validations: DoseValidationMap
 ): Record<string, string | null> {
   const result: Record<string, string | null> = {};
-
   for (const program of Object.values(pack.programs) as any[]) {
     const programId = program.program?.id;
     const counterId = program.program?.counter;
-
     if (!programId || !counterId) continue;
-
     const validation = validations[counterId];
-
     if (!validation) {
       result[programId] = null;
       continue;
     }
-
     const validDoses = validation.doses.filter(dose => dose.valid);
-
     result[programId] = validDoses.length
       ? validDoses[validDoses.length - 1].administeredOn
       : null;
   }
-
   return result;
 }

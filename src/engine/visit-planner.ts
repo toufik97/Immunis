@@ -22,7 +22,12 @@ import {
   productCoversProgram,
   resolveBoosterProduct
 } from "./product-selector";
-import { createLiveSpacingAdjuster } from "./spacing";
+import {
+  applySpacingRules,
+  getSpacingConstraints,
+  constrainedPair,
+  liveFlags
+} from "./spacing";
 
 interface RawVisit {
   date: Date;
@@ -31,6 +36,28 @@ interface RawVisit {
   role: string;
   programIds: string[];
   projected: boolean;
+}
+
+// Merge the generic dose rule (base) with the product-qualified rule (overlay).
+// The overlay must ADD product-specific targets, never SHADOW the base intervals.
+function findDoseRule(
+  doseValidity: any[],
+  doseNumber: number,
+  productGroupId: string
+): any {
+  const base = doseValidity.find(
+    (r: any) => r.dose === doseNumber && !r.product_group
+  );
+  const overlay = doseValidity.find(
+    (r: any) => r.dose === doseNumber && r.product_group === productGroupId
+  );
+  if (!base) return overlay ?? null;
+  if (!overlay) return base;
+  const merged: any = { ...base };
+  for (const [k, v] of Object.entries(overlay)) {
+    if (k !== "dose" && k !== "product_group") merged[k] = v;
+  }
+  return merged;
 }
 
 export function planVisits(
@@ -64,18 +91,16 @@ export function planVisits(
 
   const productGroups: any[] = (pack.catalog as any).product_groups ?? [];
   const programs: any = pack.programs as any;
+  const spacingConstraints = getSpacingConstraints(pack);
+  const spacingIsLive = liveFlags(pack);
 
   const rawVisits: RawVisit[] = [];
   const plannedPrimaryByProgram: Record<string, number> = {};
   const birthOffsetByProgram: Record<string, number> = {};
-  const spacingAdjuster = createLiveSpacingAdjuster(history, pack);
 
   // ---------- birth doses ----------
   for (const plan of selection.birthDosePlans ?? []) {
-    const planDateRaw = parseDate(plan.date);
-    const spacedBirth = spacingAdjuster.adjust(plan.productGroupId, planDateRaw);
-    for (const w of spacedBirth.warnings) warnings.push(w);
-    const planDate = spacedBirth.date;
+    const planDate = parseDate(plan.date);
     rawVisits.push({
       date: planDate,
       productGroupId: plan.productGroupId,
@@ -110,9 +135,12 @@ export function planVisits(
           need.validDosesReceived +
           (birthOffsetByProgram[programId] ?? 0) +
           slot.slot;
-        const rule = doseValidity.find((r: any) => r.dose === absoluteDoseNumber);
+        const rule = findDoseRule(
+          doseValidity,
+          absoluteDoseNumber,
+          slotProduct.productGroupId
+        );
         const lastDate = scheduledLastByProgram[programId] ?? null;
-
         const programEarliest = calculateEarliestPrimaryDate(
           rule,
           lastDate,
@@ -132,8 +160,10 @@ export function planVisits(
             (programNeed?.validDosesReceived ?? 0) +
             (birthOffsetByProgram[programId] ?? 0) +
             slot.slot;
-          const rule = doseValidity.find(
-            (r: any) => r.dose === absoluteDoseNumber
+          const rule = findDoseRule(
+            doseValidity,
+            absoluteDoseNumber,
+            slotProduct.productGroupId
           );
           if (!rule?.max_age) return true;
           const limitMonths = durationToMonths(rule.max_age);
@@ -150,18 +180,16 @@ export function planVisits(
 
       if (feasibleProgramIds.length === 0) continue;
 
-      const spaced = spacingAdjuster.adjust(slotProduct.productGroupId, earliest);
-      for (const w of spaced.warnings) warnings.push(w);
       productDates.push({
         productGroupId: slotProduct.productGroupId,
         coveredProgramIds: feasibleProgramIds,
-        date: spaced.date
+        date: earliest
       });
     }
 
     if (productDates.length === 0) continue;
 
-    // cluster alignment (G33): far-out doses keep their own visit
+    // cluster alignment (G33) with spacing gate: constrained pairs never share a visit
     const sortedDates = [...productDates].sort(
       (a, b) => a.date.getTime() - b.date.getTime()
     );
@@ -173,7 +201,16 @@ export function planVisits(
         const gap = Math.round(
           (pd.date.getTime() - prevDate.getTime()) / 86400000
         );
-        if (gap <= maxAlignmentDelayDays) {
+        const gateBlocked = lastCluster.some(
+          member =>
+            constrainedPair(
+              spacingConstraints,
+              member.productGroupId,
+              pd.productGroupId,
+              spacingIsLive
+            )?.sameDayAllowed === false
+        );
+        if (gap <= maxAlignmentDelayDays && !gateBlocked) {
           lastCluster.push(pd);
           continue;
         }
@@ -249,11 +286,7 @@ export function planVisits(
         boosterConfig,
         ageInMonthsAt(birthDate, visitDate)
       ) ?? booster.productGroupId;
-    
-      const spacedBooster = spacingAdjuster.adjust(boosterProduct, visitDate);
-    for (const w of spacedBooster.warnings) warnings.push(w);
-    visitDate = spacedBooster.date;
-    
+
     rawVisits.push({
       date: visitDate,
       productGroupId: boosterProduct,
@@ -265,7 +298,18 @@ export function planVisits(
     scheduledLastByProgram[booster.programId] = visitDate;
   }
 
+  // ---------- spacing rules vs recorded history AND planned visits ----------
+  let spacingWarnings = applySpacingRules(rawVisits, history, pack);
+  for (const w of spacingWarnings) {
+    warnings.push(w);
+  }
 
+  // CASCADE REPLAN: if spacing moved a dose, replan subsequent doses of the same product
+  if (cascadeReplanAfterSpacing(rawVisits, selection, needsById, programs, birthDate, birthOffsetByProgram, warnings)) {
+    // Run spacing again on the replanned visits
+    const reSpacingWarnings = applySpacingRules(rawVisits, history, pack);
+    for (const w of reSpacingWarnings) warnings.push(w);
+  }
 
   // ---------- same-visit antigen overlap unification ----------
   const unified = unifySameDateConflicts(
@@ -345,6 +389,80 @@ export function planVisits(
   }
 
   return { visits, warnings };
+}
+
+function cascadeReplanAfterSpacing(
+  rawVisits: RawVisit[],
+  selection: ProductSelectionResult,
+  needsById: Record<string, AntigenNeed>,
+  programs: any,
+  birthDate: Date,
+  birthOffsetByProgram: Record<string, number>,
+  warnings: string[]
+): boolean {
+  // Group visits by product
+  const visitsByProduct = new Map<string, RawVisit[]>();
+  for (const visit of rawVisits) {
+    const existing = visitsByProduct.get(visit.productGroupId) ?? [];
+    existing.push(visit);
+    visitsByProduct.set(visit.productGroupId, existing);
+  }
+
+  let changed = false;
+
+  // For each product, check if any visit was moved and replan subsequent visits
+  for (const [productGroupId, visits] of visitsByProduct) {
+    if (visits.length < 2) continue;
+
+    // Sort by date
+    visits.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+    // Replan each visit based on the previous visit's actual date
+    for (let i = 1; i < visits.length; i++) {
+      const prevVisit = visits[i - 1];
+      const currVisit = visits[i];
+
+      // Find the program for this product
+      const programId = currVisit.programIds[0];
+      const need = needsById[programId];
+      if (!need) continue;
+
+      const program: any = programs[programId];
+      const doseValidity: any[] = program?.primary_series?.dose_validity ?? [];
+      
+      // Find the slot number for this visit
+      const slot = selection.primarySlots.find(s => 
+        s.products.some(p => p.productGroupId === productGroupId)
+      )?.slot;
+      if (!slot) continue;
+
+      const absoluteDoseNumber = need.validDosesReceived + (birthOffsetByProgram[programId] ?? 0) + slot;
+      const rule = findDoseRule(doseValidity, absoluteDoseNumber, productGroupId);
+      
+      if (!rule?.min_interval_from_previous) continue;
+
+      // Calculate new earliest based on previous visit's actual date
+      const lastAgeMonths = ageInMonthsAt(birthDate, prevVisit.date);
+      const interval = resolveDuration(rule.min_interval_from_previous, lastAgeMonths);
+      
+      if (interval) {
+        const newEarliest = addDurationToDate(prevVisit.date, interval);
+        
+        // Only move forward, never backward
+        if (newEarliest > currVisit.date) {
+          const oldDate = formatDate(currVisit.date);
+          currVisit.date = newEarliest;
+          const newDate = formatDate(currVisit.date);
+          warnings.push(
+            `CASCADE_REPLAN: ${productGroupId} dose ${absoluteDoseNumber} moved from ${oldDate} to ${newDate} (interval from previous dose).`
+          );
+          changed = true;
+        }
+      }
+    }
+  }
+
+  return changed;
 }
 
 function unifySameDateConflicts(

@@ -41,7 +41,6 @@ export function validateCounterDoses(
   const birthDate = parseDate(patient.birthDate);
   const counters: any[] = (pack.counters as any).counters ?? [];
   const counter = counters.find((c: any) => c.id === counterId);
-
   if (!counter) {
     return { counterId, doses: [], validDoseCount: 0 };
   }
@@ -59,13 +58,11 @@ export function validateCounterDoses(
     );
 
   const doses: ValidatedDose[] = [];
-
   const zeroRecords: ImmunizationRecord[] = [];
   const countedRecords: ImmunizationRecord[] = [];
 
   for (const record of relevantRecords) {
     const ageAt = ageInMonthsAt(birthDate, parseDate(record.administeredOn));
-
     if (
       context.doseZero &&
       context.doseZero.productGroups.includes(record.productGroupId) &&
@@ -109,9 +106,23 @@ export function validateCounterDoses(
       reasons.push("DUPLICATE_SAME_DAY");
     }
 
-    const validityRule = context.rules?.find(
-      (rule: any) => rule.dose === doseNumber
-    );
+    const validityRule = (() => {
+      const base = context.rules?.find(
+        (rule: any) => rule.dose === doseNumber && !rule.product_group
+      );
+      const overlay = context.rules?.find(
+        (rule: any) =>
+          rule.dose === doseNumber &&
+          rule.product_group === record.productGroupId
+      );
+      if (!base) return overlay;
+      if (!overlay) return base;
+      const merged: any = { ...base };
+      for (const [k, v] of Object.entries(overlay)) {
+        if (k !== "dose" && k !== "product_group") merged[k] = v;
+      }
+      return merged;
+    })();
 
     let t1IntervalPassed = true;
 
@@ -134,13 +145,11 @@ export function validateCounterDoses(
         validityRule.min_interval_from_previous,
         lastValidDoseAgeMonths ?? 0
       );
-
       if (interval) {
         const requiredDays = durationToDays(interval);
         const actualDays = Math.round(
           (doseDate.getTime() - lastValidDoseDate.getTime()) / 86400000
         );
-
         if (actualDays < requiredDays) {
           reasons.push(`INVALID_INTERVAL_BEFORE_DOSE_${doseNumber}`);
           t1IntervalPassed = false;
@@ -158,7 +167,6 @@ export function validateCounterDoses(
     if (valid && doseNumber > context.requiredValidDoses) {
       const seq = doseNumber - context.requiredValidDoses;
       const target = context.boosterTargets?.[seq];
-
       if (target) {
         if (target.minAge) {
           const targetAgeMonths = durationToMonths(target.minAge);
@@ -168,19 +176,16 @@ export function validateCounterDoses(
             );
           }
         }
-
         if (target.interval && lastValidDoseDate && t1IntervalPassed) {
           const targetInterval = resolveDuration(
             target.interval,
             lastValidDoseAgeMonths ?? 0
           );
-
           if (targetInterval) {
             const requiredDays = durationToDays(targetInterval);
             const actualDays = Math.round(
               (doseDate.getTime() - lastValidDoseDate.getTime()) / 86400000
             );
-
             if (actualDays < requiredDays) {
               warnings.push(
                 `SHORT_BOOSTER_${seq}_INTERVAL_COUNTED: interval shorter than policy target. Dose counted.`

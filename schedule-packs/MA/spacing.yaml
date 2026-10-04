@@ -13,3 +13,21 @@ spacing_rules:
     exemptions:
       - product_a: VPO
         product_b: ROTAVIRUS
+
+  - id: PCV13TT_DTP_OFFSET_15D
+    label_fr: Décalage 15 jours PrimoVax13/PCV13-TT vs vaccins DTP
+    description_fr: >
+      Toujours décaler de 15 jours la vaccination par PrimoVax13/
+      PCV13-TT par rapport au pentavalent, DTC ou Td (fiche transition).
+    applies_when:
+      pairs:
+        - product_a: PCV_PRIMOVAX
+          product_b: PENTA
+        - product_a: PCV_PRIMOVAX
+          product_b: DTC
+        - product_a: PCV_PRIMOVAX
+          product_b: TD
+    min_gap:
+      days: 15
+    same_day_allowed: false
+    move: PCV_PRIMOVAX

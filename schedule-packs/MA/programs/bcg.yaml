@@ -20,7 +20,11 @@ program:
 
 primary_series:
   required_valid_doses: 1
-
+  birth_dose:
+    product_group: BCG
+    counts_as_dose: 1
+    plan_if_age_below:
+      months: 1
   dose_validity:
     - dose: 1
       min_age:

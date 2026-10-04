@@ -10,7 +10,7 @@ product_selection:
     coverage_reward: 100
     unneeded_program_penalty: 200
     max_alignment_delay:
-      days: 45
+      days: 15
 
   eligibility:
     - product_group: PENTA
@@ -41,3 +41,16 @@ product_selection:
     - TD
     - VAR
 
+  availability_policies:
+    - id: TRANSITION
+      label_fr: Transition PrimoVax exclusif (fiche)
+      reserved:
+        - product_group: PCV_PREVENAR
+          reserve_for: history_starters
+    - id: CONTINUITY_FIRST
+      label_fr: Continuité de marque, stock ouvert
+      reserved: []
+    - id: STOCK_DRIVEN
+      label_fr: Piloté par stock réel
+      reserved: []
+      requires_stock_input: true
