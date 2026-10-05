@@ -82,6 +82,23 @@ export function durationToDays(duration?: Duration | null): number {
   return days;
 }
 
+/** Short human text for messages: {months: 84} -> "7 years", {weeks: 8} -> "8 weeks". */
+export function describeDuration(duration?: Duration | null): string {
+  if (!duration) return "0 days";
+  if (duration.birth) return "birth";
+  if (duration.years) return `${duration.years} year${duration.years === 1 ? "" : "s"}`;
+  if (duration.months) {
+    if (duration.months % 12 === 0) {
+      const y = duration.months / 12;
+      return `${y} year${y === 1 ? "" : "s"}`;
+    }
+    return `${duration.months} months`;
+  }
+  if (duration.weeks) return `${duration.weeks} weeks`;
+  if (duration.days) return `${duration.days} days`;
+  return "0 days";
+}
+
 export function ageInMonthsAt(birthDate: Date, evaluationDate: Date): number {
   return differenceInMonths(evaluationDate, birthDate);
 }

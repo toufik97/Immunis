@@ -42,6 +42,12 @@ antigens:
   - id: BCG
     label_fr: Tuberculose / BCG
 
+  - id: VITAMIN_A
+    label_fr: Vitamine A
+
+  - id: VITAMIN_D
+    label_fr: Vitamine D
+
 product_groups:
   - id: HB_MONO
     label_fr: Hépatite B monovalent
@@ -129,3 +135,24 @@ product_groups:
     clinical:
       live: true
       availability: legacy
+
+  - id: VITD
+    label_fr: Vitamine D 200 000 UI
+    satisfies_antigens:
+      - VITAMIN_D
+    clinical:
+      availability: current
+
+  - id: VITA_100K
+    label_fr: Vitamine A 100 000 UI
+    satisfies_antigens:
+      - VITAMIN_A
+    clinical:
+      availability: current
+
+  - id: VITA_200K
+    label_fr: Vitamine A 200 000 UI
+    satisfies_antigens:
+      - VITAMIN_A
+    clinical:
+      availability: current

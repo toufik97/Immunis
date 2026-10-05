@@ -154,5 +154,10 @@ export function applySpacingRules(
       }
     }
   }
+  if (changed) {
+    warnings.push(
+      "SPACING_NOT_CONVERGED: spacing rules still moving visits after 24 passes; check the plan manually."
+    );
+  }
   return warnings;
 }

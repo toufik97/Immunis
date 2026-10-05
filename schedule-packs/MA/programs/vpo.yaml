@@ -14,7 +14,7 @@ primary_series:
     counts_as_dose: 0
     plan_if_age_below:
       weeks: 4
-  dose_zero:             # <--- ADD THIS BLOCK
+  dose_zero:
     product_groups:
       - VPO
     max_age:

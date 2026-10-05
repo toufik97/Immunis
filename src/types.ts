@@ -12,7 +12,8 @@ export type ProgramStatus =
   | "NEEDS_PRIMARY"
   | "NEEDS_BOOSTER"
   | "COMPLETE"
-  | "NOT_NEEDED";
+  | "NOT_NEEDED"
+  | "UNDETERMINED"; // no catch-up rule matched: the engine cannot say what is needed
 
 export interface AntigenNeed {
   programId: string;
@@ -25,7 +26,7 @@ export interface AntigenNeed {
   action: string | null;
   boosterSequence: number | null;
   boosterPolicyId: string | null;
-  targetProduct?: string | null;   // <-- ADD THIS LINE
+  targetProduct?: string | null;
   warnings: string[];
 }
 

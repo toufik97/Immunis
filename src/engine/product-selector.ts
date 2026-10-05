@@ -8,6 +8,7 @@ import type {
   SlotProduct,
   BirthDosePlan
 } from "../types";
+import type { DoseValidationMap } from "./dose-counter";
 import {
   parseDate,
   formatDate,
@@ -21,7 +22,8 @@ export function selectProducts(
   needs: AntigenNeed[],
   pack: SchedulePack,
   patient: Patient,
-  evaluationDate: Date
+  evaluationDate: Date,
+  validations?: DoseValidationMap
 ): ProductSelectionResult {
   const reasoning: string[] = [];
   const warnings: string[] = [];
@@ -73,6 +75,13 @@ export function selectProducts(
     const birthDose = program?.primary_series?.birth_dose;
     if (!birthDose) continue;
     if (need.validDosesReceived !== 0) continue;
+
+    // A birth dose that counts as dose 0 (VPO0) is not in validDosesReceived,
+    // so look for it in the validated history before planning it again.
+    const alreadyGivenAsDoseZero = (validations?.[need.counterId]?.doses ?? []).some(
+      (d: any) => d.doseNumber === 0 && d.valid
+    );
+    if (alreadyGivenAsDoseZero) continue;
 
     if (!isAgeBefore(birthDate, evaluationDate, birthDose.plan_if_age_below)) {
       continue;
@@ -312,7 +321,11 @@ export function selectProducts(
     });
 
     reasoning.push(
-      `Booster ${boosterSequence} needed for ${need.programId}: selected ${boosterConfig.product_group}`
+      `Booster ${boosterSequence} needed for ${need.programId}: selected ${
+        typeof boosterConfig.product_group === "string"
+          ? boosterConfig.product_group
+          : "product chosen by age at dose"
+      }`
     );
   }
 

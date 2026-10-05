@@ -122,8 +122,10 @@ export function evaluateProgram(
   }
 
   if (!matchedRule) {
+    // Fail closed: "no rule matched" must never look like "nothing needed".
+    need.status = "UNDETERMINED";
     need.warnings.push(
-      `No matching catch-up rule for age ${ageMonths} months and ${validDosesReceived} valid doses`
+      `NO_MATCHING_RULE: No matching catch-up rule for age ${ageMonths} months and ${validDosesReceived} valid doses`
     );
     return need;
   }
@@ -215,7 +217,8 @@ export function evaluateProgram(
       break;
     }
     default: {
-      need.warnings.push(`Unknown action: ${then.action}`);
+      need.status = "UNDETERMINED";
+      need.warnings.push(`UNKNOWN_ACTION: Unknown action: ${then.action}`);
     }
   }
 

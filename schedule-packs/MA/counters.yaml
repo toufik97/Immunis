@@ -63,7 +63,7 @@ counters:
   - id: ROTA_DOSES
     label_fr: Doses rotavirus
     counts_product_groups:
-      - ROTAVIRUS   # <--- MUST be exactly this, matching catalog.yaml
+      - ROTAVIRUS
 
   - id: MEASLES_DOSES
     label_fr: Doses valides Rougeole
@@ -93,3 +93,14 @@ counters:
       - RR
       - RRO
     only_valid_doses: true
+
+  - id: VITD_DOSES
+    label_fr: Doses de vitamine D
+    counts_product_groups:
+      - VITD
+
+  - id: VITA_DOSES
+    label_fr: Doses de vitamine A
+    counts_product_groups:
+      - VITA_100K
+      - VITA_200K

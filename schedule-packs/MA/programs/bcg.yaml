@@ -47,17 +47,17 @@ catchup_rules:
       action: complete_primary
       doses_needed: 1
 
-  - id: MA-BCG-CU-GE6Y
-    when:
-      age: { from: { years: 6 } }
-    then:
-      action: none
-
   - id: MA-BCG-CU-GE1
     when:
       counter: { id: BCG_DOSES, gte: 1 }
     then:
       action: complete
+
+  - id: MA-BCG-CU-GE6Y
+    when:
+      age: { from: { years: 6 } }
+    then:
+      action: none
 
 review_flags:
   - id: BCG-REVIEW-001

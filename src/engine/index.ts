@@ -12,7 +12,7 @@ import { countDoses, type DoseValidationMap } from "./dose-counter";
 import { evaluateAllPrograms } from "./antigen-evaluator";
 import { selectProducts } from "./product-selector";
 import { planVisits } from "./visit-planner";
-import { parseDate, isAgeBefore } from "./duration";
+import { parseDate, isAgeBefore, describeDuration } from "./duration";
 
 export interface EngineResult {
   patient: Patient;
@@ -52,7 +52,8 @@ export function evaluatePatient(
     antigenNeeds,
     pack,
     patient,
-    evaluationDate
+    evaluationDate,
+    validations
   );
 
   // 5. Build dated visits
@@ -115,8 +116,9 @@ function applyDoseCaps(
         need.dosesNeeded = 0;
         need.boosterSequence = null;
         need.status = "COMPLETE";
+        need.action = "complete";
         need.warnings.push(
-          `DOSE_CAP_REACHED_PLANNING_STOPPED: ${cap.max_doses} doses already given before 7 years; no further dose planned (hyperimmunization guard).`
+          `DOSE_CAP_REACHED_PLANNING_STOPPED: ${cap.max_doses} doses already given before ${describeDuration(cap.before_age)}; no further dose planned (hyperimmunization guard).`
         );
       }
     }
