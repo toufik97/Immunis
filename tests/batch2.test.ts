@@ -110,7 +110,7 @@ describe("pack validation at load time", () => {
     expect(load(mutated("programs/dt.yaml", "booster_policy: DT_BOOSTERS", "booster_policy: DT_BOOSTER"))).toThrow(/DT_BOOSTER/);
   });
   it("rejects an unknown product in spacing rules", () => {
-    expect(load(mutated("spacing.yaml", "move: PCV_PRIMOVAX", "move: PCV_PRIMOVAXX"))).toThrow(/PCV_PRIMOVAXX/);
+    expect(load(mutated("spacing.yaml", /(move(_on_tie)?: )PCV_PRIMOVAX/, "$1PCV_PRIMOVAXX"))).toThrow(/PCV_PRIMOVAXX/);
   });
 });
 

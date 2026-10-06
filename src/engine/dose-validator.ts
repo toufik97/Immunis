@@ -4,7 +4,7 @@ import {
   parseDate,
   ageInMonthsAt,
   durationToMonths,
-  durationToDays,
+  addDurationToDate,
   resolveDuration,
   isAgeAtLeast,
   isAgeBefore
@@ -149,11 +149,9 @@ export function validateCounterDoses(
         lastValidDoseAgeMonths ?? 0
       );
       if (interval) {
-        const requiredDays = durationToDays(interval);
-        const actualDays = Math.round(
-          (doseDate.getTime() - lastValidDoseDate.getTime()) / 86400000
-        );
-        if (actualDays < requiredDays) {
+        // Calendar math, like the planner: 6 months after Jan 15 is Jul 15,
+        // not "183 days" (which can be a day too many or too few).
+        if (doseDate.getTime() < addDurationToDate(lastValidDoseDate, interval).getTime()) {
           reasons.push(`INVALID_INTERVAL_BEFORE_DOSE_${doseNumber}`);
           t1IntervalPassed = false;
         }
@@ -185,11 +183,7 @@ export function validateCounterDoses(
             lastValidDoseAgeMonths ?? 0
           );
           if (targetInterval) {
-            const requiredDays = durationToDays(targetInterval);
-            const actualDays = Math.round(
-              (doseDate.getTime() - lastValidDoseDate.getTime()) / 86400000
-            );
-            if (actualDays < requiredDays) {
+            if (doseDate.getTime() < addDurationToDate(lastValidDoseDate, targetInterval).getTime()) {
               warnings.push(
                 `SHORT_BOOSTER_${seq}_INTERVAL_COUNTED: interval shorter than policy target. Dose counted.`
               );

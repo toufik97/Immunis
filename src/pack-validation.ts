@@ -29,6 +29,21 @@ export function validatePack(pack: SchedulePack): PackValidation {
   };
 
   // --- catalog and counters
+  const seenAlias = new Map<string, string>();
+  for (const g of catalog.product_groups ?? []) {
+    if (g.category !== undefined && g.category !== "vaccine" && g.category !== "supplement") {
+      errors.push(`catalog product ${g.id}: category must be "vaccine" or "supplement", got "${g.category}"`);
+    }
+    for (const alias of g.aliases ?? []) {
+      if (productIds.has(alias)) {
+        errors.push(`catalog product ${g.id}: alias "${alias}" is also a product id`);
+      } else if (seenAlias.has(alias)) {
+        errors.push(`catalog product ${g.id}: alias "${alias}" already belongs to ${seenAlias.get(alias)}`);
+      } else {
+        seenAlias.set(alias, g.id);
+      }
+    }
+  }
   for (const g of catalog.product_groups ?? []) {
     for (const ag of g.satisfies_antigens ?? []) {
       if (!antigenIds.has(ag)) {
@@ -76,6 +91,14 @@ export function validatePack(pack: SchedulePack): PackValidation {
     }
     for (const rule of primary.dose_validity ?? []) {
       needProduct(rule.product_group, at(`primary_series.dose_validity dose ${rule.dose}`));
+      const amt = rule.dose_amount;
+      if (amt !== undefined) {
+        const okValue = typeof amt?.value === "number" && amt.value > 0;
+        const okUnit = typeof amt?.unit === "string" && amt.unit.length > 0;
+        if (!okValue || !okUnit) {
+          errors.push(at(`primary_series.dose_validity dose ${rule.dose}: dose_amount needs a positive number "value" and a "unit"`));
+        }
+      }
     }
 
     for (const pol of policies) {
@@ -131,6 +154,7 @@ export function validatePack(pack: SchedulePack): PackValidation {
       needProduct(ex.product_a, `spacing rule ${r.id} exemption`);
       needProduct(ex.product_b, `spacing rule ${r.id} exemption`);
     }
+    needProduct(r.move_on_tie, `spacing rule ${r.id} move_on_tie`);
     needProduct(r.move, `spacing rule ${r.id} move`);
   }
 
