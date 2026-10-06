@@ -9,6 +9,7 @@ import type {
   EvaluateOptions
 } from "../types";
 import { countDoses, type DoseValidationMap } from "./dose-counter";
+import { normalizeHistory } from "./history";
 import { evaluateAllPrograms } from "./antigen-evaluator";
 import { selectProducts } from "./product-selector";
 import { planVisits } from "./visit-planner";
@@ -23,15 +24,20 @@ export interface EngineResult {
   productSelection: ProductSelectionResult;
   visitPlan: VisitPlan;
   assumptions: string[];
+  /** problems with the input itself, e.g. a product id the catalog does not know */
+  inputWarnings: string[];
 }
 
 export function evaluatePatient(
   patient: Patient,
-  history: ImmunizationRecord[],
+  rawHistory: ImmunizationRecord[],
   pack: SchedulePack,
   evaluationDate: Date,
   options: EvaluateOptions = {}
 ): EngineResult {
+  // 0. Accept retired product ids (aliases) and flag unknown ones
+  const { history, warnings: inputWarnings } = normalizeHistory(rawHistory, pack);
+
   // 1. Count and validate recorded doses
   const { counts, validations } = countDoses(history, pack, patient);
 
@@ -86,7 +92,8 @@ export function evaluatePatient(
     antigenNeeds,
     productSelection,
     visitPlan,
-    assumptions
+    assumptions,
+    inputWarnings
   };
 }
 

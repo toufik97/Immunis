@@ -17,3 +17,4 @@ docs/morocco/*
 # But make an exception for the draft folder
 !docs/morocco/draft/
 !docs/morocco/draft/*
+docs/morocco/draft/bug.md

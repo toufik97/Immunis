@@ -58,6 +58,21 @@ export interface ProductSelectionResult {
 
 export type VisitStatus = "DUE_NOW" | "DUE_FUTURE" | "PROJECTED";
 
+export interface DoseAmount {
+  value: number;
+  unit: string; // e.g. "IU"
+}
+
+/** One dose inside a visit: which program it counts for, which dose number it is,
+ *  and the prescribed amount when the schedule defines one (vitamins). */
+export interface PlannedDose {
+  programId: string;
+  productGroupId: string;
+  doseNumber: number;
+  category: "vaccine" | "supplement";
+  amount?: DoseAmount;
+}
+
 export interface PlannedVisit {
   visitNumber: number;
   date: string;
@@ -65,6 +80,7 @@ export interface PlannedVisit {
   antigensCovered: string[];
   role: string;
   status: VisitStatus;
+  doses?: PlannedDose[];
 }
 
 export interface EvaluateOptions {

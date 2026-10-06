@@ -1,0 +1,38 @@
+program:
+  id: VITA_PROGRAM
+  label_fr: Vitamine A
+  description_fr: >
+    Supplémentation en vitamine A.
+    1ère dose (100 000 UI) à 6 mois, 2ème et 3ème doses (200 000 UI) à 12 et 18 mois.
+    Intervalle minimum de 6 mois entre les doses.
+  antigen_targets:
+    - VITAMIN_A
+  counter: VITA_DOSES
+
+catchup_rules:
+  - id: VITA-DEFAULT
+    when: {}
+    then:
+      action: complete_remaining
+
+primary_series:
+  required_valid_doses: 3
+  dose_validity:
+    - dose: 1
+      min_age:
+        months: 6
+      target_min_age:
+        months: 6
+      dose_amount: { value: 100000, unit: IU }
+    - dose: 2
+      min_interval_from_previous:
+        months: 6
+      target_min_age:
+        months: 12
+      dose_amount: { value: 200000, unit: IU }
+    - dose: 3
+      min_interval_from_previous:
+        months: 6
+      target_min_age:
+        months: 18
+      dose_amount: { value: 200000, unit: IU }

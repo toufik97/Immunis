@@ -102,5 +102,4 @@ counters:
   - id: VITA_DOSES
     label_fr: Doses de vitamine A
     counts_product_groups:
-      - VITA_100K
-      - VITA_200K
+      - VITA

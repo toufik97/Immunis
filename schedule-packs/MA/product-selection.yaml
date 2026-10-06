@@ -25,7 +25,6 @@ product_selection:
       max_age: { months: 24, exclusive: true }
     - product_group: BCG
       max_age: { years: 6, exclusive: true }
-
   product_ranking:
     - PENTA
     - DTC

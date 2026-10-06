@@ -44,9 +44,11 @@ antigens:
 
   - id: VITAMIN_A
     label_fr: Vitamine A
+    kind: supplement
 
   - id: VITAMIN_D
     label_fr: Vitamine D
+    kind: supplement
 
 product_groups:
   - id: HB_MONO
@@ -136,22 +138,23 @@ product_groups:
       live: true
       availability: legacy
 
+  # Supplements. The dose AMOUNT is clinical and lives in the program
+  # (dose_amount); which capsules/stock make up that amount is for the
+  # inventory and UI layers, not the engine.
   - id: VITD
-    label_fr: Vitamine D 200 000 UI
+    label_fr: Vitamine D
+    category: supplement
     satisfies_antigens:
       - VITAMIN_D
     clinical:
       availability: current
 
-  - id: VITA_100K
-    label_fr: Vitamine A 100 000 UI
-    satisfies_antigens:
-      - VITAMIN_A
-    clinical:
-      availability: current
-
-  - id: VITA_200K
-    label_fr: Vitamine A 200 000 UI
+  - id: VITA
+    label_fr: Vitamine A
+    category: supplement
+    aliases:            # old ids, still accepted in history rows
+      - VITA_100K
+      - VITA_200K
     satisfies_antigens:
       - VITAMIN_A
     clinical:

@@ -1,0 +1,32 @@
+program:
+  id: VITD_PROGRAM
+  label_fr: Vitamine D
+  description_fr: >
+    Supplémentation en vitamine D (200 000 UI).
+    Dose de naissance + 2ème dose à 6 mois.
+  antigen_targets:
+    - VITAMIN_D
+  counter: VITD_DOSES
+
+catchup_rules:
+  - id: VITD-DEFAULT
+    when: {}
+    then:
+      action: complete_remaining
+
+primary_series:
+  required_valid_doses: 2
+  birth_dose:
+    product_group: VITD
+    plan_if_age_below:
+      weeks: 4
+    counts_as_dose: 1
+  dose_validity:
+    - dose: 1
+      min_age:
+        weeks: 0
+      dose_amount: { value: 200000, unit: IU }
+    - dose: 2
+      min_interval_from_previous:
+        months: 6
+      dose_amount: { value: 200000, unit: IU }
