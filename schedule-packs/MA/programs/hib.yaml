@@ -121,4 +121,4 @@ review_flags:
     question: >
       No Hib monovalent in active catalog; unmet-need warning is
       emitted for 3-5 year starters. Add HIB_MONO if stock exists.
-    status: needs_validation
+    status: clinician_confirmed

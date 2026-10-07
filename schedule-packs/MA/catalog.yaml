@@ -60,6 +60,8 @@ product_groups:
     label_fr: BCG
     satisfies_antigens:
       - BCG
+    clinical:
+      live: true
 
   - id: VPO
     label_fr: VPO

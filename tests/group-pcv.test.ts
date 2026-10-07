@@ -189,4 +189,16 @@ describe("Group PCV — coexistence, policies, both products (Stage 5)", () => {
       expect(dose2!.reasons.join(" ")).toContain("INVALID_INTERVAL");
     });
   });
+  describe("PC-G: 3-dose TT completion → 12-month booster (item 2)", () => {
+    it("2/4/6-month PrimoVax evaluated at 9 months → NEEDS_BOOSTER, not COMPLETE", () => {
+      const r = runAvail("2026-01-01", [
+        rec("2026-03-15", "PCV_PRIMOVAX"),
+        rec("2026-05-15", "PCV_PRIMOVAX"),
+        rec("2026-07-15", "PCV_PRIMOVAX")
+      ], "2026-10-01", { policy: "TRANSITION" });
+      const n = need(r, "PCV_PROGRAM");
+      expect(n.status).toBe("NEEDS_BOOSTER");
+      expect(n.boosterSequence).toBe(1);
+    });
+  });
 });

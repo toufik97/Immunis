@@ -60,11 +60,11 @@ describe("Group M — Measles/Rubella + spacing + legacy", () => {
     expect(gap === 0 || gap >= 28).toBe(true);
   });
 
-  it("M7: VPO vs rotavirus exemption — no spacing shift of VPO", () => {
+  it("M7: VPO vs rotavirus exemption — recorded Rota doesn't shift VPO", () => {
     const r = run("2025-12-01", [rec("2026-03-20", "ROTAVIRUS")], "2026-04-01");
-    const vpoVisit = r.visitPlan.visits.find(v => v.products.includes("VPO"));
-    expect(vpoVisit).toBeDefined();
-    expect(r.visitPlan.warnings.join(" ")).not.toContain("LIVE_SPACING_SHIFT");
+    // If the exemption failed, VPO dose 1 (12 days after Rota) would be pushed to 04-17.
+    // It must stay on the eval date.
+    expect(r.visitPlan.visits.some(v => v.date === "2026-04-01" && v.products.includes("VPO"))).toBe(true);
   });
 
   it("M8: rotavirus recorded 7 days ago shifts RR1 (not an exempt pair)", () => {
@@ -72,5 +72,13 @@ describe("Group M — Measles/Rubella + spacing + legacy", () => {
     const rrVisit = r.visitPlan.visits.find(v => v.products.includes("RR"));
     // VPO at 04-01 also constrains RR (both live, not exempt) -> 04-01 + 28d = 04-29
     expect(rrVisit?.date).toBe("2026-04-29");
+  });
+
+  it("M9: BCG recorded 12 days ago (live) → RR pushed to the 28-day gap", () => {
+    const r = run("2025-07-01", [rec("2026-03-20", "BCG")], "2026-04-01");
+    const rrVisit = r.visitPlan.visits.find(v => v.products.includes("RR"));
+    expect(rrVisit).toBeDefined();
+    const gap = (new Date(rrVisit!.date).getTime() - new Date("2026-03-20").getTime()) / 86400000;
+    expect(gap === 0 || gap >= 28).toBe(true);
   });
 });

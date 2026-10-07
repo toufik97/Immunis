@@ -172,7 +172,7 @@ review_flags:
       Birth dose window set to <2 months (aligned with Penta1).
       WHO uses 6 weeks as the primary-series start; a VPO at 6 weeks
       is therefore treated as dose 0 here. Needs validation.
-    status: needs_validation
+    status: clinician_confirmed
   - id: VPO-REVIEW-002
     topic: Campaign doses
     question: >

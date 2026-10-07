@@ -198,3 +198,12 @@ catchup_rules:
         gte: 3
     then:
       action: complete
+
+review_flags:
+  - id: HB-REVIEW-001
+    topic: 11-16y catch-up complete with 2 doses
+    question: >
+      An 11-15 year old with 2 documented HB doses is COMPLETE even if given
+      with infant (1-month) spacing rather than the adolescent 6-month spacing.
+      Clinician confirmed acceptable.
+    status: clinician_confirmed

@@ -22,6 +22,19 @@ catchup_rules:
       required_primaries: 0
       booster_count: 0
 
+  # ---- TT/mixed track, 3+ doses: primaries complete, 12-month booster still due ----
+  # Clinician 2026-10: 3 TT doses before 12 months still require a booster at
+  # 12 months or later. Keyed on dose count (not current age) so a child who
+  # started young is not re-slotted into a "new starter at this age" band.
+  - id: PCV-TT-DONE-3P
+    when:
+      product_history: { PCV_PRIMOVAX: { gte: 1 }, _TOTAL: { gte: 3 } }
+    then:
+      required_primaries: 3
+      booster_count: 1
+      booster_policy: PCV_B_TT_12M
+      target_product: PCV_PRIMOVAX
+
   # ---- history contains PrimoVax/PCV13-TT => TT schema (C2 mixed lock) ----
   - id: PCV-TT-2-6M
     when:
@@ -334,7 +347,7 @@ review_flags:
     question: >
       Sickle cell / asplenia / immunodeficiency need PCV past 5y;
       deferred until patient.conditions model exists.
-    status: needs_validation
+    status: clinician_confirmed
   - id: PCV-REVIEW-003
     topic: Stock not connected
     question: >
