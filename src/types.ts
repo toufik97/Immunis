@@ -27,6 +27,9 @@ export interface AntigenNeed {
   boosterSequence: number | null;
   boosterPolicyId: string | null;
   targetProduct?: string | null;
+  /** primaries / boosters this product track requires (variant rules such as PCV) */
+  requiredPrimaries?: number | null;
+  boosterCount?: number | null;
   warnings: string[];
 }
 
@@ -71,6 +74,8 @@ export interface PlannedDose {
   doseNumber: number;
   category: "vaccine" | "supplement";
   amount?: DoseAmount;
+  /** true for a future booster shown only in a full projection */
+  projected?: boolean;
 }
 
 export interface PlannedVisit {

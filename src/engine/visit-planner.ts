@@ -173,6 +173,15 @@ export function planVisits(
       if (programEarliest > earliest) earliest = programEarliest;
     }
 
+    // last day on which every program's age limit (Rota's 24 months, ...) still allows the dose
+    let latest: Date | null = null;
+    for (const programId of programIds) {
+      const limit = doseRules[programId]?.max_age;
+      if (!limit) continue;
+      const lastDay = addDurationToDate(addDurationToDate(birthDate, limit), { days: -1 });
+      if (!latest || lastDay < latest) latest = lastDay;
+    }
+
     const feasible = programIds.filter((programId: string) => {
       const rule = doseRules[programId];
       if (!rule?.max_age) return true;
@@ -185,7 +194,7 @@ export function planVisits(
       return true;
     });
 
-    return { earliest, feasible, doseNumbers };
+    return { earliest, feasible, doseNumbers, latest };
   };
 
   for (const slot of selection.primarySlots) {
@@ -194,6 +203,7 @@ export function planVisits(
       coveredProgramIds: string[];
       date: Date;
       doseNumbers: Record<string, number>;
+      latest: Date | null;
     }> = [];
 
     const queue: Array<{
@@ -208,7 +218,7 @@ export function planVisits(
 
     while (queue.length > 0) {
       const slotProduct = queue.shift()!;
-      const { earliest, feasible, doseNumbers } = slotProductDate(
+      const { earliest, feasible, doseNumbers, latest } = slotProductDate(
         slot.slot,
         slotProduct.productGroupId,
         slotProduct.coveredProgramIds
@@ -263,7 +273,8 @@ export function planVisits(
         productGroupId: slotProduct.productGroupId,
         coveredProgramIds: feasible,
         date: earliest,
-        doseNumbers
+        doseNumbers,
+        latest
       });
     }
 
@@ -277,9 +288,14 @@ export function planVisits(
     for (const pd of sortedDates) {
       const lastCluster = clusters[clusters.length - 1];
       if (lastCluster) {
-        const prevDate = lastCluster[lastCluster.length - 1].date;
+        // the delay is measured from the first (earliest) dose of the cluster, so a
+        // chain of doses 15 days apart cannot stretch the visit beyond the maximum
+        const firstDate = lastCluster[0].date;
         const gap = Math.round(
-          (pd.date.getTime() - prevDate.getTime()) / 86400000
+          (pd.date.getTime() - firstDate.getTime()) / 86400000
+        );
+        const withinAgeLimits = lastCluster.every(
+          member => !member.latest || member.latest.getTime() >= pd.date.getTime()
         );
         const gateBlocked = lastCluster.some(
           member =>
@@ -290,7 +306,7 @@ export function planVisits(
               spacingIsLive
             )?.sameDayAllowed === false
         );
-        if (gap <= maxAlignmentDelayDays && !gateBlocked) {
+        if (gap <= maxAlignmentDelayDays && !gateBlocked && withinAgeLimits) {
           lastCluster.push(pd);
           continue;
         }
@@ -387,6 +403,22 @@ export function planVisits(
     scheduledLastByProgram[booster.programId] = visitDate;
   }
 
+  // ---------- projected boosters join the plan before spacing is applied ----------
+  if (projection === "full") {
+    rawVisits.push(
+      ...projectFutureBoosters(
+        needsById,
+        programs,
+        scheduledLastByProgram,
+        plannedPrimaryByProgram,
+        productGroups,
+        birthDate,
+        evaluationDate,
+        rawVisits.length
+      )
+    );
+  }
+
   // ---------- dose intervals + spacing rules, together ----------
   // The earliest a visit may take given its own program's previous dose
   // (recorded, or planned and possibly moved) and the age rules.
@@ -398,7 +430,7 @@ export function planVisits(
       const doseNumber = visit.doseNumbers[programId];
       let prev: RawVisit | null = null;
       for (const other of all) {
-        if (other === visit || other.projected) continue;
+        if (other === visit) continue;
         const n = other.doseNumbers[programId];
         if (n === undefined || n >= (doseNumber ?? Infinity)) continue;
         if (
@@ -444,6 +476,31 @@ export function planVisits(
     warnings.push(w);
   }
 
+  // ---------- age limits, on the final dates ----------
+  // Spacing and intervals can push a dose past its age limit (Rota: 24 months).
+  // Such a dose is dropped, never planned late.
+  for (const visit of [...rawVisits]) {
+    if (visit.kind === "birth") continue;
+    for (const programId of [...visit.programIds]) {
+      const doseNumber = visit.doseNumbers[programId];
+      const rule = findDoseRule(
+        programs[programId]?.primary_series?.dose_validity ?? [],
+        doseNumber,
+        visit.productGroupId
+      );
+      if (rule?.max_age && !isAgeBefore(birthDate, visit.date, rule.max_age)) {
+        warnings.push(
+          `AGE_LIMIT_PREVENTS_DOSE: ${programId} dose ${doseNumber} would fall at ${ageInMonthsAt(birthDate, visit.date)} months (limit ${durationToMonths(rule.max_age)} months). Not planned.`
+        );
+        visit.programIds = visit.programIds.filter((p: string) => p !== programId);
+        delete visit.doseNumbers[programId];
+      }
+    }
+    if (visit.programIds.length === 0) {
+      rawVisits.splice(rawVisits.indexOf(visit), 1);
+    }
+  }
+
   // ---------- same-visit antigen overlap unification ----------
   const unified = unifySameDateConflicts(
     rawVisits,
@@ -455,22 +512,8 @@ export function planVisits(
     warnings
   );
 
-  // ---------- projection of future boosters ----------
-  if (projection === "full") {
-    projectFutureBoosters(
-      unified,
-      needsById,
-      programs,
-      scheduledLastByProgram,
-      plannedPrimaryByProgram,
-      productGroups,
-      birthDate,
-      evaluationDate
-    );
-  }
-
   // ---------- group by date ----------
-  const source = projection === "full" ? unified : unified.filter(v => !v.projected);
+  const source = unified;
   source.sort((a, b) => a.date.getTime() - b.date.getTime());
 
   // Dose details for display: dose number, category and the prescribed amount
@@ -491,6 +534,7 @@ export function planVisits(
         doseNumber,
         category: product?.category === "supplement" ? "supplement" : "vaccine"
       };
+      if (visit.projected) dose.projected = true;
       if (rule?.dose_amount) {
         dose.amount = {
           value: Number(rule.dose_amount.value),
@@ -530,7 +574,7 @@ export function planVisits(
     for (const dose of dosesOf(visit)) {
       existing.doses.set(`${dose.programId}|${dose.productGroupId}|${dose.doseNumber}`, dose);
     }
-    if (visit.projected) existing.projected = true;
+    existing.projected = existing.projected && visit.projected;
     grouped.set(key, existing);
   }
 
@@ -647,7 +691,7 @@ function unifySameDateConflicts(
         role: group.map(v => v.role).join("+"),
         programIds: unionPrograms,
         doseNumbers: Object.assign({}, ...group.map(v => v.doseNumbers)),
-        projected: false
+        projected: group.every(v => v.projected)
       });
     } else {
       warnings.push(
@@ -660,24 +704,29 @@ function unifySameDateConflicts(
 }
 
 function projectFutureBoosters(
-  visits: RawVisit[],
   needsById: Record<string, AntigenNeed>,
   programs: any,
   scheduledLastByProgram: Record<string, Date | null>,
   plannedPrimaryByProgram: Record<string, number>,
   productGroups: any[],
   birthDate: Date,
-  evaluationDate: Date
-): void {
+  evaluationDate: Date,
+  startOrder: number
+): RawVisit[] {
+  const out: RawVisit[] = [];
   for (const [programId, need] of Object.entries(needsById)) {
     const program: any = programs[programId];
     const policies: any[] = program?.booster_policies ?? [];
     if (policies.length === 0) continue;
+    // a variant rule (PCV) can say "no booster on this track"
+    if (need.boosterCount === 0) continue;
     const policy =
       policies.find((p: any) => p.id === need.boosterPolicyId) ?? policies[0];
     if (!policy) continue;
 
-    const required = program?.primary_series?.required_valid_doses ?? 0;
+    // primaries needed before the booster: the variant's own count when it has one
+    const required =
+      need.requiredPrimaries ?? program?.primary_series?.required_valid_doses ?? 0;
     const projectedPrimaryTotal =
       need.validDosesReceived + (plannedPrimaryByProgram[programId] ?? 0);
 
@@ -695,6 +744,7 @@ function projectFutureBoosters(
 
     let refDate = scheduledLastByProgram[programId] ?? null;
     for (let seq = nextSeq; ; seq++) {
+      if (need.boosterCount != null && need.boosterCount > 0 && seq > need.boosterCount) break;
       const config = policy[`booster_${seq}`];
       if (!config) break;
 
@@ -728,10 +778,10 @@ function projectFutureBoosters(
         need.status === "NEEDS_BOOSTER"
           ? need.validDosesReceived + 2 // one booster visit is already planned
           : projectedPrimaryTotal + 1;
-      visits.push({
+      out.push({
         date,
         baseDate: date,
-        order: visits.length,
+        order: startOrder + out.length,
         kind: "booster",
         booster: { config, seq },
         productGroupId: projectedProduct,
@@ -745,6 +795,7 @@ function projectFutureBoosters(
       scheduledLastByProgram[programId] = date;
     }
   }
+  return out;
 }
 
 function calculateEarliestPrimaryDate(

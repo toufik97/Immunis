@@ -2,16 +2,27 @@ import { describe, it, expect } from "vitest";
 import { run, expectVisitContains, expectVisitOnDateContains, rec } from "./helpers";
 
 describe("Group C — conditional intervals (resilient)", () => {
-  it("C1: dose 2 at 11m → dose 3 at 4 weeks", () => {
+  it("C1: dose 2 at 10m → dose 3 at 4 weeks (PCV not due, so no spacing involved)", () => {
+    const r = run("2025-01-01", [
+      rec("2025-03-01", "PENTA"),
+      rec("2025-11-01", "PENTA"),
+      rec("2025-03-20", "PCV_PRIMOVAX"),
+      rec("2025-09-20", "PCV_PRIMOVAX")
+    ], "2025-11-15");
+    const penta = r.visitPlan.visits.find(v => v.products.includes("PENTA"));
+    expect(penta!.date).toBe("2025-11-29");
+    expect(penta!.status).toBe("DUE_FUTURE");
+  });
+
+  it("C1b: same child, PrimoVax due now → PrimoVax first, Penta 15 days after it", () => {
     const r = run("2025-01-01", [
       rec("2025-03-01", "PENTA"),
       rec("2025-11-01", "PENTA")
     ], "2025-11-15");
-    // PCV steals index 0 at the eval date, so find PENTA by product
-    const pentaVisit = r.visitPlan.visits.find(v => v.products.includes("PENTA"));
-    expect(pentaVisit).toBeDefined();
-    expect(pentaVisit!.date).toBe("2025-11-29");
-    expect(pentaVisit!.status).toBe("DUE_FUTURE");
+    const primo = r.visitPlan.visits.find(v => v.products.includes("PCV_PRIMOVAX"));
+    const penta = r.visitPlan.visits.find(v => v.products.includes("PENTA"));
+    expect(primo!.date).toBe("2025-11-16"); // 15 days after the Penta given 2025-11-01
+    expect(penta!.date).toBe("2025-12-01"); // 15 days after the PrimoVax
   });
 
   it("C2: dose 2 at 13m → dose 3 at 6 months (DTC and HB may split due to 5m vs 6m intervals)", () => {

@@ -49,7 +49,11 @@ describe("PrimoVax and Penta/DTC/Td are 15 days apart; whoever is due first keep
   });
   it("a catch-up child keeps all three PrimoVax doses, at least 2 months apart (none merged away)", () => {
     const r = run("2025-10-16", "2026-03-16", [], { projection: "full" });
-    const primo = datesOf(r, "PCV_PRIMOVAX");
+    // the three primaries; the booster after them is a projected extra visit
+    const primo = r.visitPlan.visits
+      .filter((v: any) => v.products.includes("PCV_PRIMOVAX") && v.status !== "PROJECTED")
+      .map((v: any) => v.date)
+      .sort();
     expect(primo.length).toBe(3);
     for (let i = 1; i < primo.length; i++) expect(days(primo[i - 1], primo[i])).toBeGreaterThanOrEqual(59);
     for (const p of [...datesOf(r, "PENTA"), ...datesOf(r, "DTC"), ...datesOf(r, "TD")]) {

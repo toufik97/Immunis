@@ -139,6 +139,8 @@ export function evaluateProgram(
   if (then.required_primaries !== undefined || then.booster_count !== undefined) {
     const RP = Number(then.required_primaries ?? 0);
     const BC = Number(then.booster_count ?? 0);
+    need.requiredPrimaries = RP;
+    need.boosterCount = BC;
     need.boosterPolicyId =
       then.booster_policy ?? program.primary_series?.booster_policy ?? null;
     if (then.target_product !== undefined) {
