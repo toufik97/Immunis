@@ -37,8 +37,8 @@ describe("Group M — Measles/Rubella + spacing + legacy", () => {
       rec("2024-10-01", "VAR"),
       rec("2025-04-01", "VAR")
     ], "2026-04-01");
-    expect(count(var2, "RR_DOSES")).toBe(0);
-    expect(need(var2, "RR_PROGRAM").dosesNeeded).toBe(2);
+    expect(count(var2, "RR_DOSES")).toBe(2);
+    expect(need(var2, "RR_PROGRAM").status).toBe("COMPLETE");
   });
 
   it("M5: planner never offers legacy RRO or VAR", () => {

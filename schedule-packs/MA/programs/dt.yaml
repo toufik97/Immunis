@@ -211,4 +211,13 @@ dose_caps:
     max_doses: 6
     before_age:
       months: 84
-    on_exceed: warn_and_stop_planning
+
+review_flags:
+  - id: DT-REVIEW-001
+    topic: Dose 5 / booster 2 interval branches below 24 months are unreachable
+    question: >
+      DT rules start at 7 years, so age_at_previous_dose is always >= 84
+      months and only the "from 60 months -> 1 year" branch can ever match.
+      The <24m branch that DTP/VPO omit (G14 exemption) can never trigger
+      here; the structure is kept identical for consistency.
+    status: policy_decision

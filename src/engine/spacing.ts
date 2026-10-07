@@ -13,11 +13,6 @@ export interface SpacingConstraint {
   move: string | null;
 }
 
-interface EventLike {
-  date: Date;
-  productGroupId: string;
-  ref?: { date: Date };
-}
 
 export function liveFlags(pack: SchedulePack): Record<string, boolean> {
   const productGroups: any[] = (pack as any).catalog?.product_groups ?? [];
@@ -81,91 +76,6 @@ export function constrainedPair(
     return con;
   }
   return null;
-}
-
-export function applySpacingRules(
-  rawVisits: { date: Date; productGroupId: string }[],
-  history: ImmunizationRecord[],
-  pack: SchedulePack
-): string[] {
-  const constraints = getSpacingConstraints(pack);
-  if (constraints.length === 0) return [];
-  const isLive = liveFlags(pack);
-  const warnings: string[] = [];
-
-  const relevant = (pid: string): boolean =>
-    isLive[pid] === true ||
-    constraints.some(c => c.pairs.some(([x, y]) => x === pid || y === pid));
-
-  const recorded: EventLike[] = history
-    .filter(r => relevant(r.productGroupId))
-    .map(r => ({ date: parseDate(r.administeredOn), productGroupId: r.productGroupId }));
-
-  let changed = true;
-  let guard = 0;
-  while (changed && guard < 24) {
-    changed = false;
-    guard++;
-    const planned: EventLike[] = rawVisits
-      .filter(v => relevant(v.productGroupId))
-      .map(v => ({ date: v.date, productGroupId: v.productGroupId, ref: v }));
-    const events = [...recorded, ...planned];
-
-    for (let i = 0; i < events.length; i++) {
-      for (let j = i + 1; j < events.length; j++) {
-        const A = events[i];
-        const B = events[j];
-        const con = constrainedPair(constraints, A.productGroupId, B.productGroupId, isLive);
-        if (!con) continue;
-
-        const [early, late] =
-          A.date.getTime() <= B.date.getTime() ? [A, B] : [B, A];
-        const gapDays = Math.round(
-          (late.date.getTime() - early.date.getTime()) / 86400000
-        );
-        const conflict = con.sameDayAllowed
-          ? gapDays > 0 && gapDays < con.minGapDays
-          : gapDays < con.minGapDays;
-        if (!conflict) continue;
-
-        let mover: EventLike | null = null;
-        let other: EventLike | null = null;
-        const designated = con.move;
-
-        if (designated) {
-          const dIsEarly = early.productGroupId === designated;
-          const dIsLate = late.productGroupId === designated;
-          if (dIsEarly || dIsLate) {
-            const dEvent = dIsEarly ? early : late;
-            const oEvent = dIsEarly ? late : early;
-            if (dEvent.ref) { mover = dEvent; other = oEvent; }
-            else if (oEvent.ref) { mover = oEvent; other = dEvent; }
-          }
-        }
-        if (!mover) {
-          if (late.ref) { mover = late; other = early; }
-          else if (early.ref) { mover = early; other = late; }
-        }
-        if (!mover || !mover.ref || !other) continue;
-
-        const newDate = addDurationToDate(other.date, { days: con.minGapDays });
-        if (newDate.getTime() !== mover.ref.date.getTime()) {
-          const tag = con.bothLive ? "LIVE_SPACING_SHIFT" : "SPACING_SHIFT";
-          warnings.push(
-            `${tag}: ${mover.productGroupId} moved from ${formatDate(mover.ref.date)} to ${formatDate(newDate)} (${con.id}: >= ${con.minGapDays} days apart).`
-          );
-          mover.ref.date = newDate;
-          changed = true;
-        }
-      }
-    }
-  }
-  if (changed) {
-    warnings.push(
-      "SPACING_NOT_CONVERGED: spacing rules still moving visits after 24 passes; check the plan manually."
-    );
-  }
-  return warnings;
 }
 
 // ---------------------------------------------------------------------------

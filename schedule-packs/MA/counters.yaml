@@ -65,22 +65,6 @@ counters:
     counts_product_groups:
       - ROTAVIRUS
 
-  - id: MEASLES_DOSES
-    label_fr: Doses valides Rougeole
-    counts_product_groups:
-      - RR
-      - RRO
-      - VAR
-    only_valid_doses: true
-    confidence: needs_validation
-
-  - id: RUBELLA_DOSES
-    label_fr: Doses valides Rubéole
-    counts_product_groups:
-      - RR
-      - RRO
-    only_valid_doses: true
-
   - id: BCG_DOSES
     label_fr: Doses BCG
     counts_product_groups:
@@ -92,6 +76,7 @@ counters:
     counts_product_groups:
       - RR
       - RRO
+      - VAR
     only_valid_doses: true
 
   - id: VITD_DOSES

@@ -103,11 +103,13 @@ export function validateCounterDoses(
     const warnings: string[] = [];
 
     const previousRecord = countedRecords[i - 1];
-    if (
+    // A same-day duplicate of the same product is a data error, not a dose.
+    const isDuplicateSameDay = Boolean(
       previousRecord &&
       previousRecord.productGroupId === record.productGroupId &&
       previousRecord.administeredOn === record.administeredOn
-    ) {
+    );
+    if (isDuplicateSameDay) {
       reasons.push("DUPLICATE_SAME_DAY");
     }
 
@@ -159,11 +161,12 @@ export function validateCounterDoses(
     }
 
     const isOverridden = record.overridden === true;
-    if (isOverridden && reasons.length > 0) {
+    if (isOverridden && reasons.length > 0 && !isDuplicateSameDay) {
       reasons.push("OVERRIDDEN_BY_HEALTHCARE_PROFESSIONAL");
     }
-
-    const valid = reasons.length === 0 || isOverridden;
+    // An override can waive clinical timing rules, but never a same-day
+    // duplicate: two identical records on one day is a data error, not a dose.
+    const valid = !isDuplicateSameDay && (reasons.length === 0 || isOverridden);
 
     if (valid && doseNumber > context.requiredValidDoses) {
       const seq = doseNumber - context.requiredValidDoses;
@@ -232,4 +235,4 @@ export function validateCounterDoses(
   }
 
   return { counterId, doses, validDoseCount };
-}
+}

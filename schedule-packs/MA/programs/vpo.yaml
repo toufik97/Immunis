@@ -187,3 +187,11 @@ review_flags:
       now follow dose count at any age (adult OPV schemas not
       separately reviewed).
     status: clinician_confirmed
+  - id: VPO-REVIEW-004
+    topic: Dose 5 / booster 2 interval has no branch below 24 months
+    question: >
+      Intentional (G14 routine-window exemption), same mechanism as DTP.
+      When dose 4 is given before 24 months, no extra interval is enforced
+      beyond the min_age floor. Locked by tests; do not add a <24m branch
+      without updating them.
+    status: policy_decision

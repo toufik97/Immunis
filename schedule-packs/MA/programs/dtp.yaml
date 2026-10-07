@@ -330,4 +330,14 @@ dose_caps:
     max_doses: 6
     before_age:
       months: 84
-    on_exceed: warn_and_stop_planning
+
+review_flags:
+  - id: DTP-REVIEW-001
+    topic: Dose 5 / booster 2 interval has no branch below 24 months
+    question: >
+      Intentional (G14 routine-window exemption). When booster 1 is given
+      before 24 months (the routine 18-month window), no extra interval is
+      enforced beyond the min_age floor. The 4-year / 1-year branches apply
+      only to a late (catch-up) booster 1. Locked by tests B13, B17 and G14;
+      do not add a <24m branch without updating them.
+    status: policy_decision
