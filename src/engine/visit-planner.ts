@@ -846,4 +846,4 @@ function boosterIntervalDate(
   const interval = resolveDuration(raw, ageInMonthsAt(birthDate, lastDate));
   if (!interval) return null;
   return addDurationToDate(lastDate, interval);
-}
+}

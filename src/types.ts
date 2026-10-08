@@ -112,3 +112,28 @@ export interface AvailabilityInput {
   policy?: "TRANSITION" | "CONTINUITY_FIRST" | "STOCK_DRIVEN";
   products?: string[];
 }
+
+export type WarningSeverity = "info" | "soft" | "blocking";
+
+export interface WarningContext {
+  programId?: string;
+  counterId?: string;
+  productGroupId?: string;
+  doseNumber?: number;
+  administeredOn?: string;
+  date?: string;
+}
+
+export interface EngineWarning {
+  /** stable machine code, e.g. "INVALID_AGE_TOO_EARLY" (no dose number in the code) */
+  code: string;
+  /** how the UI must treat it */
+  severity: WarningSeverity;
+  /** true = a healthcare pro may override with justification (audit); false = hard stop */
+  overridable: boolean;
+  context?: WarningContext;
+  /** values for i18n templates, e.g. { ageMonths: 14, targetMonths: 18 } */
+  params?: Record<string, string | number>;
+  /** English fallback; the French catalogue is a UI/i18n concern */
+  message_en: string;
+}
