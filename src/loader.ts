@@ -75,6 +75,7 @@ export function loadSchedulePack(
     warnings: []
   };
 
+  checkPackVersion(country, catalog);
   const { errors, warnings } = validatePack(pack);
   if (errors.length > 0) {
     throw new Error(
@@ -83,4 +84,22 @@ export function loadSchedulePack(
   }
   pack.warnings = warnings;
   return pack;
+}
+
+/**
+ * Forward-compat gate: engine understands MA-PNI 0.x packs.
+ * Major bump (1.x) throws instead of half-planning; minor additions pass
+ * through via `.passthrough()` schemas. Unknown fields are ignored by old
+ * code until explicitly supported.
+ */
+function checkPackVersion(country: string, catalog: Catalog): void {
+  const meta = (catalog as { meta?: { pack_id?: string; version?: string } }).meta;
+  const version = meta?.version;
+  if (!version) return;
+  const major = version.split(".")[0];
+  if (major !== "0") {
+    throw new Error(
+      `Schedule pack ${country} version ${version} is not supported by this engine (supports 0.x). Refusing to plan.`
+    );
+  }
 }

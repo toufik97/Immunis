@@ -1,5 +1,6 @@
 import type { SchedulePack } from "../loader";
 import type { Patient, ImmunizationRecord } from "../types";
+import type { DoseCap, DoseValidityRule, Interval, PackDuration } from "../schema";
 import {
   parseDate,
   ageInMonthsAt,
@@ -26,11 +27,11 @@ export interface ValidationResult {
 }
 
 export interface ValidityContext {
-  rules: any[];
+  rules: DoseValidityRule[];
   requiredValidDoses: number;
-  boosterTargets: Record<number, { minAge?: any; interval?: any }>;
-  caps: any[];
-  doseZero: { productGroups: string[]; maxAge: any } | null;
+  boosterTargets: Record<number, { minAge?: PackDuration; interval?: Interval }>;
+  caps: DoseCap[];
+  doseZero: { productGroups: string[]; maxAge: PackDuration } | null;
 }
 
 export function validateCounterDoses(
@@ -41,8 +42,8 @@ export function validateCounterDoses(
   context: ValidityContext
 ): ValidationResult {
   const birthDate = parseDate(patient.birthDate);
-  const counters: any[] = (pack.counters as any).counters ?? [];
-  const counter = counters.find((c: any) => c.id === counterId);
+  const counters = pack.counters.counters ?? [];
+  const counter = counters.find((c) => c.id === counterId);
   if (!counter) {
     return { counterId, doses: [], validDoseCount: 0 };
   }
@@ -92,7 +93,6 @@ export function validateCounterDoses(
 
   let validDoseCount = 0;
   let lastValidDoseDate: Date | null = null;
-  let lastValidDoseAgeMonths: number | null = null;
 
   for (let i = 0; i < countedRecords.length; i++) {
     const record = countedRecords[i];
@@ -113,12 +113,12 @@ export function validateCounterDoses(
       reasons.push("DUPLICATE_SAME_DAY");
     }
 
-    const validityRule = (() => {
+    const validityRule: DoseValidityRule | undefined = (() => {
       const base = context.rules?.find(
-        (rule: any) => rule.dose === doseNumber && !rule.product_group
+        (rule) => rule.dose === doseNumber && !rule.product_group
       );
       const overlay = context.rules?.find(
-        (rule: any) =>
+        (rule) =>
           rule.dose === doseNumber &&
           rule.product_group === record.productGroupId
       );
@@ -126,12 +126,9 @@ export function validateCounterDoses(
       if (!overlay) return base;
       // Overlay ADDS product-specific targets (target_min_age, dose_amount),
       // never SHADOWS base timing. Base min/max age and intervals always win.
-      const merged: any = { ...base };
-      for (const [k, v] of Object.entries(overlay)) {
-        if (k === "dose" || k === "product_group") continue;
-        if (k === "min_age" || k === "max_age" || k === "min_interval_from_previous") continue;
-        merged[k] = v;
-      }
+      const merged: DoseValidityRule = { ...base };
+      if (overlay.target_min_age) merged.target_min_age = overlay.target_min_age;
+      if (overlay.dose_amount) merged.dose_amount = overlay.dose_amount;
       return merged;
     })();
 
@@ -231,7 +228,6 @@ export function validateCounterDoses(
     if (valid) {
       validDoseCount++;
       lastValidDoseDate = doseDate;
-      lastValidDoseAgeMonths = doseAgeMonths;
     }
 
     doses.push({

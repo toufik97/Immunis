@@ -9,11 +9,15 @@ import type {
   BirthDosePlan
 } from "../types";
 import type { DoseValidationMap } from "./dose-counter";
+import type {
+  BoosterConfig,
+  EligibilityRule,
+  ProductGroup
+} from "../schema";
 import {
   parseDate,
   formatDate,
   durationToMonths,
-  ageInMonthsAt,
   ageThresholdDate,
   isAgeAtLeast,
   isAgeBefore
@@ -29,25 +33,7 @@ export function selectProducts(
   const reasoning: string[] = [];
   const warnings: string[] = [];
 
-  const productSelection: any =
-    (pack.productSelection as any)?.product_selection ?? {};
-
-  const selectionConfig: any = productSelection.selection ?? {};
-  const eligibilityRules: any[] = productSelection.eligibility ?? [];
-  const ranking: string[] = productSelection.product_ranking ?? [];
-  
-  const preferences: any[] = productSelection.preferences ?? [];
-  
-  const coverageReward = Number(selectionConfig.coverage_reward ?? 100);
-  const unneededPenalty = Number(selectionConfig.unneeded_program_penalty ?? 200);
-
   const birthDate = parseDate(patient.birthDate);
-
-  const productGroups: any[] = (pack.catalog as any).product_groups ?? [];
-  
-  const plannableGroups = productGroups.filter(
-    (g: any) => (g?.clinical?.availability ?? "current") !== "legacy"
-  );
   const primaryNeeds = needs.filter(
     need =>
       need.status === "NEEDS_PRIMARY" &&
@@ -74,7 +60,7 @@ export function selectProducts(
   const birthDosePlans: BirthDosePlan[] = [];
 
   for (const need of primaryNeeds) {
-    const program: any = (pack.programs as any)[need.programId];
+    const program: any = pack.programs[need.programId];
     const birthDose = program?.primary_series?.birth_dose;
     if (!birthDose) continue;
     if (need.validDosesReceived !== 0) continue;
@@ -151,7 +137,7 @@ export function selectProducts(
       continue;
     }
 
-    const program: any = (pack.programs as any)[need.programId];
+    const program: any = pack.programs[need.programId];
 
     if (!program) {
       warnings.push(`Program not found for booster need: ${need.programId}`);
@@ -214,7 +200,9 @@ export function selectProducts(
     birthDosePlans,
     reasoning,
     warnings,
-    strategy: selectionConfig.mode ?? "generic_program_coverage"
+    strategy:
+      (pack.productSelection?.product_selection as { selection?: { mode?: string } })
+        ?.selection?.mode ?? "generic_program_coverage"
   };
 }
 
@@ -223,11 +211,11 @@ export interface PickContext {
   needs: AntigenNeed[];
   needsById: Record<string, AntigenNeed>;
   birthDate: Date;
-  productGroups: any[];
-  plannableGroups: any[];
-  eligibilityRules: any[];
+  productGroups: ProductGroup[];
+  plannableGroups: ProductGroup[];
+  eligibilityRules: EligibilityRule[];
   ranking: string[];
-  preferences: any[];
+  preferences: Array<{ when?: { program_needed?: string }; then?: { prefer_product?: string; bonus?: number } }>;
   coverageReward: number;
   unneededPenalty: number;
 }
@@ -237,10 +225,9 @@ export function buildPickContext(
   needs: AntigenNeed[],
   birthDate: Date
 ): PickContext {
-  const productSelection: any =
-    (pack.productSelection as any)?.product_selection ?? {};
-  const selectionConfig: any = productSelection.selection ?? {};
-  const productGroups: any[] = (pack.catalog as any).product_groups ?? [];
+  const productSelection = pack.productSelection?.product_selection ?? {};
+  const selectionConfig = (productSelection as { selection?: { coverage_reward?: number; unneeded_program_penalty?: number } }).selection ?? {};
+  const productGroups = pack.catalog.product_groups ?? [];
   const needsById: Record<string, AntigenNeed> = {};
   for (const n of needs) needsById[n.programId] = n;
   return {
@@ -250,11 +237,11 @@ export function buildPickContext(
     birthDate,
     productGroups,
     plannableGroups: productGroups.filter(
-      (g: any) => (g?.clinical?.availability ?? "current") !== "legacy"
+      (g) => (g?.clinical?.availability ?? "current") !== "legacy"
     ),
-    eligibilityRules: productSelection.eligibility ?? [],
-    ranking: productSelection.product_ranking ?? [],
-    preferences: productSelection.preferences ?? [],
+    eligibilityRules: (productSelection as { eligibility?: EligibilityRule[] }).eligibility ?? [],
+    ranking: (productSelection as { product_ranking?: string[] }).product_ranking ?? [],
+    preferences: (productSelection as { preferences?: PickContext["preferences"] }).preferences ?? [],
     coverageReward: Number(selectionConfig.coverage_reward ?? 100),
     unneededPenalty: Number(selectionConfig.unneeded_program_penalty ?? 200)
   };
@@ -331,7 +318,7 @@ export function pickProductsForPrograms(
       const preferredOf = (needId: string): string | null => {
         const n = needsById[needId];
         if (n?.targetProduct) return n.targetProduct;
-        const prog: any = (pack.programs as any)[needId];
+        const prog: any = pack.programs[needId];
         return prog?.primary_series?.preferred_product ?? null;
       };
       const prefBonus = coveredNeeded.some(
@@ -459,7 +446,7 @@ export function isProductEligible(
   productGroupId: string,
   birthDate: Date,
   date: Date,
-  eligibilityRules: any[]
+  eligibilityRules: EligibilityRule[]
 ): boolean {
   const rule = eligibilityRules.find(
     eligibility => eligibility.product_group === productGroupId
@@ -489,7 +476,7 @@ export function isProductEligible(
   return true;
 }
 
-export function productCoversProgram(product: any, need: AntigenNeed): boolean {
+export function productCoversProgram(product: ProductGroup, need: AntigenNeed): boolean {
   const satisfies: string[] = Array.isArray(product.satisfies_antigens)
     ? product.satisfies_antigens
     : [];
@@ -501,7 +488,7 @@ export function productCoversProgram(product: any, need: AntigenNeed): boolean {
 function preferenceBonus(
   productId: string,
   neededNow: AntigenNeed[],
-  preferences: any[]
+  preferences: PickContext["preferences"]
 ): number {
   let bonus = 0;
 
@@ -527,7 +514,7 @@ function preferenceBonus(
 }
 
 export function resolveBoosterProduct(
-  config: any,
+  config: BoosterConfig,
   ageMonthsAtDose: number
 ): string | null {
   const pg = config?.product_group;
@@ -561,7 +548,7 @@ export function resolveBoosterProduct(
 
 /** Calendar-exact variant: matches age branches with real dates, no float drift. */
 export function resolveBoosterProductForDate(
-  config: any,
+  config: BoosterConfig,
   birthDate: Date,
   doseDate: Date
 ): string | null {
@@ -578,4 +565,4 @@ export function resolveBoosterProductForDate(
     }
   }
   return null;
-}
+}

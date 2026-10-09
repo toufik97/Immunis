@@ -23,7 +23,7 @@ export function liveFlags(pack: SchedulePack): Record<string, boolean> {
 }
 
 export function getSpacingConstraints(pack: SchedulePack): SpacingConstraint[] {
-  const rules = (pack.spacing as any)?.spacing_rules ?? [];
+  const rules = pack.spacing?.spacing_rules ?? [];
   if (!Array.isArray(rules)) return [];
   const out: SpacingConstraint[] = [];
   for (const r of rules) {

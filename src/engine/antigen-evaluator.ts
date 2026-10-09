@@ -90,7 +90,7 @@ export function evaluateProgram(
   const policy = availability?.policy ?? "TRANSITION";
   const stockList = availability?.products;
   const policiesCfg: any[] =
-    (pack.productSelection as any)?.product_selection?.availability_policies ?? [];
+    pack.productSelection?.product_selection?.availability_policies ?? [];
   const policyCfg = policiesCfg.find((p: any) => p.id === policy) ?? policiesCfg[0];
   const reserved: any[] = policyCfg?.reserved ?? [];
   const isAvailable = (pid: string): boolean => {
@@ -272,4 +272,4 @@ function matchesRule(rule: any, env: MatchEnv): boolean {
   }
 
   return true;
-}
+}

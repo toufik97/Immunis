@@ -142,12 +142,12 @@ function applyDoseCaps(
   void evaluationDate;
   const birthDate = parseDate(patient.birthDate);
   return needs.map((need) => {
-    const program: any = (pack.programs as any)[need.programId];
-    const caps: any[] = program?.dose_caps ?? [];
+    const program = pack.programs[need.programId];
+    const caps = program?.dose_caps ?? [];
     let out: AntigenNeed = need;
     for (const cap of caps) {
       const validation = validations[cap.counter];
-      const dosesBeforeCapAge = (validation?.doses ?? []).filter((d: any) => {
+      const dosesBeforeCapAge = (validation?.doses ?? []).filter((d) => {
         if (!d.valid) return false;
         return isAgeBefore(birthDate, parseDate(d.administeredOn), cap.before_age);
       }).length;
@@ -175,7 +175,7 @@ function buildProgramLastDates(
   validations: DoseValidationMap
 ): Record<string, string | null> {
   const result: Record<string, string | null> = {};
-  for (const program of Object.values(pack.programs) as any[]) {
+  for (const program of Object.values(pack.programs)) {
     const programId = program.program?.id;
     const counterId = program.program?.counter;
     if (!programId || !counterId) continue;

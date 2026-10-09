@@ -1,5 +1,6 @@
 import type { SchedulePack } from "../loader";
 import type { Patient, ImmunizationRecord, DoseCounts } from "../types";
+import type { DoseCap, DoseValidityRule, Interval, PackDuration, Program } from "../schema";
 import {
   validateCounterDoses,
   type ValidationResult,
@@ -18,12 +19,12 @@ export function countDoses(
   const counts: DoseCounts = {};
   const validations: DoseValidationMap = {};
 
-  const counters: any[] = (pack.counters as any).counters ?? [];
-  const allPrograms: any[] = Object.values(pack.programs) as any[];
+  const counters = pack.counters.counters ?? [];
+  const allPrograms: Program[] = Object.values(pack.programs);
 
   for (const counter of counters) {
     const owner = allPrograms.find(
-      (p: any) => p.program?.counter === counter.id
+      (p) => p.program?.counter === counter.id
     );
 
     const context: ValidityContext = owner
@@ -51,13 +52,13 @@ export function countDoses(
   return { counts, validations };
 }
 
-function collectCaps(allPrograms: any[], counterId: string): any[] {
+function collectCaps(allPrograms: Program[], counterId: string): DoseCap[] {
   const seen = new Set<string>();
 
   return allPrograms
-    .flatMap((p: any) => p?.dose_caps ?? [])
-    .filter((c: any) => c.counter === counterId)
-    .filter((c: any) => {
+    .flatMap((p) => p?.dose_caps ?? [])
+    .filter((c) => c.counter === counterId)
+    .filter((c) => {
       const key = JSON.stringify(c);
       if (seen.has(key)) return false;
       seen.add(key);
@@ -66,27 +67,29 @@ function collectCaps(allPrograms: any[], counterId: string): any[] {
 }
 
 function buildValidityContext(
-  program: any,
-  allPrograms: any[],
+  program: Program,
+  allPrograms: Program[],
   counterId: string
 ): ValidityContext {
   const primary = program?.primary_series ?? {};
-  const rules: any[] = primary.dose_validity ?? [];
+  const rules: DoseValidityRule[] = primary.dose_validity ?? [];
   const requiredValidDoses: number = primary.required_valid_doses ?? 0;
 
-  const policies: any[] = program?.booster_policies ?? [];
-  const policy =
-    policies.find((p: any) => p.id === primary.booster_policy) ?? policies[0];
+  const policies = program?.booster_policies ?? [];
+  const policy: Record<string, unknown> | undefined =
+    (policies.find((p) => (p as { id?: string }).id === primary.booster_policy) ?? policies[0]) as
+      | Record<string, unknown>
+      | undefined;
 
-  const boosterTargets: Record<number, { minAge?: any; interval?: any }> = {};
+  const boosterTargets: Record<number, { minAge?: PackDuration; interval?: Interval }> = {};
 
   if (policy) {
     for (let seq = 1; ; seq++) {
-      const config = policy[`booster_${seq}`];
+      const config = (policy as Record<string, any>)[`booster_${seq}`];
       if (!config) break;
 
       // Support booster_N specific intervals; fall back to booster_1 pattern.
-      const interval =
+      const interval: Interval | undefined =
         seq === 1
           ? config.min_interval_after_primary_completion
           : (config[`min_interval_after_booster_${seq - 1}`] ??

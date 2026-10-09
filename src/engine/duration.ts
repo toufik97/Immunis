@@ -5,6 +5,7 @@ import {
   addYears,
   differenceInMonths
 } from "date-fns";
+import type { Interval, PackDuration } from "../schema";
 
 export interface Duration {
   days?: number;
@@ -19,7 +20,10 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export function isValidDateString(s: string): boolean {
   if (!DATE_RE.test(s)) return false;
-  const [y, m, d] = s.split("-").map(Number);
+  const parts = s.split("-").map(Number);
+  const y = parts[0]!;
+  const m = parts[1]!;
+  const d = parts[2]!;
   if (m < 1 || m > 12 || d < 1 || d > 31) return false;
   const dt = new Date(`${s}T00:00:00`);
   return (
@@ -157,15 +161,15 @@ export function isAgeBefore(
 }
 
 export function resolveDuration(
-  rule: any,
+  rule: Interval | PackDuration | undefined | null,
   contextAgeMonths: number
-): Duration | null {
+): PackDuration | null {
   if (!rule) {
     return null;
   }
 
-  if (!rule.conditional) {
-    return rule as Duration;
+  if (!("conditional" in rule)) {
+    return rule as PackDuration;
   }
 
   for (const condition of rule.conditional) {
@@ -193,7 +197,7 @@ export function resolveDuration(
     }
 
     if (matches) {
-      return condition.interval as Duration;
+      return condition.interval as PackDuration;
     }
   }
 
@@ -203,20 +207,20 @@ export function resolveDuration(
 /** True when a conditional interval has branches but none matches this age.
  * Callers must fail closed (invalid dose / needs review), never treat as
  * "no wait needed". */
-export function isConditionalUnmatched(rule: any, contextAgeMonths: number): boolean {
-  if (!rule?.conditional) return false;
+export function isConditionalUnmatched(rule: Interval | undefined | null, contextAgeMonths: number): boolean {
+  if (!rule || !("conditional" in rule)) return false;
   return resolveDuration(rule, contextAgeMonths) === null;
 }
 
 /** Calendar-exact branch match: avoids float-month drift for week-based rules.
  * Uses birthDate + reference date instead of approximate months. */
 export function resolveDurationForDate(
-  rule: any,
+  rule: Interval | PackDuration | undefined | null,
   birthDate: Date,
   referenceDate: Date
-): Duration | null {
+): PackDuration | null {
   if (!rule) return null;
-  if (!rule.conditional) return rule as Duration;
+  if (!("conditional" in rule)) return rule as PackDuration;
   for (const condition of rule.conditional) {
     const ageCondition = condition?.when?.age_at_previous_dose;
     if (!ageCondition) continue;
@@ -227,16 +231,16 @@ export function resolveDurationForDate(
     if (ageCondition.to_before) {
       if (!isAgeBefore(birthDate, referenceDate, ageCondition.to_before)) matches = false;
     }
-    if (matches) return condition.interval as Duration;
+    if (matches) return condition.interval as PackDuration;
   }
   return null;
 }
 
 export function isConditionalUnmatchedForDate(
-  rule: any,
+  rule: Interval | PackDuration | undefined | null,
   birthDate: Date,
   referenceDate: Date
 ): boolean {
-  if (!rule?.conditional) return false;
+  if (!rule || !("conditional" in rule)) return false;
   return resolveDurationForDate(rule, birthDate, referenceDate) === null;
 }

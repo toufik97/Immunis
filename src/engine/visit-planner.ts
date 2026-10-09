@@ -8,6 +8,7 @@ import type {
   PlannedDose,
   ImmunizationRecord
 } from "../types";
+import type { DoseValidityRule } from "../schema";
 import {
   parseDate,
   formatDate,
@@ -52,24 +53,21 @@ interface RawVisit {
 // Merge the generic dose rule (base) with the product-qualified rule (overlay).
 // The overlay ADDS product-specific targets, never SHADOWS base intervals.
 function findDoseRule(
-  doseValidity: any[],
+  doseValidity: DoseValidityRule[],
   doseNumber: number,
   productGroupId: string
-): any {
+): DoseValidityRule | null {
   const base = doseValidity.find(
-    (r: any) => r.dose === doseNumber && !r.product_group
+    (r) => r.dose === doseNumber && !r.product_group
   );
   const overlay = doseValidity.find(
-    (r: any) => r.dose === doseNumber && r.product_group === productGroupId
+    (r) => r.dose === doseNumber && r.product_group === productGroupId
   );
   if (!base) return overlay ?? null;
   if (!overlay) return base;
-  const merged: any = { ...base };
-  for (const [k, v] of Object.entries(overlay)) {
-    if (k === "dose" || k === "product_group") continue;
-    if (k === "min_age" || k === "max_age" || k === "min_interval_from_previous") continue;
-    merged[k] = v;
-  }
+  const merged: DoseValidityRule = { ...base };
+  if (overlay.target_min_age) merged.target_min_age = overlay.target_min_age;
+  if (overlay.dose_amount) merged.dose_amount = overlay.dose_amount;
   return merged;
 }
 
