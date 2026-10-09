@@ -18,3 +18,7 @@ docs/morocco/*
 !docs/morocco/draft/
 !docs/morocco/draft/*
 docs/morocco/draft/bug.md
+
+# Local agent skills (untracked)
+.agents/
+skills-lock.json
