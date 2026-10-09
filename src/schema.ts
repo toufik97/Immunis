@@ -340,7 +340,10 @@ export type DoseValidityRule = z.infer<typeof DoseValidityRuleSchema>;
 export type PrimarySeries = z.infer<typeof PrimarySeriesSchema>;
 export type BoosterConfig = z.infer<typeof BoosterConfigSchema>;
 export type BoosterPolicy = z.infer<typeof BoosterPolicySchema>;
+/** Booster policies carry booster_1..N entries; zod keeps them via passthrough. */
+export type LooseBoosterPolicy = BoosterPolicy & Record<string, BoosterConfig | undefined>;
 export type DoseCap = z.infer<typeof DoseCapSchema>;
+export type CatchupRule = z.infer<typeof CatchupRuleSchema>;
 export type EligibilityRule = z.infer<typeof EligibilityRuleSchema>;
 export type SpacingRule = z.infer<typeof SpacingRuleSchema>;
 export type ConditionalInterval = z.infer<typeof ConditionalIntervalSchema>;

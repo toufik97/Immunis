@@ -15,12 +15,12 @@ export function validatePack(pack: SchedulePack): PackValidation {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  const catalog: any = pack.catalog;
-  const counters: any[] = (pack.counters as any).counters ?? [];
-  const productIds = new Set<string>((catalog.product_groups ?? []).map((g: any) => g.id));
-  const antigenIds = new Set<string>((catalog.antigens ?? []).map((a: any) => a.id));
-  const counterIds = new Set<string>(counters.map((c: any) => c.id));
-  const programs = Object.values(pack.programs) as any[];
+  const catalog = pack.catalog;
+  const counters = pack.counters.counters ?? [];
+  const productIds = new Set<string>((catalog.product_groups ?? []).map((g) => g.id));
+  const antigenIds = new Set<string>((catalog.antigens ?? []).map((a) => a.id));
+  const counterIds = new Set<string>(counters.map((c) => c.id));
+  const programs = Object.values(pack.programs);
 
   const needProduct = (id: unknown, where: string) => {
     if (typeof id === "string" && !productIds.has(id)) {
@@ -89,7 +89,7 @@ export function validatePack(pack: SchedulePack): PackValidation {
       }
     }
 
-    const policies: any[] = program.booster_policies ?? [];
+    const policies = program.booster_policies ?? [];
     const policyIds = new Set<string>(policies.map(p => p.id));
     const needPolicy = (id: unknown, where: string) => {
       if (typeof id === "string" && !policyIds.has(id)) {
@@ -153,13 +153,13 @@ export function validatePack(pack: SchedulePack): PackValidation {
   }
 
   // --- product selection and spacing
-  const ps: any = (pack.productSelection as any)?.product_selection ?? {};
-  for (const e of ps.eligibility ?? []) needProduct(e.product_group, "product-selection eligibility");
-  for (const id of ps.product_ranking ?? []) needProduct(id, "product-selection product_ranking");
-  for (const pol of ps.availability_policies ?? []) {
+  const ps = pack.productSelection?.product_selection ?? {};
+  for (const e of (ps as { eligibility?: Array<{ product_group?: string }> }).eligibility ?? []) needProduct(e.product_group, "product-selection eligibility");
+  for (const id of (ps as { product_ranking?: string[] }).product_ranking ?? []) needProduct(id, "product-selection product_ranking");
+  for (const pol of (ps as { availability_policies?: Array<{ id?: string; reserved?: Array<{ product_group?: string }> }> }).availability_policies ?? []) {
     for (const r of pol.reserved ?? []) needProduct(r.product_group, `availability policy ${pol.id}`);
   }
-  for (const r of (pack.spacing as any)?.spacing_rules ?? []) {
+  for (const r of pack.spacing?.spacing_rules ?? []) {
     for (const p of r.applies_when?.pairs ?? []) {
       needProduct(p.product_a, `spacing rule ${r.id}`);
       needProduct(p.product_b, `spacing rule ${r.id}`);

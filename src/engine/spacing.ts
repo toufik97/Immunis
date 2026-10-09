@@ -18,7 +18,7 @@ export interface SpacingConstraint {
 export function liveFlags(pack: SchedulePack): Record<string, boolean> {
   const productGroups = pack.catalog.product_groups ?? [];
   const isLive: Record<string, boolean> = {};
-  for (const g of productGroups) isLive[g.id] = (g as any)?.clinical?.live === true;
+  for (const g of productGroups) isLive[g.id] = g?.clinical?.live === true;
   return isLive;
 }
 
@@ -111,10 +111,17 @@ export function scheduleWithSpacing<T extends ScheduledVisit>(
   history: ImmunizationRecord[],
   pack: SchedulePack,
   chainLowerBound: (visit: T, all: T[]) => Date
-): string[] {
+): { visits: T[]; warnings: string[] } {
   const constraints = getSpacingConstraints(pack);
   const isLive = liveFlags(pack);
   const warnings: string[] = [];
+
+  // Immutable: work on clones, never mutate the caller's array.
+  const clones: T[] = visits.map((v) => ({
+    ...v,
+    date: new Date(v.date.getTime()),
+    baseDate: new Date(v.baseDate.getTime())
+  }));
 
   const relevant = (pid: string): boolean =>
     isLive[pid] === true ||
@@ -125,7 +132,7 @@ export function scheduleWithSpacing<T extends ScheduledVisit>(
     .map(r => ({ date: parseDate(r.administeredOn), productGroupId: r.productGroupId }));
 
   // Processing order: the dose due first settles first.
-  const ordered = [...visits].sort(
+  const ordered = [...clones].sort(
     (a, b) => a.baseDate.getTime() - b.baseDate.getTime() || a.order - b.order
   );
 
@@ -157,7 +164,7 @@ export function scheduleWithSpacing<T extends ScheduledVisit>(
 
     for (const v of ordered) {
       const before = v.date;
-      let date = chainLowerBound(v, visits);
+      let date = chainLowerBound(v, clones);
       if (date.getTime() < before.getTime()) date = before; // never earlier
       let spacingCon: SpacingConstraint | null = null;
 
@@ -172,7 +179,7 @@ export function scheduleWithSpacing<T extends ScheduledVisit>(
           const target = addDurationToDate(r.date, con.minGap);
           if (!pushTo || target > pushTo) { pushTo = target; pushCon = con; }
         }
-        for (const o of visits) {
+        for (const o of clones) {
           if (o === v) continue;
           const con = constrainedPair(constraints, v.productGroupId, o.productGroupId, isLive);
           if (!con || !conflicts(date, o.date, con) || !otherWins(v, o, con)) continue;
@@ -207,5 +214,5 @@ export function scheduleWithSpacing<T extends ScheduledVisit>(
       `SPACING_NOT_CONVERGED: spacing rules still moving visits after ${passes} passes; check the plan manually.`
     );
   }
-  return warnings;
+  return { visits: clones, warnings };
 }

@@ -12,12 +12,12 @@ import type { DoseValidationMap } from "./dose-counter";
 import type {
   BoosterConfig,
   EligibilityRule,
+  LooseBoosterPolicy,
   ProductGroup
 } from "../schema";
 import {
   parseDate,
   formatDate,
-  durationToMonths,
   ageThresholdDate,
   isAgeAtLeast,
   isAgeBefore
@@ -60,7 +60,7 @@ export function selectProducts(
   const birthDosePlans: BirthDosePlan[] = [];
 
   for (const need of primaryNeeds) {
-    const program: any = pack.programs[need.programId];
+    const program = pack.programs[need.programId];
     const birthDose = program?.primary_series?.birth_dose;
     if (!birthDose) continue;
     if (need.validDosesReceived !== 0) continue;
@@ -68,7 +68,7 @@ export function selectProducts(
     // A birth dose that counts as dose 0 (VPO0) is not in validDosesReceived,
     // so look for it in the validated history before planning it again.
     const alreadyGivenAsDoseZero = (validations?.[need.counterId]?.doses ?? []).some(
-      (d: any) => d.doseNumber === 0 && d.valid
+      (d) => d.doseNumber === 0 && d.valid
     );
     if (alreadyGivenAsDoseZero) continue;
 
@@ -137,14 +137,14 @@ export function selectProducts(
       continue;
     }
 
-    const program: any = pack.programs[need.programId];
+    const program = pack.programs[need.programId];
 
     if (!program) {
       warnings.push(`Program not found for booster need: ${need.programId}`);
       continue;
     }
 
-    const boosterPolicies: any[] = program.booster_policies ?? [];
+    const boosterPolicies = (program?.booster_policies ?? []) as LooseBoosterPolicy[];
 
     const boosterPolicy =
       boosterPolicies.find(
@@ -173,8 +173,9 @@ export function selectProducts(
         ? boosterConfig.product_group
         : resolveBoosterProductForDate(boosterConfig, birthDate, evaluationDate);
     if (!selectedProduct) {
+      const pg = boosterConfig.product_group;
       const fallback =
-        boosterConfig.product_group?.conditional?.[0]?.product ?? null;
+        typeof pg === "string" ? pg : pg?.conditional?.[0]?.product ?? null;
       warnings.push(
         `CONDITIONAL_BOOSTER_UNRESOLVED: no age branch matched for ${need.programId} booster ${boosterSequence} at evaluation age; using ${fallback ?? "first plannable"} (needs review).`
       );
@@ -290,7 +291,7 @@ export function pickProductsForPrograms(
       break;
     }
 
-    let bestProduct: any = null;
+    let bestProduct: ProductGroup | null = null;
     let bestCovered: AntigenNeed[] = [];
     let bestScore = -Infinity;
 
@@ -318,7 +319,7 @@ export function pickProductsForPrograms(
       const preferredOf = (needId: string): string | null => {
         const n = needsById[needId];
         if (n?.targetProduct) return n.targetProduct;
-        const prog: any = pack.programs[needId];
+        const prog = pack.programs[needId];
         return prog?.primary_series?.preferred_product ?? null;
       };
       const prefBonus = coveredNeeded.some(
@@ -371,7 +372,7 @@ export function pickProductsForPrograms(
         const b = slotProducts[j];
 
         const antigensOf = (id: string): string[] => {
-          const p = productGroups.find((x: any) => x.id === id);
+          const p = productGroups.find((x) => x.id === id);
           return Array.isArray(p?.satisfies_antigens)
             ? p.satisfies_antigens
             : [];
@@ -390,7 +391,7 @@ export function pickProductsForPrograms(
         // union (same scoring as the greedy pick), never just the first match.
         // Prevents merging PENTA+DTC into a lower-ranked product that adds
         // unneeded antigens.
-        let best: any = null;
+        let best: ProductGroup | null = null;
         let bestScore = -Infinity;
         for (const product of plannableGroups) {
           if (!isProductEligible(product.id, birthDate, atDate, eligibilityRules)) continue;
@@ -513,40 +514,7 @@ function preferenceBonus(
   return bonus;
 }
 
-export function resolveBoosterProduct(
-  config: BoosterConfig,
-  ageMonthsAtDose: number
-): string | null {
-  const pg = config?.product_group;
-
-  if (typeof pg === "string") {
-    return pg;
-  }
-
-  if (pg?.conditional) {
-    for (const branch of pg.conditional) {
-      const c = branch?.when?.age_at_dose;
-      if (!c) continue;
-
-      let matches = true;
-
-      if (c.from && ageMonthsAtDose < durationToMonths(c.from)) {
-        matches = false;
-      }
-      if (c.to_before && ageMonthsAtDose >= durationToMonths(c.to_before)) {
-        matches = false;
-      }
-
-      if (matches) {
-        return branch.product ?? null;
-      }
-    }
-  }
-
-  return null;
-}
-
-/** Calendar-exact variant: matches age branches with real dates, no float drift. */
+/** Single booster-product path: calendar-exact age-branch match, no float drift. */
 export function resolveBoosterProductForDate(
   config: BoosterConfig,
   birthDate: Date,

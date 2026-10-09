@@ -1,6 +1,6 @@
 import type { SchedulePack } from "../loader";
 import type { Patient, ImmunizationRecord, DoseCounts } from "../types";
-import type { DoseCap, DoseValidityRule, Interval, PackDuration, Program } from "../schema";
+import type { BoosterConfig, DoseCap, DoseValidityRule, Interval, PackDuration, Program } from "../schema";
 import {
   validateCounterDoses,
   type ValidationResult,
@@ -85,15 +85,16 @@ function buildValidityContext(
 
   if (policy) {
     for (let seq = 1; ; seq++) {
-      const config = (policy as Record<string, any>)[`booster_${seq}`];
+      const config = (policy as Record<string, BoosterConfig | undefined>)[`booster_${seq}`];
       if (!config) break;
 
       // Support booster_N specific intervals; fall back to booster_1 pattern.
+      const cfg = config as BoosterConfig & Record<string, Interval | undefined>;
       const interval: Interval | undefined =
         seq === 1
-          ? config.min_interval_after_primary_completion
-          : (config[`min_interval_after_booster_${seq - 1}`] ??
-            config.min_interval_after_booster_1);
+          ? cfg.min_interval_after_primary_completion
+          : (cfg[`min_interval_after_booster_${seq - 1}`] ??
+            cfg.min_interval_after_booster_1);
       boosterTargets[seq] = {
         minAge: config.min_age,
         interval

@@ -71,25 +71,34 @@ describe("scheduleWithSpacing on its own", () => {
   const noChain = (v: any) => v.baseDate;
   it("same day: the designated product waits", () => {
     const a = visit("A", "2026-01-01", 0), b = visit("B", "2026-01-01", 1);
-    scheduleWithSpacing([a, b], [], spacingPack, noChain);
-    expect([formatDate(a.date), formatDate(b.date)]).toEqual(["2026-01-01", "2026-01-16"]);
+    const out = scheduleWithSpacing([a, b], [], spacingPack, noChain).visits;
+    expect([formatDate(out[0]!.date), formatDate(out[1]!.date)]).toEqual(["2026-01-01", "2026-01-16"]);
+    // input is not mutated
+    expect(formatDate(a.date)).toBe("2026-01-01");
   });
   it("different days: the one due first keeps its date, whichever product it is", () => {
     const a = visit("A", "2026-01-05", 0), b = visit("B", "2026-01-01", 1);
-    scheduleWithSpacing([a, b], [], spacingPack, noChain);
-    expect([formatDate(a.date), formatDate(b.date)]).toEqual(["2026-01-16", "2026-01-01"]);
+    const out = scheduleWithSpacing([a, b], [], spacingPack, noChain).visits;
+    const byOrder = [...out].sort((x, y) => x.order - y.order);
+    expect([formatDate(byOrder[0]!.date), formatDate(byOrder[1]!.date)]).toEqual(["2026-01-16", "2026-01-01"]);
   });
   it("a recorded dose never moves", () => {
     const a = visit("A", "2026-01-05", 0);
-    scheduleWithSpacing([a], [{ administeredOn: "2026-01-01", productGroupId: "B" }], spacingPack, noChain);
-    expect(formatDate(a.date)).toBe("2026-01-16");
+    const out = scheduleWithSpacing([a], [{ administeredOn: "2026-01-01", productGroupId: "B" }], spacingPack, noChain).visits;
+    expect(formatDate(out[0]!.date)).toBe("2026-01-16");
   });
   it("moves later only, and a pushed visit drags its same-program successors via the chain", () => {
     const a1 = visit("A", "2026-01-01", 0), b = visit("B", "2026-01-01", 1), a2 = visit("A", "2026-01-20", 2);
-    const chain = (v: any) => (v === a2 ? addDurationToDate(a1.date, { days: 28 }) : v.baseDate);
-    scheduleWithSpacing([a1, b, a2], [], spacingPack, chain);
-    expect(formatDate(b.date)).toBe("2026-01-16");
-    expect(formatDate(a2.date)).toBe("2026-01-31"); // 28 days after a1 is 01-29, but B at 01-16 needs 15 days: 01-31
+    const chain = (v: any, all: any[]) => {
+      const self = all.find((x: any) => x.order === 2);
+      const first = all.find((x: any) => x.order === 0);
+      if (v.order === 2 && first) return addDurationToDate(first.date, { days: 28 });
+      return v.baseDate;
+    };
+    const out = scheduleWithSpacing([a1, b, a2], [], spacingPack, chain).visits;
+    const byOrder = [...out].sort((x: any, y: any) => x.order - y.order);
+    expect(formatDate(byOrder[1]!.date)).toBe("2026-01-16");
+    expect(formatDate(byOrder[2]!.date)).toBe("2026-01-31"); // 28 days after a1 is 01-29, but B at 01-16 needs 15 days: 01-31
   });
 });
 

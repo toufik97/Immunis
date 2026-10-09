@@ -8,7 +8,7 @@ import type {
   PlannedDose,
   ImmunizationRecord
 } from "../types";
-import type { DoseValidityRule } from "../schema";
+import type { BoosterConfig, DoseValidityRule, EligibilityRule, LooseBoosterPolicy, PackDuration, ProductGroup, Program } from "../schema";
 import {
   parseDate,
   formatDate,
@@ -40,7 +40,7 @@ interface RawVisit {
   order: number;
   kind: "birth" | "primary" | "booster";
   /** booster policy entry this visit comes from (kind "booster") */
-  booster?: { config: any; seq: number };
+  booster?: { config: BoosterConfig; seq: number };
   productGroupId: string;
   antigens: string[];
   role: string;
@@ -98,12 +98,12 @@ export function planVisits(
     ...scheduledLastByProgram
   };
 
-  const productSelection = pack.productSelection?.product_selection ?? {} as any;
-  const selectionConfig: any = (productSelection as any).selection ?? {};
-  const maxAlignmentDelay = selectionConfig.max_alignment_delay ?? { days: 0 };
+  const productSelection = pack.productSelection?.product_selection ?? {};
+  const selectionConfig = (productSelection as { selection?: { max_alignment_delay?: PackDuration } }).selection ?? {};
+  const maxAlignmentDelay: PackDuration = selectionConfig.max_alignment_delay ?? { days: 0 };
 
-  const productGroups = pack.catalog.product_groups ?? [];
-  const programs = pack.programs as any;
+  const productGroups: ProductGroup[] = pack.catalog.product_groups ?? [];
+  const programs: Record<string, Program> = pack.programs;
   const spacingConstraints = getSpacingConstraints(pack);
   const spacingIsLive = liveFlags(pack);
 
@@ -134,7 +134,7 @@ export function planVisits(
 
   // ---------- primary slots ----------
   const pickCtx = buildPickContext(pack, needs, birthDate);
-  const eligibilityRules: any[] = productSelection.eligibility ?? [];
+  const eligibilityRules = (productSelection as { eligibility?: import("../schema").EligibilityRule[] }).eligibility ?? [];
 
   // Earliest date for one product in one slot, the programs it can still cover
   // (Rota's age limit etc.), and the dose number it represents for each program.
@@ -145,13 +145,13 @@ export function planVisits(
   ) => {
     let earliest = evaluationDate;
     const doseNumbers: Record<string, number> = {};
-    const doseRules: Record<string, any> = {};
+    const doseRules: Record<string, DoseValidityRule | null> = {};
 
     for (const programId of programIds) {
       const need = needsById[programId];
       if (!need) continue;
-      const program: any = programs[programId];
-      const doseValidity: any[] = program?.primary_series?.dose_validity ?? [];
+      const program = programs[programId];
+      const doseValidity = program?.primary_series?.dose_validity ?? [];
       const absoluteDoseNumber =
         need.validDosesReceived +
         (birthOffsetByProgram[programId] ?? 0) +
@@ -340,14 +340,15 @@ export function planVisits(
   // ---------- boosters required by current needs ----------
   for (const booster of selection.boosterPlans) {
     const need = needsById[booster.programId];
-    const program: any = programs[booster.programId];
+    const program = programs[booster.programId];
+    if (!program) { warnings.push(`Program not found for booster: ${booster.programId}`); continue; }
     if (!program) {
       warnings.push(`Program not found for booster: ${booster.programId}`);
       continue;
     }
-    const boosterPolicies: any[] = program.booster_policies ?? [];
+    const boosterPolicies = (program.booster_policies ?? []) as LooseBoosterPolicy[];
     const boosterPolicy =
-      boosterPolicies.find((p: any) => p.id === need?.boosterPolicyId) ??
+      boosterPolicies.find((p) => (p as { id?: string }).id === need?.boosterPolicyId) ??
       boosterPolicies[0];
     const boosterConfig = boosterPolicy?.[`booster_${booster.boosterSequence}`];
     if (!boosterConfig) {
@@ -468,9 +469,12 @@ export function planVisits(
     return bound;
   };
 
-  for (const w of scheduleWithSpacing(rawVisits, history, pack, chainLowerBound)) {
+  const spaced = scheduleWithSpacing(rawVisits, history, pack, chainLowerBound);
+  for (const w of spaced.warnings) {
     warnings.push(w);
   }
+  rawVisits.length = 0;
+  rawVisits.push(...spaced.visits);
 
   // ---------- age limits, on the final dates ----------
   // Spacing and intervals can push a dose past its age limit (Rota: 24 months).
@@ -518,7 +522,7 @@ export function planVisits(
     visit.programIds.flatMap((programId: string) => {
       const doseNumber = visit.doseNumbers[programId];
       if (doseNumber === undefined) return [];
-      const product = productGroups.find((p: any) => p.id === visit.productGroupId);
+      const product = productGroups.find((p) => p.id === visit.productGroupId);
       const rule = findDoseRule(
         programs[programId]?.primary_series?.dose_validity ?? [],
         doseNumber,
@@ -599,9 +603,9 @@ export function planVisits(
 
 function unifySameDateConflicts(
   rawVisits: RawVisit[],
-  productGroups: any[],
-  programs: any,
-  productSelection: any,
+  productGroups: ProductGroup[],
+  programs: Record<string, Program>,
+  productSelection: { eligibility?: EligibilityRule[] },
   needsById: Record<string, AntigenNeed>,
   birthDate: Date,
   warnings: string[]
@@ -654,10 +658,10 @@ function unifySameDateConflicts(
     const unionPrograms = Array.from(new Set(group.flatMap(v => v.programIds)));
     const ownIds = new Set(group.map(v => v.productGroupId));
     const candidates = [
-      ...productGroups.filter((p: any) => ownIds.has(p.id)),
-      ...productGroups.filter((p: any) => !ownIds.has(p.id))
+      ...productGroups.filter((p) => ownIds.has(p.id)),
+      ...productGroups.filter((p) => !ownIds.has(p.id))
     ];
-    const candidate = candidates.find((product: any) => {
+    const candidate = candidates.find((product) => {
       if (
         !isProductEligible(
           product.id,
@@ -669,7 +673,7 @@ function unifySameDateConflicts(
         return false;
       }
       return unionPrograms.every((programId: string) => {
-        const program: any = programs[programId];
+        const program = programs[programId];
         const need = needsById[programId];
         if (!program || !need) return false;
         return productCoversProgram(product, need);
@@ -701,23 +705,23 @@ function unifySameDateConflicts(
 
 function projectFutureBoosters(
   needsById: Record<string, AntigenNeed>,
-  programs: any,
+  programs: Record<string, Program>,
   scheduledLastByProgram: Record<string, Date | null>,
   plannedPrimaryByProgram: Record<string, number>,
-  productGroups: any[],
+  productGroups: ProductGroup[],
   birthDate: Date,
   evaluationDate: Date,
   startOrder: number
 ): RawVisit[] {
   const out: RawVisit[] = [];
   for (const [programId, need] of Object.entries(needsById)) {
-    const program: any = programs[programId];
-    const policies: any[] = program?.booster_policies ?? [];
+    const program = programs[programId];
+    const policies = (program?.booster_policies ?? []) as LooseBoosterPolicy[];
     if (policies.length === 0) continue;
     // a variant rule (PCV) can say "no booster on this track"
     if (need.boosterCount === 0) continue;
     const policy =
-      policies.find((p: any) => p.id === need.boosterPolicyId) ?? policies[0];
+      policies.find((p) => (p as { id?: string }).id === need.boosterPolicyId) ?? policies[0];
     if (!policy) continue;
 
     // primaries needed before the booster: the variant's own count when it has one
@@ -798,7 +802,7 @@ function projectFutureBoosters(
 }
 
 function calculateEarliestPrimaryDate(
-  rule: any,
+  rule: DoseValidityRule | null,
   lastDate: Date | null,
   birthDate: Date,
   evaluationDate: Date
@@ -826,14 +830,14 @@ function calculateEarliestPrimaryDate(
   return earliest;
 }
 
-function getProductAntigens(productGroups: any[], productGroupId: string): string[] {
+function getProductAntigens(productGroups: ProductGroup[], productGroupId: string): string[] {
   const product = productGroups.find(p => p.id === productGroupId);
   if (!product) return [];
   return Array.isArray(product.satisfies_antigens) ? product.satisfies_antigens : [];
 }
 
 function boosterIntervalDate(
-  config: any,
+  config: BoosterConfig,
   seq: number,
   lastDate: Date,
   birthDate: Date

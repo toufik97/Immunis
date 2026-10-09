@@ -72,6 +72,8 @@ export function addDurationToDate(date: Date, duration?: Duration | null): Date 
 }
 
 export function durationToMonths(duration?: Duration | null): number {
+  // Display-only: human text and warning params. Never use for decisions;
+  // decisions use resolveDurationForDate (calendar-exact).
   if (!duration) {
     return 0;
   }
@@ -88,6 +90,8 @@ export function durationToMonths(duration?: Duration | null): number {
 }
 
 export function durationToDays(duration?: Duration | null): number {
+  // Display-only: messages and legacy estimates. Spacing and alignment use
+  // addDurationToDate (calendar-exact), never this approximation.
   if (!duration) {
     return 0;
   }
@@ -160,60 +164,10 @@ export function isAgeBefore(
   return date.getTime() < ageThresholdDate(birthDate, duration).getTime();
 }
 
-export function resolveDuration(
-  rule: Interval | PackDuration | undefined | null,
-  contextAgeMonths: number
-): PackDuration | null {
-  if (!rule) {
-    return null;
-  }
-
-  if (!("conditional" in rule)) {
-    return rule as PackDuration;
-  }
-
-  for (const condition of rule.conditional) {
-    const ageCondition = condition?.when?.age_at_previous_dose;
-
-    if (!ageCondition) {
-      continue;
-    }
-
-    // AND-logic: both bounds must hold for a branch to match
-    let matches = true;
-
-    if (ageCondition.from) {
-      const limit = durationToMonths(ageCondition.from);
-      if (contextAgeMonths < limit) {
-        matches = false;
-      }
-    }
-
-    if (ageCondition.to_before) {
-      const limit = durationToMonths(ageCondition.to_before);
-      if (contextAgeMonths >= limit) {
-        matches = false;
-      }
-    }
-
-    if (matches) {
-      return condition.interval as PackDuration;
-    }
-  }
-
-  return null;
-}
-
-/** True when a conditional interval has branches but none matches this age.
- * Callers must fail closed (invalid dose / needs review), never treat as
- * "no wait needed". */
-export function isConditionalUnmatched(rule: Interval | undefined | null, contextAgeMonths: number): boolean {
-  if (!rule || !("conditional" in rule)) return false;
-  return resolveDuration(rule, contextAgeMonths) === null;
-}
-
-/** Calendar-exact branch match: avoids float-month drift for week-based rules.
- * Uses birthDate + reference date instead of approximate months. */
+/** Single interval path: calendar-exact branch match.
+ * Uses birthDate + reference date instead of approximate float months, so
+ * week-based rules never drift by days. Gap (no branch matches) means
+ * "no constraint" by pack design (G14 routine-window exemption). */
 export function resolveDurationForDate(
   rule: Interval | PackDuration | undefined | null,
   birthDate: Date,

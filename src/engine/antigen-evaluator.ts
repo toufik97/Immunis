@@ -1,5 +1,6 @@
 import type { SchedulePack } from "../loader";
 import type { Patient, DoseCounts, AntigenNeed, AvailabilityInput } from "../types";
+import type { CatchupRule, Program } from "../schema";
 import type { DoseValidationMap } from "./dose-counter";
 import { parseDate, ageInMonthsAt, isAgeAtLeast, isAgeBefore } from "./duration";
 
@@ -27,7 +28,7 @@ export function evaluateAllPrograms(
   context?: EvaluationContext
 ): AntigenNeed[] {
   const needs: AntigenNeed[] = [];
-  for (const program of Object.values(pack.programs) as any[]) {
+  for (const program of Object.values(pack.programs)) {
     needs.push(
       evaluateProgram(pack, program, patient, doseCounts, evaluationDate, context)
     );
@@ -37,7 +38,7 @@ export function evaluateAllPrograms(
 
 export function evaluateProgram(
   pack: SchedulePack,
-  program: any,
+  program: Program,
   patient: Patient,
   doseCounts: DoseCounts,
   evaluationDate: Date,
@@ -78,7 +79,7 @@ export function evaluateProgram(
   const perProduct: Record<string, number> = {};
   if (context?.validations) {
     const doseList = (context.validations[counterId]?.doses ?? []).filter(
-      (d: any) => d.valid && d.doseNumber > 0
+      (d) => d.valid && d.doseNumber > 0
     );
     for (const d of doseList) {
       perProduct[d.productGroupId] = (perProduct[d.productGroupId] ?? 0) + 1;
@@ -89,13 +90,14 @@ export function evaluateProgram(
   const availability = context?.availability;
   const policy = availability?.policy ?? "TRANSITION";
   const stockList = availability?.products;
-  const policiesCfg: any[] =
+  const policiesCfg =
     pack.productSelection?.product_selection?.availability_policies ?? [];
-  const policyCfg = policiesCfg.find((p: any) => p.id === policy) ?? policiesCfg[0];
-  const reserved: any[] = policyCfg?.reserved ?? [];
+  const policyCfg = policiesCfg.find((p) => (p as { id?: string }).id === policy) ?? policiesCfg[0];
+  const reserved: Array<{ product_group?: string; reserve_for?: string }> =
+    (policyCfg as { reserved?: Array<{ product_group?: string; reserve_for?: string }> })?.reserved ?? [];
   const isAvailable = (pid: string): boolean => {
     if (stockList) return stockList.includes(pid);
-    const res = reserved.find((r: any) => r.product_group === pid);
+    const res = reserved.find((r) => r.product_group === pid);
     if (!res) return true;
     if (res.reserve_for === "history_starters") return (perProduct[pid] ?? 0) > 0;
     return true;
@@ -112,8 +114,8 @@ export function evaluateProgram(
     isAvailable
   };
 
-  const rules: any[] = program.catchup_rules ?? [];
-  let matchedRule: any = null;
+  const rules = program.catchup_rules ?? [];
+  let matchedRule: CatchupRule | null = null;
   for (const rule of rules) {
     if (matchesRule(rule, env)) {
       matchedRule = rule;
@@ -227,7 +229,7 @@ export function evaluateProgram(
   return need;
 }
 
-function matchesRule(rule: any, env: MatchEnv): boolean {
+function matchesRule(rule: CatchupRule, env: MatchEnv): boolean {
   const when = rule.when;
   if (!when) {
     return false;
@@ -256,9 +258,9 @@ function matchesRule(rule: any, env: MatchEnv): boolean {
 
   // NEW: per-product history counts
   if (when.product_history) {
-    for (const [pid, cond] of Object.entries(when.product_history as Record<string, any>)) {
+    for (const [pid, cond] of Object.entries(when.product_history)) {
       const n = pid === "_TOTAL" ? env.total : (env.perProduct[pid] ?? 0);
-      const c = cond as any;
+      const c = cond as { equals?: number; gte?: number; lte?: number };
       if (c.equals !== undefined && n !== Number(c.equals)) return false;
       if (c.gte !== undefined && n < Number(c.gte)) return false;
       if (c.lte !== undefined && n > Number(c.lte)) return false;
