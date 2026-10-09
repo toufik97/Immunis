@@ -5,7 +5,7 @@ import type { SchedulePack } from "../infra/packs/loader";
 import { evaluatePatient } from "../engine";
 import { parseDate } from "../engine/duration";
 import { toEngineHistory } from "../app/evaluate-child";
-import { createChild, findChildrenByName, getChild, allocateLocalId } from "../infra/repos/children";
+import { createChild, findChildrenByName, getChild, allocateLocalId, findPossibleDuplicates } from "../infra/repos/children";
 import { recordEncounter, listDosesByChild } from "../infra/repos/encounters";
 import { addLot, listLots, checkLotUsable } from "../infra/repos/stock";
 import { createAppointment, listDue, markAppointment, listNoShows } from "../infra/repos/appointments";
@@ -21,6 +21,8 @@ const ChildInput = z.object({
   parentNames: z.string().optional(),
   centreId: z.string().optional(),
   firstVisitYear: z.string().regex(/^\d{4}$/).optional(),
+  /** Set when the nurse confirms registration despite a duplicate warning. */
+  force: z.boolean().optional(),
 });
 
 const EncounterInput = z.object({
@@ -117,6 +119,13 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
   app.post("/api/children", async (req, reply) => {
     try {
       const input = ChildInput.parse(req.body);
+      if (!input.force) {
+        const duplicates = findPossibleDuplicates(db, input.familyName, input.givenName, input.birthDate);
+        if (duplicates.length > 0) {
+          reply.code(409).send({ error: "Possible duplicate: a child with this name and birth date exists", duplicates });
+          return;
+        }
+      }
       const child = createChild(db, input);
       if (input.centreId && input.firstVisitYear) {
         allocateLocalId(db, child.id, input.centreId, input.firstVisitYear);

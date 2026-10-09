@@ -50,8 +50,7 @@ export function createChild(db: Database.Database, input: NewChild): Child {
 }
 
 /** Case-insensitive name search (FR-1.1). */
-export function findChildrenByName(db: Database.Database, query: string): Child[] {
-  const rows = db
+export function findChildrenByName(db: Database.Database, query: string): Child[] {  const rows = db
     .prepare(
       "SELECT * FROM children WHERE family_name LIKE ? OR given_name LIKE ? ORDER BY family_name, given_name LIMIT 50"
     )
@@ -63,6 +62,25 @@ export function getChild(db: Database.Database, id: string): Child | null {
   const row = db.prepare("SELECT * FROM children WHERE id = ?").get(id) as ChildRow | undefined;
   if (!row) return null;
   return toChild(row, localIdsFor(db, id));
+}
+
+/**
+ * Possible duplicates for the registration guard: same names
+ * (case-insensitive) and same birthDate. Homonyms exist, so callers
+ * warn rather than block — the nurse decides.
+ */
+export function findPossibleDuplicates(
+  db: Database.Database,
+  familyName: string,
+  givenName: string,
+  birthDate: string
+): Child[] {
+  const rows = db
+    .prepare(
+      "SELECT * FROM children WHERE LOWER(family_name) = LOWER(?) AND LOWER(given_name) = LOWER(?) AND birth_date = ?"
+    )
+    .all(familyName, givenName, birthDate) as ChildRow[];
+  return rows.map((row) => toChild(row, localIdsFor(db, row.id)));
 }
 
 /**

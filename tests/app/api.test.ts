@@ -82,6 +82,30 @@ describe("api", () => {
     db.close();
   });
 
+  it("warns on duplicate registration but allows forced homonyms", async () => {
+    const db = openTestDb();
+    const app = buildApp(db, pack);
+    const body = {
+      familyName: "El Amrani",
+      givenName: "Yasmine",
+      birthDate: "2025-03-14",
+      centreId: "CS01",
+      firstVisitYear: "2026",
+    };
+    expect((await app.inject({ method: "POST", url: "/api/children", payload: body })).statusCode).toBe(201);
+    const dup = await app.inject({ method: "POST", url: "/api/children", payload: body });
+    expect(dup.statusCode).toBe(409);
+    expect((dup.json() as { duplicates: unknown[] }).duplicates).toHaveLength(1);
+    const forced = await app.inject({
+      method: "POST",
+      url: "/api/children",
+      payload: { ...body, force: true },
+    });
+    expect(forced.statusCode).toBe(201);
+    expect((forced.json() as { localIds: { value: string }[] }).localIds[0].value).toBe("2/2026");
+    db.close();
+  });
+
   it("serves pack metadata and centre-only analytics", async () => {
     const db = openTestDb();
     const app = buildApp(db, pack);

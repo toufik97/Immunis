@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import "./i18n";
 import { applyLocale, type Locale } from "./i18n";
-import { api, type Child } from "./api";
+import { api, type Child, type DuplicateChild } from "./api";
 import VisitPanel from "./components/VisitPanel";
 import { SessionPanel, NoShowPanel, StockPanel } from "./components/Panels";
 import "./styles.css";
@@ -17,6 +17,8 @@ export default function App() {
   const [results, setResults] = useState<Child[]>([]);
   const [child, setChild] = useState<Child | null>(null);
   const [reg, setReg] = useState({ familyName: "", givenName: "", birthDate: "", parentNames: "", centreId: "CS01", firstVisitYear: "2026" });
+  const [duplicates, setDuplicates] = useState<DuplicateChild[] | null>(null);
+  const [registering, setRegistering] = useState(false);
   const [err, setErr] = useState("");
 
   useEffect(() => {
@@ -34,14 +36,22 @@ export default function App() {
     }
   }
 
-  async function register(): Promise<void> {
+  async function register(force = false): Promise<void> {
     setErr("");
+    setRegistering(true);
     try {
-      const c = await api.registerChild({ ...reg });
-      setChild(c);
-      setResults([]);
+      const r = await api.registerChildDetailed({ ...reg, ...(force ? { force: true } : {}) });
+      if (r.status === "duplicate") {
+        setDuplicates(r.duplicates);
+      } else {
+        setDuplicates(null);
+        setChild(r.child);
+        setResults([]);
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRegistering(false);
     }
   }
 
@@ -123,8 +133,34 @@ export default function App() {
                 </label>
               </div>
               <div className="toolbar">
-                <button onClick={register}>{t("register.add")}</button>
+                <button onClick={() => register(false)} disabled={registering}>
+                  {t("register.add")}
+                </button>
               </div>
+              {duplicates && duplicates.length > 0 && (
+                <div className="error">
+                  <p>{t("register.duplicate")}</p>
+                  <ul>
+                    {duplicates.map((c) => (
+                      <li key={c.id}>
+                        {c.givenName} {c.familyName} · {t("child.birthDate", { date: c.birthDate })}{" "}
+                        {(c.localIds ?? []).map((l) => t("child.localId", { value: l.value })).join(" ")}{" "}
+                        <button className="secondary" onClick={() => { setChild(c); setDuplicates(null); }}>
+                          {t("child.select")}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="toolbar">
+                    <button onClick={() => register(true)} disabled={registering}>
+                      {t("register.force")}
+                    </button>
+                    <button className="secondary" onClick={() => setDuplicates(null)}>
+                      {t("common.remove")}
+                    </button>
+                  </div>
+                </div>
+              )}
             </section>
 
             {child && pack && (

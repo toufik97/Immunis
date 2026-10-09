@@ -43,6 +43,10 @@ export interface Appointment {
   kept: boolean | null;
 }
 
+export interface DuplicateChild extends Child {
+  localIds: { centreId: string; value: string }[];
+}
+
 export const api = {
   health: () => req<{ ok: boolean }>("/api/health"),
   pack: () =>
@@ -58,6 +62,20 @@ export const api = {
     req<Child[]>(`/api/children?q=${encodeURIComponent(q)}`),
   registerChild: (body: Record<string, string>) =>
     req<Child>("/api/children", { method: "POST", body: JSON.stringify(body) }),
+  /** Registration with duplicate surfacing: 409 carries possible matches. */
+  registerChildDetailed: async (
+    body: Record<string, unknown>
+  ): Promise<{ status: "created"; child: Child } | { status: "duplicate"; duplicates: DuplicateChild[] }> => {
+    const res = await fetch("/api/children", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = (await res.json()) as Child & { error?: string; duplicates?: DuplicateChild[] };
+    if (res.status === 409) return { status: "duplicate", duplicates: data.duplicates ?? [] };
+    if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+    return { status: "created", child: data };
+  },
   recordEncounter: (body: unknown) =>
     req<unknown>("/api/encounters", { method: "POST", body: JSON.stringify(body) }),
   evaluate: (body: unknown) =>

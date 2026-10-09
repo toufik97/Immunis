@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, type Child, type Dose } from "../api";
+import { api, type Child, type Dose, type Lot } from "../api";
 
 interface Props {
   child: Child;
@@ -19,10 +19,27 @@ export default function VisitPanel({ child, products, onDone }: Props) {
   const [screening, setScreening] = useState("VACCINATE");
   const [weightKg, setWeightKg] = useState("");
   const [doses, setDoses] = useState<Dose[]>([]);
+  const [lotsByProduct, setLotsByProduct] = useState<Record<string, Lot[]>>({});
   const [nextRdv, setNextRdv] = useState("");
   const [result, setResult] = useState<Awaited<ReturnType<typeof api.evaluate>> | null>(null);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+
+  // Load usable lots for every product used by a CENTRE dose row.
+  useEffect(() => {
+    const needed = [...new Set(doses.filter((d) => d.origin === "CENTRE").map((d) => d.productGroupId))].filter(
+      (p) => p && !(p in lotsByProduct)
+    );
+    if (needed.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      const entries = await Promise.all(needed.map(async (p) => [p, await api.lots(p)] as const));
+      if (!cancelled) setLotsByProduct((m) => ({ ...m, ...Object.fromEntries(entries) }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  });
 
   function addDose(): void {
     setDoses((d) => [
@@ -54,6 +71,11 @@ export default function VisitPanel({ child, products, onDone }: Props) {
   async function record(): Promise<void> {
     setErr("");
     setMsg("");
+    const missingLot = doses.some((d) => d.origin === "CENTRE" && !d.lotId);
+    if (missingLot) {
+      setErr(t("visit.lotRequired"));
+      return;
+    }
     try {
       await api.recordEncounter({
         childId: child.id,
@@ -104,11 +126,12 @@ export default function VisitPanel({ child, products, onDone }: Props) {
 
       <h3>{t("visit.history")}</h3>
       {doses.map((d, i) => (
-        <div className="row" key={i}>
+        <div key={i}>
+        <div className="row">
           <select
             value={d.productGroupId}
             onChange={(e) =>
-              setDoses((ds) => ds.map((x, j) => (j === i ? { ...x, productGroupId: e.target.value } : x)))
+              setDoses((ds) => ds.map((x, j) => (j === i ? { ...x, productGroupId: e.target.value, lotId: undefined } : x)))
             }
           >
             {products.map((p) => (
@@ -128,7 +151,7 @@ export default function VisitPanel({ child, products, onDone }: Props) {
             value={d.origin}
             onChange={(e) =>
               setDoses((ds) =>
-                ds.map((x, j) => (j === i ? { ...x, origin: e.target.value as Dose["origin"] } : x))
+                ds.map((x, j) => (j === i ? { ...x, origin: e.target.value as Dose["origin"], lotId: undefined } : x))
               )
             }
           >
@@ -141,6 +164,33 @@ export default function VisitPanel({ child, products, onDone }: Props) {
           <button className="secondary" onClick={() => setDoses((ds) => ds.filter((_, j) => j !== i))}>
             {t("common.remove")}
           </button>
+        </div>
+        {d.origin === "CENTRE" && (
+          <div className="row">
+            <label>
+              {t("visit.lot")}
+              {(lotsByProduct[d.productGroupId] ?? []).filter((l) => l.qtyOnHand > 0).length === 0 ? (
+                <span className="hint"> {t("visit.nolot")}</span>
+              ) : (
+                <select
+                  value={d.lotId ?? ""}
+                  onChange={(e) =>
+                    setDoses((ds) => ds.map((x, j) => (j === i ? { ...x, lotId: e.target.value || undefined } : x)))
+                  }
+                >
+                  <option value="">—</option>
+                  {(lotsByProduct[d.productGroupId] ?? [])
+                    .filter((l) => l.qtyOnHand > 0)
+                    .map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.lotNumber} · {l.expiryDate} · ×{l.qtyOnHand}
+                      </option>
+                    ))}
+                </select>
+              )}
+            </label>
+          </div>
+        )}
         </div>
       ))}
       <div className="toolbar">
