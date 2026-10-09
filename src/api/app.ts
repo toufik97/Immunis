@@ -11,8 +11,8 @@ import { listDosesByChild } from "../infra/repos/encounters";
 import { nowIso, todayLocal } from "../infra/time";
 import { recordVisit, RecordGateError } from "../app/record-visit";
 import { addLot, listLots, checkLotUsable } from "../infra/repos/stock";
-import { createAppointment, listDue, markAppointment, listNoShows } from "../infra/repos/appointments";
-import type { Appointment } from "../domain/appointment";
+import { createAppointment, markAppointment } from "../infra/repos/appointments";
+import { noShowsFor, sessionFor } from "../app/sessions";
 import { insertOverride, listOverridesByChild } from "../infra/repos/audit";
 import { countCentreDosesByProduct } from "../app/analytics";
 import { exportCentre, listPendingOutbox, ackOutbox } from "../infra/sync/sync";
@@ -213,28 +213,13 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
   });
 
   // ---- sessions, appointments, no-shows ----
-  const withChild = (a: Appointment) => {
-    const c = getChild(db, a.childId);
-    return {
-      ...a,
-      childName: c ? `${c.givenName} ${c.familyName}` : a.childId,
-      localIds: c?.localIds ?? [],
-      address: c?.address ?? null,
-    };
-  };
-
   app.get("/api/sessions", async (req, reply) => {
     const date = (req.query as Record<string, string>).date;
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       reply.code(400).send({ error: "date is required (YYYY-MM-DD)" });
       return;
     }
-    const expected = listDue(db, date).map(withChild);
-    const dosesByProduct: Record<string, number> = {};
-    for (const a of expected) {
-      for (const p of a.expectedProducts) dosesByProduct[p] = (dosesByProduct[p] ?? 0) + 1;
-    }
-    return { date, expected, counters: { children: expected.length, dosesByProduct } };
+    return sessionFor(db, date);
   });
 
   app.post("/api/appointments", async (req, reply) => {
@@ -268,7 +253,7 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
       reply.code(400).send({ error: "asOf is required (YYYY-MM-DD)" });
       return;
     }
-    return listNoShows(db, asOf).map(withChild);
+    return noShowsFor(db, asOf);
   });
 
   // ---- overrides ----
