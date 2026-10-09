@@ -77,3 +77,11 @@ CREATE TABLE IF NOT EXISTS outbox (
 
 CREATE INDEX IF NOT EXISTS idx_doses_child ON doses(child_id);
 CREATE INDEX IF NOT EXISTS idx_appointments_due ON appointments(due_date);
+
+-- Annual per-centre registry counter for "xx/yy" local ids (FR-1.4).
+CREATE TABLE IF NOT EXISTS id_counters (
+  centre_id TEXT NOT NULL,
+  year TEXT NOT NULL,
+  last_xx INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (centre_id, year)
+);
