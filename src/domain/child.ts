@@ -8,16 +8,20 @@ const LocalIdSchema = z.object({
 
 /**
  * Child identity (spec §5.1).
- * Internal stable id is independent of per-centre annual xx/yy ids.
+ * Internal stable id is independent of per-centre annual xx/YYYY ids.
+ * Identity is confirmed by birthDate and never edited after registration.
  * nationalId is a reserved placeholder for future merge.
  */
 export const ChildSchema = z.object({
   id: z.string().min(1),
   familyName: z.string().min(1),
   givenName: z.string().min(1),
-  /** Confirmation key before any clinical action (FR-1.2). */
+  /** Confirmation key before any clinical action (FR-1.2). Immutable. */
   birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  parentNames: z.string().optional(),
+  fatherName: z.string().optional(),
+  motherName: z.string().optional(),
+  /** Free-text domicile; helps locate absentees. Optional. */
+  address: z.string().optional(),
   localIds: z.array(LocalIdSchema).default([]),
   nationalId: z.string().optional(),
 });

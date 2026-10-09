@@ -6,7 +6,9 @@ export interface NewChild {
   familyName: string;
   givenName: string;
   birthDate: string;
-  parentNames?: string;
+  fatherName?: string;
+  motherName?: string;
+  address?: string;
 }
 
 interface ChildRow {
@@ -14,7 +16,9 @@ interface ChildRow {
   family_name: string;
   given_name: string;
   birth_date: string;
-  parent_names: string | null;
+  father_name: string | null;
+  mother_name: string | null;
+  address: string | null;
   national_id: string | null;
 }
 
@@ -24,7 +28,9 @@ function toChild(row: ChildRow, localIds: { centreId: string; value: string }[])
     familyName: row.family_name,
     givenName: row.given_name,
     birthDate: row.birth_date,
-    parentNames: row.parent_names ?? undefined,
+    fatherName: row.father_name ?? undefined,
+    motherName: row.mother_name ?? undefined,
+    address: row.address ?? undefined,
     localIds,
     nationalId: row.national_id ?? undefined,
   });
@@ -43,8 +49,8 @@ function localIdsFor(db: Database.Database, childId: string) {
 export function createChild(db: Database.Database, input: NewChild): Child {
   const id = randomUUID();
   db.prepare(
-    "INSERT INTO children (id, family_name, given_name, birth_date, parent_names) VALUES (?, ?, ?, ?, ?)"
-  ).run(id, input.familyName, input.givenName, input.birthDate, input.parentNames ?? null);
+    "INSERT INTO children (id, family_name, given_name, birth_date, father_name, mother_name, address) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  ).run(id, input.familyName, input.givenName, input.birthDate, input.fatherName ?? null, input.motherName ?? null, input.address ?? null);
   const row = db.prepare("SELECT * FROM children WHERE id = ?").get(id) as ChildRow;
   return toChild(row, []);
 }

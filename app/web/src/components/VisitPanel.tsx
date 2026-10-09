@@ -125,6 +125,11 @@ export default function VisitPanel({ child, products, onDone }: Props) {
       <h2>
         {child.givenName} {child.familyName} · {t("child.birthDate", { date: child.birthDate })}
       </h2>
+      <p className="hint">
+        {[child.fatherName, child.motherName].filter(Boolean).join(" · ")}
+        {child.address ? ` · ${child.address}` : ""}
+        {(child.localIds ?? []).map((l) => ` · ${t("child.localId", { value: l.value })}`).join("")}
+      </p>
       <label className="check">
         <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
         {t("visit.identityVerified")}

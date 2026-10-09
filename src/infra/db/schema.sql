@@ -5,8 +5,11 @@ CREATE TABLE IF NOT EXISTS children (
   id TEXT PRIMARY KEY,
   family_name TEXT NOT NULL,
   given_name TEXT NOT NULL,
-  birth_date TEXT NOT NULL,          -- YYYY-MM-DD, identity confirmation key
-  parent_names TEXT,
+  birth_date TEXT NOT NULL,          -- YYYY-MM-DD, identity confirmation key, immutable
+  parent_names TEXT,                 -- legacy single field, superseded by father/mother_name
+  father_name TEXT,
+  mother_name TEXT,
+  address TEXT,                      -- free-text domicile
   national_id TEXT                   -- reserved, NULL in v1
 );
 CREATE TABLE IF NOT EXISTS local_ids (

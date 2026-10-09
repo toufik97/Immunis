@@ -16,7 +16,7 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Child[]>([]);
   const [child, setChild] = useState<Child | null>(null);
-  const [reg, setReg] = useState({ familyName: "", givenName: "", birthDate: "", parentNames: "", centreId: "CS01", firstVisitYear: "2026" });
+  const [reg, setReg] = useState({ familyName: "", givenName: "", birthDate: "", fatherName: "", motherName: "", address: "", centreId: "CS01", firstVisitYear: "2026" });
   const [duplicates, setDuplicates] = useState<DuplicateChild[] | null>(null);
   const [registering, setRegistering] = useState(false);
   const [err, setErr] = useState("");
@@ -128,8 +128,16 @@ export default function App() {
                   <input type="date" value={reg.birthDate} onChange={(e) => setReg({ ...reg, birthDate: e.target.value })} />
                 </label>
                 <label>
-                  {t("register.parentNames")}
-                  <input value={reg.parentNames} onChange={(e) => setReg({ ...reg, parentNames: e.target.value })} />
+                  {t("register.fatherName")}
+                  <input value={reg.fatherName} onChange={(e) => setReg({ ...reg, fatherName: e.target.value })} />
+                </label>
+                <label>
+                  {t("register.motherName")}
+                  <input value={reg.motherName} onChange={(e) => setReg({ ...reg, motherName: e.target.value })} />
+                </label>
+                <label>
+                  {t("register.address")}
+                  <input value={reg.address} onChange={(e) => setReg({ ...reg, address: e.target.value })} />
                 </label>
               </div>
               <div className="toolbar">

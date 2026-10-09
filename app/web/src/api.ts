@@ -13,7 +13,9 @@ export interface Child {
   familyName: string;
   givenName: string;
   birthDate: string;
-  parentNames?: string;
+  fatherName?: string;
+  motherName?: string;
+  address?: string;
   localIds: { centreId: string; value: string }[];
 }
 
