@@ -1,12 +1,19 @@
+import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import type { SchedulePack } from "../infra/packs/loader";
 import { evaluatePatient } from "../engine";
 import { parseDate } from "../engine/duration";
 import { toStructured } from "../engine/warnings";
-import type { ImmunizationRecord } from "../types";
-import { toEngineHistory } from "./evaluate-child";
+import { canonicalProductId, nextExpectedProducts, toGatedEngineHistory } from "./evaluate-child";
 import type { DoseRecord, Encounter } from "../domain/encounter";
-import { recordEncounter, type NewEncounter } from "../infra/repos/encounters";
+import { EncounterSchema } from "../domain/encounter";
+import {
+  storeEncounter,
+  todayLocal,
+  validateEncounterDates,
+  type NewEncounter,
+  type PersistOptions,
+} from "../infra/repos/encounters";
 import { insertOverride } from "../infra/repos/audit";
 
 export interface GateIssue {
@@ -34,15 +41,6 @@ export interface RecordVisitInput extends NewEncounter {
   overrideReason?: string;
 }
 
-function canonicalProducts(pack: SchedulePack): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const g of pack.catalog.product_groups ?? []) {
-    map.set(g.id, g.id);
-    for (const alias of g.aliases ?? []) map.set(alias, g.id);
-  }
-  return map;
-}
-
 /** One row per (dose, code): PENTA trips DTP/HB/Hib counters with the same code. */
 function dedupeIssues(issues: GateIssue[]): GateIssue[] {
   const seen = new Set<string>();
@@ -54,36 +52,59 @@ function dedupeIssues(issues: GateIssue[]): GateIssue[] {
   });
 }
 
-/** Products of the first planned visit after the recording date (session prep). */
-function nextProducts(
-  result: Pick<ReturnType<typeof evaluatePatient>, "visitPlan">,
-  afterDate: string
-): string[] {
-  const visits = result.visitPlan.visits;
-  const upcoming = visits.find((v) => v.date > afterDate) ?? visits[0];
-  return upcoming?.products ?? [];
-}
-
 /**
  * Clinical gate around visit recording (the engine as gatekeeper, not display).
  * Only CENTRE doses are gated — they are administered here, now, under our
  * responsibility. EXTERNAL/CAMPAIGN rows are transcribed history; the engine
  * still flags them at evaluation time but never blocks their recording.
+ *
+ * Single clinical seam: gate + store + Override audit commit in one
+ * transaction, so a waived dose never persists without its audit row and a
+ * lot failure never leaves a half-written visit. Low-level `recordEncounter`
+ * stays for non-clinical persistence tests; production writes go here.
  */
 export function recordVisit(
   db: Database.Database,
   pack: SchedulePack,
   childBirthDate: string,
   prior: DoseRecord[],
-  input: RecordVisitInput
+  input: RecordVisitInput,
+  opts?: PersistOptions
 ): { encounter: Encounter; waived: GateIssue[] } {
-  const doses = input.doses ?? [];
-  const canonical = canonicalProducts(pack);
-  const canon = (id: string) => canonical.get(id) ?? id;
+  const today = opts?.today ?? todayLocal();
+  const nowIso = opts?.nowIso ?? new Date().toISOString();
+  const parsed = EncounterSchema.parse({
+    childId: input.childId,
+    date: input.date,
+    screening: input.screening,
+    screeningNote: input.screeningNote,
+    weightKg: input.weightKg,
+    heightCm: input.heightCm,
+    doses: input.doses ?? [],
+    nextAppointmentDate: input.nextAppointmentDate,
+    id: randomUUID(),
+  });
+  validateEncounterDates(parsed, today);
+  if (parsed.screening !== "VACCINATE" && parsed.doses.length > 0) {
+    throw new RecordGateError(400, [
+      {
+        doseIndex: -1,
+        productGroupId: "",
+        administeredOn: parsed.date,
+        code: "SCREENING_BLOCKS_DOSES",
+        message: "non-VACCINATE screening cannot record doses",
+        overridable: false,
+      },
+    ]);
+  }
+  const doses = parsed.doses;
+  const canon = (id: string) => canonicalProductId(pack, id);
 
   // Unknown products on CENTRE doses are data errors (engine would only warn softly).
+  // Aliases count as known: VITA_100K → VITA.
+  const known = new Set((pack.catalog.product_groups ?? []).flatMap((g) => [g.id, ...(g.aliases ?? [])]));
   for (const [i, d] of doses.entries()) {
-    if (d.origin === "CENTRE" && !canonical.has(d.productGroupId)) {
+    if (d.origin === "CENTRE" && !known.has(d.productGroupId)) {
       throw new RecordGateError(400, [
         {
           doseIndex: i,
@@ -132,16 +153,8 @@ export function recordVisit(
   }
 
   // Engine cross-check on history + new doses, overrides stripped to find issues.
-  const gated = doses.filter((d) => d.origin === "CENTRE" || d.origin === "EXTERNAL");
-  const engineHistory: ImmunizationRecord[] = [
-    ...toEngineHistory(prior),
-    ...gated.map((d) => ({
-      administeredOn: d.administeredOn,
-      productGroupId: canon(d.productGroupId),
-      overridden: false,
-    })),
-  ];
-  const evaluationDate = input.date;
+  const engineHistory = toGatedEngineHistory(prior, doses, pack);
+  const evaluationDate = parsed.date;
   const result = evaluatePatient(
     { birthDate: childBirthDate },
     engineHistory,
@@ -183,26 +196,29 @@ export function recordVisit(
     throw new RecordGateError(422, soft.length > 0 ? soft : unwaived);
   }
 
-  const encounter = recordEncounter(db, {
-    ...input,
-    expectedProducts: nextProducts(result, input.date),
-  });
+  const expectedProducts = nextExpectedProducts(result, parsed.date);
 
   // One audit row per waived dose (not per counter: PENTA trips DTP/HB/Hib together).
   const waivedByDose = new Map<number, GateIssue[]>();
   for (const w of waived) {
     waivedByDose.set(w.doseIndex, [...(waivedByDose.get(w.doseIndex) ?? []), w]);
   }
-  for (const [doseIndex, ws] of waivedByDose) {
-    const d = doses[doseIndex];
-    insertOverride(db, {
-      childId: input.childId,
-      encounterId: encounter.id,
-      author: d.recordedBy,
-      what: `override ${ws.map((w) => w.code).join("+")} for ${d.productGroupId} on ${d.administeredOn}`,
-      reason: input.overrideReason!.trim(),
-      createdAt: new Date().toISOString(),
-    });
-  }
+
+  // Atomic commit: visit + stock + appointment + outbox + audit, or nothing.
+  const encounter = db.transaction((): Encounter => {
+    const stored = storeEncounter(db, parsed, expectedProducts, { nowIso });
+    for (const [doseIndex, ws] of waivedByDose) {
+      const d = doses[doseIndex];
+      insertOverride(db, {
+        childId: parsed.childId,
+        encounterId: stored.id,
+        author: d.recordedBy,
+        what: `override ${ws.map((w) => w.code).join("+")} for ${d.productGroupId} on ${d.administeredOn}`,
+        reason: input.overrideReason!.trim(),
+        createdAt: nowIso,
+      });
+    }
+    return stored;
+  })();
   return { encounter, waived };
 }

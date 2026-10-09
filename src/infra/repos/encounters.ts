@@ -51,17 +51,16 @@ export function todayLocal(): string {
   return `${now.getFullYear()}-${m}-${d}`;
 }
 
-/**
- * Record one visit (FR-5.3): screening + growth + doses + next RDV, atomically.
- * CENTRE doses consume a usable lot (FR-4.3/4.4); EXTERNAL doses never touch stock.
- * Future visit/dose dates are rejected (not credible); past history doses are fine.
- * Audit timestamps elsewhere are UTC ISO strings; civil dates stay calendar dates.
- */
-export function recordEncounter(db: Database.Database, input: NewEncounter): Encounter {
-  const encounterId = randomUUID();
-  const parsed = EncounterSchema.parse({ ...input, id: encounterId, doses: input.doses ?? [] });
+export interface PersistOptions {
+  /** Override centre wall-clock date (tests). Defaults to todayLocal(). */
+  today?: string;
+  /** Override audit/outbox timestamp (tests). Defaults to new Date().toISOString(). */
+  nowIso?: string;
+}
 
-  if (parsed.date > todayLocal()) {
+/** Civil-date credibility guards: visit/dose dates never in the future. */
+export function validateEncounterDates(parsed: Encounter, today: string): void {
+  if (parsed.date > today) {
     throw new Error(`encounter date ${parsed.date} is in the future`);
   }
   for (const dose of parsed.doses) {
@@ -72,56 +71,92 @@ export function recordEncounter(db: Database.Database, input: NewEncounter): Enc
   if (parsed.nextAppointmentDate && parsed.nextAppointmentDate < parsed.date) {
     throw new Error(`next appointment ${parsed.nextAppointmentDate} is in the past`);
   }
+}
 
-  db.transaction(() => {
+/**
+ * Persist a validated encounter without opening a transaction.
+ * Callers own the transaction so gate + audit rows can commit atomically.
+ * CENTRE doses consume a usable lot (FR-4.3/4.4); EXTERNAL doses never touch stock.
+ */
+export function storeEncounter(
+  db: Database.Database,
+  parsed: Encounter,
+  expectedProducts: string[] = [],
+  opts?: { nowIso?: string }
+): Encounter {
+  const nowIso = opts?.nowIso ?? new Date().toISOString();
+  const encounterId = parsed.id;
+
+  db.prepare(
+    "INSERT INTO encounters (id, child_id, date, screening, screening_note, weight_kg, height_cm, next_appointment_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  ).run(
+    encounterId,
+    parsed.childId,
+    parsed.date,
+    parsed.screening,
+    parsed.screeningNote ?? null,
+    parsed.weightKg ?? null,
+    parsed.heightCm ?? null,
+    parsed.nextAppointmentDate ?? null
+  );
+
+  for (const dose of parsed.doses) {
+    if (dose.origin === "CENTRE") {
+      if (!dose.lotId) throw new Error("CENTRE dose requires a lot (FR-4.3)");
+      const problem = checkLotUsable(db, dose.lotId, parsed.date);
+      if (problem !== "OK") throw new Error(`lot ${dose.lotId} is not usable: ${problem}`);
+      consumeLot(db, dose.lotId, 1, parsed.date);
+    }
     db.prepare(
-      "INSERT INTO encounters (id, child_id, date, screening, screening_note, weight_kg, height_cm, next_appointment_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO doses (id, encounter_id, child_id, product_group_id, administered_on, origin, lot_id, overridden, recorded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).run(
+      randomUUID(),
       encounterId,
       parsed.childId,
-      parsed.date,
-      parsed.screening,
-      parsed.screeningNote ?? null,
-      parsed.weightKg ?? null,
-      parsed.heightCm ?? null,
-      parsed.nextAppointmentDate ?? null
+      dose.productGroupId,
+      dose.administeredOn,
+      dose.origin,
+      dose.lotId ?? null,
+      dose.overridden ? 1 : 0,
+      dose.recordedBy
     );
+  }
 
-    for (const dose of parsed.doses) {
-      if (dose.origin === "CENTRE") {
-        if (!dose.lotId) throw new Error("CENTRE dose requires a lot (FR-4.3)");
-        const problem = checkLotUsable(db, dose.lotId, parsed.date);
-        if (problem !== "OK") throw new Error(`lot ${dose.lotId} is not usable: ${problem}`);
-        consumeLot(db, dose.lotId, 1, parsed.date);
-      }
-      db.prepare(
-        "INSERT INTO doses (id, encounter_id, child_id, product_group_id, administered_on, origin, lot_id, overridden, recorded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-      ).run(
-        randomUUID(),
-        encounterId,
-        parsed.childId,
-        dose.productGroupId,
-        dose.administeredOn,
-        dose.origin,
-        dose.lotId ?? null,
-        dose.overridden ? 1 : 0,
-        dose.recordedBy
-      );
-    }
+  if (parsed.nextAppointmentDate) {
+    const expected = (expectedProducts ?? []).filter((p) => typeof p === "string" && p.length > 0);
+    db.prepare(
+      "INSERT INTO appointments (id, child_id, due_date, expected_products, kept) VALUES (?, ?, ?, ?, NULL)"
+    ).run(randomUUID(), parsed.childId, parsed.nextAppointmentDate, JSON.stringify(expected));
+  }
 
-    if (parsed.nextAppointmentDate) {
-      const expected = (input.expectedProducts ?? []).filter((p) => typeof p === "string" && p.length > 0);
-      db.prepare(
-        "INSERT INTO appointments (id, child_id, due_date, expected_products, kept) VALUES (?, ?, ?, ?, NULL)"
-      ).run(randomUUID(), parsed.childId, parsed.nextAppointmentDate, JSON.stringify(expected));
-    }
+  db.prepare("INSERT INTO outbox (id, kind, payload, created_at, synced_at) VALUES (?, ?, ?, ?, NULL)").run(
+    randomUUID(),
+    "encounter.recorded",
+    JSON.stringify({ encounterId, childId: parsed.childId, date: parsed.date }),
+    nowIso
+  );
 
-    db.prepare("INSERT INTO outbox (id, kind, payload, created_at, synced_at) VALUES (?, ?, ?, ?, NULL)").run(
-      randomUUID(),
-      "encounter.recorded",
-      JSON.stringify({ encounterId, childId: parsed.childId, date: parsed.date }),
-      new Date().toISOString()
-    );
+  return parsed;
+}
+
+/**
+ * Record one visit (FR-5.3): screening + growth + doses + next RDV, atomically.
+ * Low-level persistence: no engine gate. Clinical writes must go through
+ * `recordVisit` in src/app/ (gate + audit in the same transaction).
+ * Future visit/dose dates are rejected (not credible); past history doses are fine.
+ * Audit timestamps elsewhere are UTC ISO strings; civil dates stay calendar dates.
+ */
+export function recordEncounter(
+  db: Database.Database,
+  input: NewEncounter,
+  opts?: PersistOptions
+): Encounter {
+  const encounterId = randomUUID();
+  const parsed = EncounterSchema.parse({ ...input, id: encounterId, doses: input.doses ?? [] });
+  validateEncounterDates(parsed, opts?.today ?? todayLocal());
+
+  db.transaction(() => {
+    storeEncounter(db, parsed, input.expectedProducts, { nowIso: opts?.nowIso });
   })();
 
   return parsed;

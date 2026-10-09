@@ -345,7 +345,7 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
           return;
         }
         birthDate = child.birthDate;
-        history = toEngineHistory(listDosesByChild(db, child.id));
+        history = toEngineHistory(listDosesByChild(db, child.id), pack);
       } else {
         if (typeof body["birthDate"] !== "string") {
           reply.code(400).send({ error: "birthDate or childId is required" });
