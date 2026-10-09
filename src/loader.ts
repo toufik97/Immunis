@@ -6,10 +6,12 @@ import {
   CountersSchema,
   ProgramSchema,
   ProductSelectionSchema,
+  SpacingSchema,
   type Catalog,
   type Counters,
   type Program,
-  type ProductSelection
+  type ProductSelection,
+  type Spacing
 } from "./schema";
 import { validatePack } from "./pack-validation";
 
@@ -18,7 +20,7 @@ export interface SchedulePack {
   counters: Counters;
   programs: Record<string, Program>;
   productSelection: ProductSelection;
-  spacing: any;
+  spacing: Spacing;
   /** Non-fatal pack inconsistencies found at load time. */
   warnings: string[];
 }
@@ -47,9 +49,11 @@ export function loadSchedulePack(
   );
   
   const spacingPath = path.join(root, "spacing.yaml");
-  const spacing: any = fs.existsSync(spacingPath)
-    ? loadYaml(spacingPath)
-    : { spacing_rules: [] };
+  const spacing: Spacing = SpacingSchema.parse(
+    fs.existsSync(spacingPath)
+      ? loadYaml(spacingPath)
+      : { spacing_rules: [] }
+  );
 
   const programsDir = path.join(root, "programs");
   const programs: Record<string, Program> = {};
