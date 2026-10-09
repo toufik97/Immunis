@@ -1,0 +1,31 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Skill allow-list for Immunis: deny everything, then allow only what this
+  // project needs. Last matching rule wins. To re-enable a skill, add an
+  // "allow" line for its ID. Global ~/.agents/skills are untouched (this file
+  // only affects this project).
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "deny" },
+    // harness built-ins
+    { "action": "skill", "resource": "opencode", "effect": "allow" },
+    { "action": "skill", "resource": "report", "effect": "allow" },
+    // core loop: test-first + verify-before-commit
+    { "action": "skill", "resource": "tdd", "effect": "allow" },
+    { "action": "skill", "resource": "test-driven-development", "effect": "allow" },
+    { "action": "skill", "resource": "verification-before-completion", "effect": "allow" },
+    // domain language (glossary, ADRs, model changes)
+    { "action": "skill", "resource": "domain-modeling", "effect": "allow" },
+    { "action": "skill", "resource": "doc-coauthoring", "effect": "allow" },
+    // clinical UI: design, React practice, RTL/a11y audits, browser testing
+    { "action": "skill", "resource": "frontend-design", "effect": "allow" },
+    { "action": "skill", "resource": "vercel-react-best-practices", "effect": "allow" },
+    { "action": "skill", "resource": "web-design-guidelines", "effect": "allow" },
+    { "action": "skill", "resource": "webapp-testing", "effect": "allow" },
+    // planning, debugging, review, discovery escape hatch
+    { "action": "skill", "resource": "writing-plans", "effect": "allow" },
+    { "action": "skill", "resource": "systematic-debugging", "effect": "allow" },
+    { "action": "skill", "resource": "diagnosing-bugs", "effect": "allow" },
+    { "action": "skill", "resource": "code-review", "effect": "allow" },
+    { "action": "skill", "resource": "find-skills", "effect": "allow" }
+  ]
+}
