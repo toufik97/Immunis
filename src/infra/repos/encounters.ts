@@ -23,8 +23,7 @@ interface DoseRow {
   recorded_by: string;
 }
 
-export function toEngineDoses(rows: DoseRow[]): DoseRecord[] {
-  return rows.map((r) => ({
+export function toEngineDoses(rows: DoseRow[]): DoseRecord[] {  return rows.map((r) => ({
     productGroupId: r.product_group_id,
     administeredOn: r.administered_on,
     origin: r.origin as DoseRecord["origin"],
@@ -42,13 +41,35 @@ export function listDosesByChild(db: Database.Database, childId: string): DoseRe
   return toEngineDoses(rows);
 }
 
+/** Server-local calendar date (centre wall-clock) for credibility guards. */
+export function todayLocal(): string {
+  const now = new Date();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${m}-${d}`;
+}
+
 /**
  * Record one visit (FR-5.3): screening + growth + doses + next RDV, atomically.
  * CENTRE doses consume a usable lot (FR-4.3/4.4); EXTERNAL doses never touch stock.
+ * Future visit/dose dates are rejected (not credible); past history doses are fine.
+ * Audit timestamps elsewhere are UTC ISO strings; civil dates stay calendar dates.
  */
 export function recordEncounter(db: Database.Database, input: NewEncounter): Encounter {
   const encounterId = randomUUID();
   const parsed = EncounterSchema.parse({ ...input, id: encounterId, doses: input.doses ?? [] });
+
+  if (parsed.date > todayLocal()) {
+    throw new Error(`encounter date ${parsed.date} is in the future`);
+  }
+  for (const dose of parsed.doses) {
+    if (dose.administeredOn > parsed.date) {
+      throw new Error(`dose date ${dose.administeredOn} is in the future relative to visit ${parsed.date}`);
+    }
+  }
+  if (parsed.nextAppointmentDate && parsed.nextAppointmentDate < parsed.date) {
+    throw new Error(`next appointment ${parsed.nextAppointmentDate} is in the past`);
+  }
 
   db.transaction(() => {
     db.prepare(

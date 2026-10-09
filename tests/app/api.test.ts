@@ -116,6 +116,22 @@ describe("api", () => {
     const meta = await app.inject({ method: "GET", url: "/api/pack" });
     expect(meta.statusCode).toBe(200);
     expect((meta.json() as { country: string }).country).toBe("MA");
+    const futureEval = await app.inject({
+      method: "POST",
+      url: "/api/evaluate",
+      payload: { birthDate: "2025-01-01", evaluationDate: "2999-01-01", history: [] },
+    });
+    expect(futureEval.statusCode).toBe(400);
+    const badHistory = await app.inject({
+      method: "POST",
+      url: "/api/evaluate",
+      payload: {
+        birthDate: "2025-01-01",
+        evaluationDate: "2026-01-01",
+        history: [{ administeredOn: "2026-06-01", productGroupId: "BCG" }],
+      },
+    });
+    expect(badHistory.statusCode).toBe(400);
     const analytics = await app.inject({ method: "GET", url: "/api/analytics/doses" });
     expect(analytics.statusCode).toBe(200);
     expect(analytics.json()).toEqual({});

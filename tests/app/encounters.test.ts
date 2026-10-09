@@ -66,8 +66,7 @@ describe("encounters", () => {
     db.close();
   });
 
-  it("rejects a CENTRE dose without a lot or with an expired lot", () => {
-    const { db, child } = setup();
+  it("rejects a CENTRE dose without a lot or with an expired lot", () => {    const { db, child } = setup();
     expect(() =>
       recordEncounter(db, {
         childId: child.id,
@@ -109,6 +108,51 @@ describe("encounters", () => {
       })
     ).toThrow();
     expect(listDosesByChild(db, child.id)).toHaveLength(0);
+    db.close();
+  });
+
+  it("rejects future visit dates and future dose dates, but keeps past history", () => {
+    const { db, child, lot } = setup();
+    const base = {
+      childId: child.id,
+      screening: "VACCINATE" as const,
+      doses: [] as never[],
+    };
+    expect(() => recordEncounter(db, { ...base, date: "2999-01-01" })).toThrow(/future/);
+    expect(() =>
+      recordEncounter(db, {
+        ...base,
+        date: "2026-10-09",
+        doses: [
+          {
+            productGroupId: "PENTA",
+            administeredOn: "2999-01-01",
+            origin: "CENTRE",
+            lotId: lot.id,
+            overridden: false,
+            recordedBy: "nurse1",
+          },
+        ],
+      })
+    ).toThrow(/future/);
+    expect(() =>
+      recordEncounter(db, { ...base, date: "2026-10-09", nextAppointmentDate: "2020-01-01" })
+    ).toThrow(/past/);
+    // Past doses (history transcribed from the carnet) stay accepted.
+    const enc = recordEncounter(db, {
+      ...base,
+      date: "2026-10-09",
+      doses: [
+        {
+          productGroupId: "PENTA",
+          administeredOn: "2026-09-01",
+          origin: "EXTERNAL",
+          overridden: false,
+          recordedBy: "nurse1",
+        },
+      ],
+    });
+    expect(enc.id).toBeTruthy();
     db.close();
   });
 });

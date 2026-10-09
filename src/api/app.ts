@@ -6,7 +6,7 @@ import { evaluatePatient } from "../engine";
 import { parseDate } from "../engine/duration";
 import { toEngineHistory } from "../app/evaluate-child";
 import { createChild, findChildrenByName, getChild, allocateLocalId, findPossibleDuplicates } from "../infra/repos/children";
-import { recordEncounter, listDosesByChild } from "../infra/repos/encounters";
+import { recordEncounter, listDosesByChild, todayLocal } from "../infra/repos/encounters";
 import { addLot, listLots, checkLotUsable } from "../infra/repos/stock";
 import { createAppointment, listDue, markAppointment, listNoShows } from "../infra/repos/appointments";
 import { insertOverride, listOverridesByChild } from "../infra/repos/audit";
@@ -303,6 +303,10 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
         reply.code(400).send({ error: "evaluationDate is required (YYYY-MM-DD)" });
         return;
       }
+      if (evaluationDate > todayLocal()) {
+        reply.code(400).send({ error: `evaluationDate ${evaluationDate} is in the future` });
+        return;
+      }
       const projection = body["projection"] === "full" ? "full" : "next";
       const availability = body["availability"] as
         | { policy?: "TRANSITION" | "CONTINUITY_FIRST" | "STOCK_DRIVEN"; products?: string[] }
@@ -335,6 +339,10 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
           }
           if (typeof r?.["productGroupId"] !== "string" || r["productGroupId"] === "") {
             errors.push(`history[${i}].productGroupId is required`);
+            return;
+          }
+          if ((r["administeredOn"] as string) > (evaluationDate as string)) {
+            errors.push(`history[${i}] date ${r["administeredOn"]} is after evaluationDate`);
             return;
           }
           history.push({

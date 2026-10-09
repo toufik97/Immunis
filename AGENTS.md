@@ -45,6 +45,7 @@ Spec is French; all code, docs, and responses are English. UI supports en/fr/ar.
 ## Conventions
 
 - TypeScript strict, ESM, `zod` for all boundaries, `date-fns` for dates.
+- Time rules: civil dates are calendar `YYYY-MM-DD` in centre wall-clock time; visit/dose/evaluation dates can never be in the future (past history doses OK); audit timestamps (`overrides.created_at`, `outbox`) are UTC ISO strings.
 - Engine warnings are codes + params, never hardcoded sentences (i18n builds sentences).
 - Local-first: everything works offline; sync is export/outbox, not live calls.
 - SMS, carnet print, national-ID merge, weekday scheduling: reserved stubs only.
