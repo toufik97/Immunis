@@ -9,11 +9,11 @@ import type { DoseRecord, Encounter } from "../domain/encounter";
 import { EncounterSchema } from "../domain/encounter";
 import {
   storeEncounter,
-  todayLocal,
   validateEncounterDates,
   type NewEncounter,
   type PersistOptions,
 } from "../infra/repos/encounters";
+import { nowIso as nowIsoStamp, todayLocal } from "../infra/time";
 import { insertOverride } from "../infra/repos/audit";
 
 export interface GateIssue {
@@ -72,7 +72,7 @@ export function recordVisit(
   opts?: PersistOptions
 ): { encounter: Encounter; waived: GateIssue[] } {
   const today = opts?.today ?? todayLocal();
-  const nowIso = opts?.nowIso ?? new Date().toISOString();
+  const nowIso = opts?.nowIso ?? nowIsoStamp();
   const parsed = EncounterSchema.parse({
     childId: input.childId,
     date: input.date,

@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import { nowIso } from "../time";
 
 const TABLES = [
   "children",
@@ -24,7 +25,7 @@ export function exportCentre(db: Database.Database): CentreDump {
   for (const t of TABLES) {
     tables[t] = db.prepare(`SELECT * FROM ${t}`).all() as Record<string, unknown>[];
   }
-  return { version: 1, exportedAt: new Date().toISOString(), tables };
+  return { version: 1, exportedAt: nowIso(), tables };
 }
 
 export interface ImportStats {

@@ -6,7 +6,8 @@ import { evaluatePatient } from "../engine";
 import { parseDate } from "../engine/duration";
 import { toEngineHistory } from "../app/evaluate-child";
 import { createChild, findChildrenByName, getChild, allocateLocalId, findPossibleDuplicates } from "../infra/repos/children";
-import { listDosesByChild, todayLocal } from "../infra/repos/encounters";
+import { listDosesByChild } from "../infra/repos/encounters";
+import { nowIso, todayLocal } from "../infra/time";
 import { recordVisit, RecordGateError } from "../app/record-visit";
 import { addLot, listLots, checkLotUsable } from "../infra/repos/stock";
 import { createAppointment, listDue, markAppointment, listNoShows } from "../infra/repos/appointments";
@@ -212,7 +213,7 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
 
   app.get("/api/lots/:id/usable", async (req) => {
     const { id } = req.params as Record<string, string>;
-    const on = (req.query as Record<string, string>).on ?? new Date().toISOString().slice(0, 10);
+    const on = (req.query as Record<string, string>).on ?? todayLocal();
     return { status: checkLotUsable(db, id, on) };
   });
 
@@ -286,7 +287,7 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
           what: input.what,
           reason: input.reason,
           encounterId: input.encounterId,
-          createdAt: new Date().toISOString(),
+          createdAt: nowIso(),
         })
       );
     } catch (e) {

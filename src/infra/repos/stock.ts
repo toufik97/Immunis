@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import { LotSchema, type Lot } from "../../domain/stock";
+import { todayLocal } from "../time";
 
 export interface NewLot {
   productGroupId: string;
@@ -61,13 +62,6 @@ export function listLots(db: Database.Database, productGroupId?: string): Lot[] 
 
 export type LotProblem = "OK" | "NOT_FOUND" | "EXPIRED" | "COLD_CHAIN_BROKEN" | "OUT_OF_STOCK";
 
-function localToday(): string {
-  const now = new Date();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${now.getFullYear()}-${m}-${d}`;
-}
-
 /** Pre-administration check (FR-4.4): expiry, integrity, cold chain, lot. */
 export function checkLotUsable(
   db: Database.Database,
@@ -87,7 +81,7 @@ export function consumeLot(
   db: Database.Database,
   lotId: string,
   qty = 1,
-  onDate = localToday()
+  onDate = todayLocal()
 ): void {
   const problem = checkLotUsable(db, lotId, onDate);
   if (problem !== "OK") throw new Error(`lot ${lotId} is not usable: ${problem}`);

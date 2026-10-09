@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import { EncounterSchema, type Encounter, type DoseRecord } from "../../domain/encounter";
 import { checkLotUsable, consumeLot } from "./stock";
+import { todayLocal, nowIso } from "../time";
+
+/** Re-exported for existing callers; new code imports from `../time`. */
+export { todayLocal, nowIso };
 
 export interface NewEncounter {
   childId: string;
@@ -43,14 +47,6 @@ export function listDosesByChild(db: Database.Database, childId: string): DoseRe
   return toEngineDoses(rows);
 }
 
-/** Server-local calendar date (centre wall-clock) for credibility guards. */
-export function todayLocal(): string {
-  const now = new Date();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${now.getFullYear()}-${m}-${d}`;
-}
-
 export interface PersistOptions {
   /** Override centre wall-clock date (tests). Defaults to todayLocal(). */
   today?: string;
@@ -84,7 +80,7 @@ export function storeEncounter(
   expectedProducts: string[] = [],
   opts?: { nowIso?: string }
 ): Encounter {
-  const nowIso = opts?.nowIso ?? new Date().toISOString();
+  const stamp = opts?.nowIso ?? nowIso();
   const encounterId = parsed.id;
 
   db.prepare(
@@ -133,7 +129,7 @@ export function storeEncounter(
     randomUUID(),
     "encounter.recorded",
     JSON.stringify({ encounterId, childId: parsed.childId, date: parsed.date }),
-    nowIso
+    stamp
   );
 
   return parsed;
