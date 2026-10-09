@@ -50,12 +50,13 @@ export function evaluatePatient(
     { validations, availability: options.availability }
   );
 
-  // 3. Stop planning when the dose cap is reached (SOMIPEV guard)
-  applyDoseCaps(antigenNeeds, pack, validations, patient, evaluationDate);
+  // 3. Stop planning when the dose cap is reached (SOMIPEV guard).
+  // Pure: returns a new array, never mutates evaluator output.
+  const cappedNeeds = applyDoseCaps(antigenNeeds, pack, validations, patient, evaluationDate);
 
   // 4. Choose products
   const productSelection = selectProducts(
-    antigenNeeds,
+    cappedNeeds,
     pack,
     patient,
     evaluationDate,
@@ -66,7 +67,7 @@ export function evaluatePatient(
   const programLastDates = buildProgramLastDates(pack, validations);
   const visitPlan = planVisits(
     productSelection,
-    antigenNeeds,
+    cappedNeeds,
     pack,
     patient,
     history,
@@ -74,6 +75,8 @@ export function evaluatePatient(
     programLastDates,
     options.projection ?? "next"
   );
+
+  assertPlanInvariants(cappedNeeds, productSelection, visitPlan);
 
   // 6. Availability assumption (was emitted by the resolver; now generated here)
   const assumptions: string[] = [];
@@ -89,12 +92,44 @@ export function evaluatePatient(
     evaluationDate,
     doseCounts: counts,
     doseValidations: validations,
-    antigenNeeds,
+    antigenNeeds: cappedNeeds,
     productSelection,
     visitPlan,
     assumptions,
     inputWarnings
   };
+}
+
+/** Return invariants the future system can rely on. Throws on hard violations. */
+function assertPlanInvariants(
+  needs: AntigenNeed[],
+  selection: ProductSelectionResult,
+  plan: VisitPlan
+): void {
+  for (const b of selection.boosterPlans) {
+    if (!b.productGroupId) {
+      throw new Error(`INVARIANT: booster plan for ${b.programId} has empty productGroupId`);
+    }
+  }
+  for (const s of selection.primarySlots) {
+    for (const p of s.products) {
+      if (!p.productGroupId) {
+        throw new Error(`INVARIANT: primary slot ${s.slot} has empty productGroupId`);
+      }
+      if (p.coveredProgramIds.length === 0) {
+        throw new Error(`INVARIANT: primary slot ${s.slot} covers no programs`);
+      }
+    }
+  }
+  for (const v of plan.visits) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v.date)) {
+      throw new Error(`INVARIANT: visit ${v.visitNumber} has bad date "${v.date}"`);
+    }
+    if (v.products.some(p => !p)) {
+      throw new Error(`INVARIANT: visit ${v.visitNumber} has empty product`);
+    }
+  }
+  void needs;
 }
 
 function applyDoseCaps(
@@ -103,39 +138,36 @@ function applyDoseCaps(
   validations: DoseValidationMap,
   patient: Patient,
   evaluationDate: Date
-): void {
+): AntigenNeed[] {
+  void evaluationDate;
   const birthDate = parseDate(patient.birthDate);
-  for (const need of needs) {
+  return needs.map((need) => {
     const program: any = (pack.programs as any)[need.programId];
     const caps: any[] = program?.dose_caps ?? [];
+    let out: AntigenNeed = need;
     for (const cap of caps) {
-      // Count doses given before the cap age, no matter how old the patient
-      // is now. The old `continue` skipped the guard exactly when past the
-      // limit, hiding hyperimmunization.
       const validation = validations[cap.counter];
       const dosesBeforeCapAge = (validation?.doses ?? []).filter((d: any) => {
         if (!d.valid) return false;
-        return isAgeBefore(
-          birthDate,
-          parseDate(d.administeredOn),
-          cap.before_age
-        );
+        return isAgeBefore(birthDate, parseDate(d.administeredOn), cap.before_age);
       }).length;
       if (dosesBeforeCapAge >= Number(cap.max_doses)) {
-        // Never overwrite UNDETERMINED: no matching rule is a signal the
-        // future system must see, not silently turn into COMPLETE.
-        if (need.status !== "UNDETERMINED") {
-          need.dosesNeeded = 0;
-          need.boosterSequence = null;
-          need.status = "COMPLETE";
-          need.action = "complete";
+        const base: AntigenNeed =
+          out === need ? { ...need, warnings: [...need.warnings] } : out;
+        if (base.status !== "UNDETERMINED") {
+          base.dosesNeeded = 0;
+          base.boosterSequence = null;
+          base.status = "COMPLETE";
+          base.action = "complete";
         }
-        need.warnings.push(
+        base.warnings.push(
           `DOSE_CAP_REACHED_PLANNING_STOPPED: ${cap.max_doses} doses already given before ${describeDuration(cap.before_age)}; no further dose planned (hyperimmunization guard).`
         );
+        out = base;
       }
     }
-  }
+    return out;
+  });
 }
 
 function buildProgramLastDates(

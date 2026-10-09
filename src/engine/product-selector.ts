@@ -399,15 +399,38 @@ export function pickProductsForPrograms(
           new Set([...a.coveredProgramIds, ...b.coveredProgramIds])
         );
 
-        const candidate = plannableGroups.find((product: any) => {
-          if (!isProductEligible(product.id, birthDate, atDate, eligibilityRules)) {
-            return false;
-          }
-          return unionProgramIds.every((pid: string) => {
+        // Best-score merge guard: pick the highest-scoring product covering the
+        // union (same scoring as the greedy pick), never just the first match.
+        // Prevents merging PENTA+DTC into a lower-ranked product that adds
+        // unneeded antigens.
+        let best: any = null;
+        let bestScore = -Infinity;
+        for (const product of plannableGroups) {
+          if (!isProductEligible(product.id, birthDate, atDate, eligibilityRules)) continue;
+          const covers = unionProgramIds.every((pid: string) => {
             const nd = needsById[pid];
             return nd ? productCoversProgram(product, nd) : false;
           });
-        });
+          if (!covers) continue;
+          const rankIndex = ranking.indexOf(product.id);
+          const rankBonus = rankIndex === -1 ? 0 : ranking.length - rankIndex;
+          const unneeded = needs.filter(
+            n =>
+              !unionProgramIds.includes(n.programId) &&
+              n.antigenTargets.length > 0 &&
+              productCoversProgram(product, n)
+          ).length;
+          const score =
+            unionProgramIds.length * coverageReward -
+            unneeded * unneededPenalty +
+            rankBonus +
+            preferenceBonus(product.id, neededNow, preferences);
+          if (score > bestScore) {
+            bestScore = score;
+            best = product;
+          }
+        }
+        const candidate = best;
 
         if (candidate) {
           slotProducts.splice(j, 1);

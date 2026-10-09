@@ -13,10 +13,27 @@ export interface Duration {
   years?: number;
   birth?: boolean;
   exclusive?: boolean;
-  [key: string]: any;
+}
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export function isValidDateString(s: string): boolean {
+  if (!DATE_RE.test(s)) return false;
+  const [y, m, d] = s.split("-").map(Number);
+  if (m < 1 || m > 12 || d < 1 || d > 31) return false;
+  const dt = new Date(`${s}T00:00:00`);
+  return (
+    !Number.isNaN(dt.getTime()) &&
+    dt.getFullYear() === y &&
+    dt.getMonth() + 1 === m &&
+    dt.getDate() === d
+  );
 }
 
 export function parseDate(dateStr: string): Date {
+  if (!isValidDateString(dateStr)) {
+    throw new Error(`INVALID_DATE: "${dateStr}" is not a real YYYY-MM-DD calendar date`);
+  }
   return new Date(`${dateStr}T00:00:00`);
 }
 

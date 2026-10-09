@@ -10,7 +10,7 @@ export function normalizeHistory(
   history: ImmunizationRecord[],
   pack: SchedulePack
 ): { history: ImmunizationRecord[]; warnings: string[] } {
-  const groups: any[] = (pack.catalog as any).product_groups ?? [];
+  const groups = pack.catalog.product_groups ?? [];
   const known = new Set<string>(groups.map(g => g.id));
   const aliasToId = new Map<string, string>();
   for (const g of groups) {

@@ -13,11 +13,9 @@ import {
   formatDate,
   addDurationToDate,
   ageInMonthsAt,
-  durationToDays,
   durationToMonths,
   resolveDurationForDate,
-  isAgeBefore,
-  type Duration
+  isAgeBefore
 } from "./duration";
 import {
   isProductEligible,
@@ -102,14 +100,12 @@ export function planVisits(
     ...scheduledLastByProgram
   };
 
-  const productSelection: any = (pack.productSelection as any)?.product_selection ?? {};
-  const selectionConfig: any = productSelection.selection ?? {};
-  const maxAlignmentDelayDays = durationToDays(
-    selectionConfig.max_alignment_delay ?? { days: 0 }
-  );
+  const productSelection = pack.productSelection?.product_selection ?? {} as any;
+  const selectionConfig: any = (productSelection as any).selection ?? {};
+  const maxAlignmentDelay = selectionConfig.max_alignment_delay ?? { days: 0 };
 
-  const productGroups: any[] = (pack.catalog as any).product_groups ?? [];
-  const programs: any = pack.programs as any;
+  const productGroups = pack.catalog.product_groups ?? [];
+  const programs = pack.programs as any;
   const spacingConstraints = getSpacingConstraints(pack);
   const spacingIsLive = liveFlags(pack);
 
@@ -291,11 +287,11 @@ export function planVisits(
       const lastCluster = clusters[clusters.length - 1];
       if (lastCluster) {
         // the delay is measured from the first (earliest) dose of the cluster, so a
-        // chain of doses 15 days apart cannot stretch the visit beyond the maximum
+        // chain of doses 15 days apart cannot stretch the visit beyond the maximum.
+        // Calendar-exact: pd must be on/before first + maxAlignmentDelay.
         const firstDate = lastCluster[0].date;
-        const gap = Math.round(
-          (pd.date.getTime() - firstDate.getTime()) / 86400000
-        );
+        const clusterLimit = addDurationToDate(firstDate, maxAlignmentDelay);
+        const withinDelay = pd.date.getTime() <= clusterLimit.getTime();
         const withinAgeLimits = lastCluster.every(
           member => !member.latest || member.latest.getTime() >= pd.date.getTime()
         );
@@ -308,7 +304,7 @@ export function planVisits(
               spacingIsLive
             )?.sameDayAllowed === false
         );
-        if (gap <= maxAlignmentDelayDays && !gateBlocked && withinAgeLimits) {
+        if (withinDelay && !gateBlocked && withinAgeLimits) {
           lastCluster.push(pd);
           continue;
         }
