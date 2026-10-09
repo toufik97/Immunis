@@ -1,4 +1,4 @@
-import { loadSchedulePack } from "./loader";
+import { loadSchedulePack } from "./infra/packs/loader";
 import { evaluatePatient } from "./engine";
 import { parseDate } from "./engine/duration";
 

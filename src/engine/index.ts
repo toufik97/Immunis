@@ -1,4 +1,4 @@
-import type { SchedulePack } from "../loader";
+import type { SchedulePack } from "../infra/packs/loader";
 import type {
   Patient,
   ImmunizationRecord,

@@ -1,4 +1,4 @@
-import type { SchedulePack } from "../loader";
+import type { SchedulePack } from "../infra/packs/loader";
 import type {
   Patient,
   AntigenNeed,
@@ -8,7 +8,7 @@ import type {
   PlannedDose,
   ImmunizationRecord
 } from "../types";
-import type { BoosterConfig, DoseValidityRule, EligibilityRule, LooseBoosterPolicy, PackDuration, ProductGroup, Program } from "../schema";
+import type { BoosterConfig, DoseValidityRule, EligibilityRule, LooseBoosterPolicy, PackDuration, ProductGroup, Program } from "../infra/packs/schema";
 import {
   parseDate,
   formatDate,
@@ -134,7 +134,7 @@ export function planVisits(
 
   // ---------- primary slots ----------
   const pickCtx = buildPickContext(pack, needs, birthDate);
-  const eligibilityRules = (productSelection as { eligibility?: import("../schema").EligibilityRule[] }).eligibility ?? [];
+  const eligibilityRules = (productSelection as { eligibility?: import("../infra/packs/schema").EligibilityRule[] }).eligibility ?? [];
 
   // Earliest date for one product in one slot, the programs it can still cover
   // (Rota's age limit etc.), and the dose number it represents for each program.

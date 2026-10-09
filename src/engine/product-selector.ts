@@ -1,4 +1,4 @@
-import type { SchedulePack } from "../loader";
+import type { SchedulePack } from "../infra/packs/loader";
 import type {
   Patient,
   AntigenNeed,
@@ -14,7 +14,7 @@ import type {
   EligibilityRule,
   LooseBoosterPolicy,
   ProductGroup
-} from "../schema";
+} from "../infra/packs/schema";
 import {
   parseDate,
   formatDate,

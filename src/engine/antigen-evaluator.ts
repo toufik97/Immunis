@@ -1,6 +1,6 @@
-import type { SchedulePack } from "../loader";
+import type { SchedulePack } from "../infra/packs/loader";
 import type { Patient, DoseCounts, AntigenNeed, AvailabilityInput } from "../types";
-import type { CatchupRule, Program } from "../schema";
+import type { CatchupRule, Program } from "../infra/packs/schema";
 import type { DoseValidationMap } from "./dose-counter";
 import { parseDate, ageInMonthsAt, isAgeAtLeast, isAgeBefore } from "./duration";
 

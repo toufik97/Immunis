@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { run } from "./helpers";
-import { parseDate, isValidDateString } from "../src/engine/duration";
+import { parseDate, isValidDateString } from "../../src/engine/duration";
 
 describe("hardening", () => {
   it("rejects impossible dates instead of rolling over", () => {

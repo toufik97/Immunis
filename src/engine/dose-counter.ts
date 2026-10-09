@@ -1,6 +1,6 @@
-import type { SchedulePack } from "../loader";
+import type { SchedulePack } from "../infra/packs/loader";
 import type { Patient, ImmunizationRecord, DoseCounts } from "../types";
-import type { BoosterConfig, DoseCap, DoseValidityRule, Interval, PackDuration, Program } from "../schema";
+import type { BoosterConfig, DoseCap, DoseValidityRule, Interval, PackDuration, Program } from "../infra/packs/schema";
 import {
   validateCounterDoses,
   type ValidationResult,

@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { run, need, count, doses, rec } from "./helpers";
-import { evaluatePatient } from "../src/engine";
-import { loadSchedulePack } from "../src/loader";
-import { parseDate } from "../src/engine/duration";
-import type { Patient, ImmunizationRecord } from "../src/types";
+import { evaluatePatient } from "../../src/engine";
+import { loadSchedulePack } from "../../src/infra/packs/loader";
+import { parseDate } from "../../src/engine/duration";
+import type { Patient, ImmunizationRecord } from "../../src/types";
 
 // Same as helpers.run() but lets us pass an explicit availability policy / stock list.
 function runAvail(

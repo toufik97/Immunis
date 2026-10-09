@@ -1,6 +1,6 @@
-import type { SchedulePack } from "../loader";
+import type { SchedulePack } from "../infra/packs/loader";
 import type { Patient, ImmunizationRecord } from "../types";
-import type { DoseCap, DoseValidityRule, Interval, PackDuration } from "../schema";
+import type { DoseCap, DoseValidityRule, Interval, PackDuration } from "../infra/packs/schema";
 import {
   parseDate,
   ageInMonthsAt,

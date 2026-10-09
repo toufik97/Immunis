@@ -1,7 +1,7 @@
 import { expect } from "vitest";
-import { loadSchedulePack } from "../src/loader";
-import { evaluatePatient, type EngineResult } from "../src/engine";
-import type { ImmunizationRecord, Patient } from "../src/types";
+import { loadSchedulePack } from "../../src/infra/packs/loader";
+import { evaluatePatient, type EngineResult } from "../../src/engine";
+import type { ImmunizationRecord, Patient } from "../../src/types";
 
 export const pack = loadSchedulePack("MA");
 

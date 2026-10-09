@@ -3,8 +3,8 @@
 //   ENGINE_SRC=../old-checkout/src npx vitest run   (helper tests skip themselves if the helpers are missing)
 import { describe, it, expect } from "vitest";
 
-const root = process.env.ENGINE_SRC ?? "../src";
-const { loadSchedulePack } = await import(`${root}/loader`);
+const root = process.env.ENGINE_SRC ?? "../../src";
+const { loadSchedulePack } = await import(`${root}/infra/packs/loader`);
 const { evaluatePatient } = await import(`${root}/engine`);
 const dur: any = await import(`${root}/engine/duration`);
 const sel: any = await import(`${root}/engine/product-selector`);

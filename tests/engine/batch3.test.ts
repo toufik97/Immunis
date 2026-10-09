@@ -5,8 +5,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const root = process.env.ENGINE_SRC ?? "../src";
-const { loadSchedulePack } = await import(`${root}/loader`);
+const root = process.env.ENGINE_SRC ?? "../../src";
+const { loadSchedulePack } = await import(`${root}/infra/packs/loader`);
 const { evaluatePatient } = await import(`${root}/engine`);
 const { parseDate } = await import(`${root}/engine/duration`);
 

@@ -5,7 +5,7 @@ import {
   addYears,
   differenceInMonths
 } from "date-fns";
-import type { Interval, PackDuration } from "../schema";
+import type { Interval, PackDuration } from "../infra/packs/schema";
 
 export interface Duration {
   days?: number;

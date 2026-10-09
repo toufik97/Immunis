@@ -6,7 +6,7 @@ import {
   DoseCapSchema,
   EligibilityRuleSchema,
   SpacingSchema
-} from "../src/schema";
+} from "../../src/infra/packs/schema";
 
 describe("strict schemas", () => {
   it("rejects singular month typo", () => {

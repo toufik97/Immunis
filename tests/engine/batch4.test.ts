@@ -2,8 +2,8 @@
 // Expects ./src next to ./test and the pack in ./schedule-packs (run from the project root).
 import { describe, it, expect } from "vitest";
 
-const root = process.env.ENGINE_SRC ?? "../src";
-const { loadSchedulePack } = await import(`${root}/loader`);
+const root = process.env.ENGINE_SRC ?? "../../src";
+const { loadSchedulePack } = await import(`${root}/infra/packs/loader`);
 const { evaluatePatient } = await import(`${root}/engine`);
 const { scheduleWithSpacing } = await import(`${root}/engine/spacing`);
 const { parseDate, formatDate, addDurationToDate } = await import(`${root}/engine/duration`);

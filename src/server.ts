@@ -1,7 +1,7 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
-import { loadSchedulePack } from "./loader";
+import { loadSchedulePack } from "./infra/packs/loader";
 import { evaluatePatient, type EngineResult } from "./engine";
 import { parseDate } from "./engine/duration";
 import { toStructured } from "./engine/warnings";
@@ -79,7 +79,7 @@ const server = http.createServer(async (req, res) => {
     const method = req.method ?? "GET";
 
     if (method === "GET" && (url === "/" || url === "/index.html")) {
-      const htmlPath = path.resolve(process.cwd(), "ui", "index.html");
+      const htmlPath = path.resolve(process.cwd(), "app", "web", "index.html");
       if (!fs.existsSync(htmlPath)) {
         return sendJson(res, 500, { error: "ui/index.html not found" });
       }

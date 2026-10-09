@@ -1,4 +1,4 @@
-import type { SchedulePack } from "../loader";
+import type { SchedulePack } from "../infra/packs/loader";
 import type { ImmunizationRecord } from "../types";
 import type { Duration } from "./duration";
 import { parseDate, formatDate, addDurationToDate } from "./duration";
