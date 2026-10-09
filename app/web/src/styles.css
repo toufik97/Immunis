@@ -1,0 +1,152 @@
+:root {
+  color-scheme: light;
+  --bg: #f1f5f9;
+  --card: #ffffff;
+  --ink: #0f172a;
+  --muted: #64748b;
+  --line: #e2e8f0;
+  --accent: #1d4ed8;
+  --ok: #166534;
+  --bad: #991b1b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+header {
+  background: var(--ink);
+  color: white;
+  padding: 18px 24px;
+}
+
+header h1 {
+  margin: 0 0 6px 0;
+  font-size: 22px;
+}
+
+.sub {
+  color: #cbd5e1;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px;
+  margin-bottom: 18px;
+}
+
+h2 {
+  margin-top: 0;
+  font-size: 18px;
+}
+
+h3 {
+  font-size: 15px;
+  margin-bottom: 8px;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: end;
+  margin-bottom: 10px;
+}
+
+label {
+  display: block;
+  font-size: 12px;
+  font-weight: bold;
+  color: #475569;
+}
+
+input,
+select,
+button {
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.row input,
+.row select {
+  flex: 1;
+  min-width: 140px;
+}
+
+.grid input,
+.grid select {
+  width: 100%;
+  margin-top: 4px;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  color: white;
+  background: var(--accent);
+  font-weight: bold;
+}
+
+button.secondary {
+  background: var(--muted);
+}
+
+.toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.error {
+  background: #fef2f2;
+  border-inline-start: 4px solid #ef4444;
+  color: var(--bad);
+  padding: 12px;
+  border-radius: 6px;
+  margin: 12px 0;
+}
+
+.ok {
+  background: #f0fdf4;
+  border-inline-start: 4px solid #22c55e;
+  color: var(--ok);
+  padding: 12px;
+  border-radius: 6px;
+  margin: 12px 0;
+}
+
+ul {
+  padding-inline-start: 20px;
+}

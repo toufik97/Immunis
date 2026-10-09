@@ -8,7 +8,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest run --watch",
-    "serve": "tsx src/server.ts"
+    "serve": "tsx src/server.ts",
+    "web:dev": "npm --prefix app/web run dev",
+    "web:build": "npm --prefix app/web run build"
   },
   "keywords": [],
   "author": "",
