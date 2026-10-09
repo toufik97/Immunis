@@ -54,6 +54,16 @@ function dedupeIssues(issues: GateIssue[]): GateIssue[] {
   });
 }
 
+/** Products of the first planned visit after the recording date (session prep). */
+function nextProducts(
+  result: Pick<ReturnType<typeof evaluatePatient>, "visitPlan">,
+  afterDate: string
+): string[] {
+  const visits = result.visitPlan.visits;
+  const upcoming = visits.find((v) => v.date > afterDate) ?? visits[0];
+  return upcoming?.products ?? [];
+}
+
 /**
  * Clinical gate around visit recording (the engine as gatekeeper, not display).
  * Only CENTRE doses are gated — they are administered here, now, under our
@@ -173,7 +183,10 @@ export function recordVisit(
     throw new RecordGateError(422, soft.length > 0 ? soft : unwaived);
   }
 
-  const encounter = recordEncounter(db, input);
+  const encounter = recordEncounter(db, {
+    ...input,
+    expectedProducts: nextProducts(result, input.date),
+  });
 
   // One audit row per waived dose (not per counter: PENTA trips DTP/HB/Hib together).
   const waivedByDose = new Map<number, GateIssue[]>();

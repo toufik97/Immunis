@@ -6,6 +6,10 @@ import { addLot } from "../../src/infra/repos/stock";
 import { listDosesByChild } from "../../src/infra/repos/encounters";
 import { listOverridesByChild } from "../../src/infra/repos/audit";
 import { recordVisit, RecordGateError } from "../../src/app/record-visit";
+import { evaluatePatient } from "../../src/engine";
+import { parseDate } from "../../src/engine/duration";
+import { toEngineHistory } from "../../src/app/evaluate-child";
+import { listDue } from "../../src/infra/repos/appointments";
 
 const pack = loadSchedulePack("MA");
 
@@ -35,9 +39,18 @@ describe("record gate (engine cross-check)", () => {
       date: "2026-03-01",
       screening: "VACCINATE",
       doses: [{ ...dose("PENTA", "2026-03-01"), lotId: penta.id }],
+      nextAppointmentDate: "2026-04-01",
     });
     expect(encounter.id).toBeTruthy();
     expect(listDosesByChild(db, child.id)).toHaveLength(1);
+    // The appointment carries the planner's next-visit products (session prep).
+    const history = toEngineHistory(listDosesByChild(db, child.id));
+    const plan = evaluatePatient({ birthDate: child.birthDate }, history, pack, parseDate("2026-03-01"), {});
+    const want = (plan.visitPlan.visits.find((v) => v.date > "2026-03-01") ?? plan.visitPlan.visits[0])?.products ?? [];
+    expect(want.length).toBeGreaterThan(0);
+    const due = listDue(db, "2026-04-01");
+    expect(due).toHaveLength(1);
+    expect(due[0].expectedProducts).toEqual(want);
     db.close();
   });
 

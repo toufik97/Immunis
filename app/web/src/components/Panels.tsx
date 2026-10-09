@@ -1,10 +1,100 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api } from "../api";
+import { api, type Appointment } from "../api";
 
 function today(): string {
   const n = new Date();
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+}
+
+interface Row {
+  id: string;
+  localId: string;
+  name: string;
+  address: string;
+  dueDate: string;
+  products: string[];
+}
+
+function toRow(a: Appointment): Row {
+  return {
+    id: a.id,
+    localId: (a.localIds ?? []).map((l) => l.value).join(" ") || "—",
+    name: a.childName ?? a.childId,
+    address: a.address ?? "—",
+    dueDate: a.dueDate,
+    products: a.expectedProducts ?? [],
+  };
+}
+
+type SortKey = "localId" | "name" | "dueDate";
+
+/** Sortable, searchable, filterable person list shared by sessions and no-shows. */
+function PersonTable({ rows, showDue }: { rows: Row[]; showDue: boolean }) {
+  const { t } = useTranslation();
+  const [query, setQuery] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("dueDate");
+  const [asc, setAsc] = useState(true);
+  const [product, setProduct] = useState("all");
+
+  const allProducts = [...new Set(rows.flatMap((r) => r.products))].sort();
+  const q = query.trim().toLowerCase();
+  const filtered = rows
+    .filter(
+      (r) =>
+        (!q || r.name.toLowerCase().includes(q) || r.localId.toLowerCase().includes(q) || r.address.toLowerCase().includes(q)) &&
+        (product === "all" || r.products.includes(product))
+    )
+    .sort((a, b) => {
+      const cmp = a[sortKey].localeCompare(b[sortKey]);
+      return asc ? cmp : -cmp;
+    });
+
+  function header(key: SortKey, label: string) {
+    return (
+      <th onClick={() => (sortKey === key ? setAsc(!asc) : (setSortKey(key), setAsc(true)))} style={{ cursor: "pointer" }}>
+        {label} {sortKey === key ? (asc ? "▲" : "▼") : ""}
+      </th>
+    );
+  }
+
+  return (
+    <div>
+      <div className="row">
+        <input placeholder={t("table.search")} value={query} onChange={(e) => setQuery(e.target.value)} />
+        <select value={product} onChange={(e) => setProduct(e.target.value)}>
+          <option value="all">{t("table.all")}</option>
+          {allProducts.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </select>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            {header("localId", t("table.localId"))}
+            {header("name", t("table.name"))}
+            <th>{t("table.address")}</th>
+            {showDue && header("dueDate", t("table.due"))}
+            <th>{t("table.doses")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.map((r) => (
+            <tr key={r.id}>
+              <td>{r.localId}</td>
+              <td>{r.name}</td>
+              <td>{r.address}</td>
+              {showDue && <td>{r.dueDate}</td>}
+              <td>{r.products.join(", ") || "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 export function SessionPanel() {
@@ -39,13 +129,7 @@ export function SessionPanel() {
         ) : (
           <div>
             <p>{t("session.expected", { n: data.counters.children })}</p>
-            <ul>
-              {data.expected.map((a) => (
-                <li key={a.id}>
-                  {a.childName ?? a.childId} — {(a.expectedProducts ?? []).join(", ") || "—"}
-                </li>
-              ))}
-            </ul>
+            <PersonTable rows={data.expected.map(toRow)} showDue={false} />
             <p>{JSON.stringify(data.counters.dosesByProduct)}</p>
           </div>
         ))}
@@ -82,13 +166,7 @@ export function NoShowPanel() {
       {list.length === 0 ? (
         <p className="hint">{t("noshow.empty")}</p>
       ) : (
-        <ul>
-          {list.map((a) => (
-            <li key={a.id}>
-              {a.childName ?? a.childId} — {t("noshow.due", { date: a.dueDate })}
-            </li>
-          ))}
-        </ul>
+        <PersonTable rows={list.map(toRow)} showDue />
       )}
     </section>
   );

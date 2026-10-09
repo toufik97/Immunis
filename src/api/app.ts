@@ -223,6 +223,7 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
       ...a,
       childName: c ? `${c.givenName} ${c.familyName}` : a.childId,
       localIds: c?.localIds ?? [],
+      address: c?.address ?? null,
     };
   };
 

@@ -17,6 +17,7 @@ describe("api", () => {
         familyName: "El Amrani",
         givenName: "Yasmine",
         birthDate: "2025-03-14",
+        address: "Rue 12",
         centreId: "CS01",
         firstVisitYear: "2026",
       },
@@ -67,9 +68,10 @@ describe("api", () => {
 
     const session = await app.inject({ method: "GET", url: "/api/sessions?date=2026-11-09" });
     expect(session.statusCode).toBe(200);
-    const body = session.json() as { expected: { childName: string }[] };
+    const body = session.json() as { expected: { childName: string; address: string; expectedProducts: string[] }[] };
     expect(body.expected).toHaveLength(1);
     expect(body.expected[0].childName).toMatch(/Yasmine/);
+    expect(body.expected[0].address).toBe("Rue 12");
 
     const noShows = await app.inject({ method: "GET", url: "/api/no-shows?asOf=2026-12-01" });
     expect((noShows.json() as unknown[])).toHaveLength(1);

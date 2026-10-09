@@ -12,6 +12,8 @@ export interface NewEncounter {
   heightCm?: number;
   doses?: DoseRecord[];
   nextAppointmentDate?: string;
+  /** Planner's products for the next visit, stored on the appointment (session prep). */
+  expectedProducts?: string[];
 }
 
 interface DoseRow {
@@ -108,9 +110,10 @@ export function recordEncounter(db: Database.Database, input: NewEncounter): Enc
     }
 
     if (parsed.nextAppointmentDate) {
+      const expected = (input.expectedProducts ?? []).filter((p) => typeof p === "string" && p.length > 0);
       db.prepare(
         "INSERT INTO appointments (id, child_id, due_date, expected_products, kept) VALUES (?, ?, ?, ?, NULL)"
-      ).run(randomUUID(), parsed.childId, parsed.nextAppointmentDate, "[]");
+      ).run(randomUUID(), parsed.childId, parsed.nextAppointmentDate, JSON.stringify(expected));
     }
 
     db.prepare("INSERT INTO outbox (id, kind, payload, created_at, synced_at) VALUES (?, ?, ?, ?, NULL)").run(

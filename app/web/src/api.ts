@@ -42,6 +42,7 @@ export interface Appointment {
   childId: string;
   childName?: string;
   localIds?: { centreId: string; value: string }[];
+  address?: string | null;
   dueDate: string;
   expectedProducts: string[];
   kept: boolean | null;
