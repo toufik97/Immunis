@@ -22,3 +22,6 @@ docs/morocco/draft/bug.md
 # Local agent skills (untracked)
 .agents/
 skills-lock.json
+
+# Local centre databases (per-site runtime files)
+data/
