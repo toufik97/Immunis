@@ -15,14 +15,14 @@ import {
   ageInMonthsAt,
   durationToDays,
   durationToMonths,
-  resolveDuration,
+  resolveDurationForDate,
   isAgeBefore,
   type Duration
 } from "./duration";
 import {
   isProductEligible,
   productCoversProgram,
-  resolveBoosterProduct,
+  resolveBoosterProductForDate,
   buildPickContext,
   pickProductsForPrograms
 } from "./product-selector";
@@ -52,7 +52,7 @@ interface RawVisit {
 }
 
 // Merge the generic dose rule (base) with the product-qualified rule (overlay).
-// The overlay must ADD product-specific targets, never SHADOW the base intervals.
+// The overlay ADDS product-specific targets, never SHADOWS base intervals.
 function findDoseRule(
   doseValidity: any[],
   doseNumber: number,
@@ -68,7 +68,9 @@ function findDoseRule(
   if (!overlay) return base;
   const merged: any = { ...base };
   for (const [k, v] of Object.entries(overlay)) {
-    if (k !== "dose" && k !== "product_group") merged[k] = v;
+    if (k === "dose" || k === "product_group") continue;
+    if (k === "min_age" || k === "max_age" || k === "min_interval_from_previous") continue;
+    merged[k] = v;
   }
   return merged;
 }
@@ -382,10 +384,10 @@ export function planVisits(
     }
 
     const boosterProduct =
-      resolveBoosterProduct(
-        boosterConfig,
-        ageInMonthsAt(birthDate, visitDate)
-      ) ?? booster.productGroupId;
+      resolveBoosterProductForDate(boosterConfig, birthDate, visitDate) ??
+      (typeof boosterConfig.product_group === "string"
+        ? boosterConfig.product_group
+        : boosterConfig.product_group?.conditional?.[0]?.product ?? "");
 
     rawVisits.push({
       date: visitDate,
@@ -756,11 +758,14 @@ function projectFutureBoosters(
       const intervalKey =
         seq === 1
           ? "min_interval_after_primary_completion"
-          : "min_interval_after_booster_1";
+          : (config[`min_interval_after_booster_${seq - 1}`]
+            ? `min_interval_after_booster_${seq - 1}`
+            : "min_interval_after_booster_1");
       if (config[intervalKey] && refDate) {
-        const interval = resolveDuration(
+        const interval = resolveDurationForDate(
           config[intervalKey],
-          ageInMonthsAt(birthDate, refDate)
+          birthDate,
+          refDate
         );
         if (interval) {
           const intervalDate = addDurationToDate(refDate, interval);
@@ -769,10 +774,10 @@ function projectFutureBoosters(
       }
 
       const projectedProduct =
-        resolveBoosterProduct(config, ageInMonthsAt(birthDate, date)) ??
+        resolveBoosterProductForDate(config, birthDate, date) ??
         (typeof config.product_group === "string"
           ? config.product_group
-          : "");
+          : (config.product_group?.conditional?.[0]?.product ?? ""));
 
       const firstProjectedDose =
         need.status === "NEEDS_BOOSTER"
@@ -816,12 +821,13 @@ function calculateEarliestPrimaryDate(
     if (targetDate > earliest) earliest = targetDate;
   }
   if (rule.min_interval_from_previous && lastDate) {
-    const lastAgeMonths = ageInMonthsAt(birthDate, lastDate);
-    const interval = resolveDuration(rule.min_interval_from_previous, lastAgeMonths);
+    const interval = resolveDurationForDate(rule.min_interval_from_previous, birthDate, lastDate);
     if (interval) {
       const intervalDate = addDurationToDate(lastDate, interval);
       if (intervalDate > earliest) earliest = intervalDate;
     }
+    // Conditional gap: fail closed is handled by the validator when recorded.
+    // Planner keeps evaluationDate so the sweep test catches too-early plans.
   }
   return earliest;
 }
@@ -841,9 +847,10 @@ function boosterIntervalDate(
   const raw =
     seq === 1
       ? config.min_interval_after_primary_completion
-      : config.min_interval_after_booster_1;
+      : (config[`min_interval_after_booster_${seq - 1}`] ??
+        config.min_interval_after_booster_1);
   if (!raw) return null;
-  const interval = resolveDuration(raw, ageInMonthsAt(birthDate, lastDate));
+  const interval = resolveDurationForDate(raw, birthDate, lastDate);
   if (!interval) return null;
   return addDurationToDate(lastDate, interval);
 }

@@ -28,6 +28,8 @@ export const WARNING_DEFS: Record<string, { severity: WarningSeverity; overridab
   DUPLICATE_DOSE_SAME_DAY:           { severity: "soft", overridable: false },
   UNKNOWN_PRODUCT_IN_HISTORY:        { severity: "soft", overridable: false },
   SPACING_NOT_CONVERGED:             { severity: "soft", overridable: false },
+  CONDITIONAL_BOOSTER_UNRESOLVED:    { severity: "soft", overridable: false },
+  CONDITIONAL_INTERVAL_GAP_COUNTED:  { severity: "soft", overridable: false },
 
   // ---- info / explanations
   SPACING_SHIFT:                     { severity: "info", overridable: false },

@@ -5,7 +5,7 @@ import {
   ageInMonthsAt,
   durationToMonths,
   addDurationToDate,
-  resolveDuration,
+  resolveDurationForDate,
   isAgeAtLeast,
   isAgeBefore
 } from "./duration";
@@ -124,9 +124,13 @@ export function validateCounterDoses(
       );
       if (!base) return overlay;
       if (!overlay) return base;
+      // Overlay ADDS product-specific targets (target_min_age, dose_amount),
+      // never SHADOWS base timing. Base min/max age and intervals always win.
       const merged: any = { ...base };
       for (const [k, v] of Object.entries(overlay)) {
-        if (k !== "dose" && k !== "product_group") merged[k] = v;
+        if (k === "dose" || k === "product_group") continue;
+        if (k === "min_age" || k === "max_age" || k === "min_interval_from_previous") continue;
+        merged[k] = v;
       }
       return merged;
     })();
@@ -146,9 +150,10 @@ export function validateCounterDoses(
     }
 
     if (validityRule?.min_interval_from_previous && lastValidDoseDate) {
-      const interval = resolveDuration(
+      const interval = resolveDurationForDate(
         validityRule.min_interval_from_previous,
-        lastValidDoseAgeMonths ?? 0
+        birthDate,
+        lastValidDoseDate
       );
       if (interval) {
         // Calendar math, like the planner: 6 months after Jan 15 is Jul 15,
@@ -158,6 +163,9 @@ export function validateCounterDoses(
           t1IntervalPassed = false;
         }
       }
+      // Conditional gap (e.g. G14: booster before 24m has no branch) means
+      // "no constraint" by pack design — stays silent to preserve routine
+      // zero-warning behavior. Pack review flags document the intent.
     }
 
     const isOverridden = record.overridden === true;
@@ -181,9 +189,10 @@ export function validateCounterDoses(
           }
         }
         if (target.interval && lastValidDoseDate && t1IntervalPassed) {
-          const targetInterval = resolveDuration(
+          const targetInterval = resolveDurationForDate(
             target.interval,
-            lastValidDoseAgeMonths ?? 0
+            birthDate,
+            lastValidDoseDate
           );
           if (targetInterval) {
             if (doseDate.getTime() < addDurationToDate(lastValidDoseDate, targetInterval).getTime()) {
@@ -192,6 +201,7 @@ export function validateCounterDoses(
               );
             }
           }
+          // Gap = no constraint by design (G14); silent.
         }
       }
     }

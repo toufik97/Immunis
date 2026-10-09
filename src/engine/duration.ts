@@ -86,17 +86,20 @@ export function durationToDays(duration?: Duration | null): number {
 export function describeDuration(duration?: Duration | null): string {
   if (!duration) return "0 days";
   if (duration.birth) return "birth";
-  if (duration.years) return `${duration.years} year${duration.years === 1 ? "" : "s"}`;
+  const parts: string[] = [];
+  if (duration.years) parts.push(`${duration.years} year${duration.years === 1 ? "" : "s"}`);
   if (duration.months) {
-    if (duration.months % 12 === 0) {
+    if (duration.months % 12 === 0 && parts.length === 0) {
       const y = duration.months / 12;
-      return `${y} year${y === 1 ? "" : "s"}`;
+      parts.push(`${y} year${y === 1 ? "" : "s"}`);
+    } else {
+      parts.push(`${duration.months} months`);
     }
-    return `${duration.months} months`;
   }
-  if (duration.weeks) return `${duration.weeks} weeks`;
-  if (duration.days) return `${duration.days} days`;
-  return "0 days";
+  if (duration.weeks) parts.push(`${duration.weeks} weeks`);
+  if (duration.days) parts.push(`${duration.days} days`);
+  if (parts.length === 0) return "0 days";
+  return parts.join(" ");
 }
 
 export function ageInMonthsAt(birthDate: Date, evaluationDate: Date): number {
@@ -178,4 +181,45 @@ export function resolveDuration(
   }
 
   return null;
+}
+
+/** True when a conditional interval has branches but none matches this age.
+ * Callers must fail closed (invalid dose / needs review), never treat as
+ * "no wait needed". */
+export function isConditionalUnmatched(rule: any, contextAgeMonths: number): boolean {
+  if (!rule?.conditional) return false;
+  return resolveDuration(rule, contextAgeMonths) === null;
+}
+
+/** Calendar-exact branch match: avoids float-month drift for week-based rules.
+ * Uses birthDate + reference date instead of approximate months. */
+export function resolveDurationForDate(
+  rule: any,
+  birthDate: Date,
+  referenceDate: Date
+): Duration | null {
+  if (!rule) return null;
+  if (!rule.conditional) return rule as Duration;
+  for (const condition of rule.conditional) {
+    const ageCondition = condition?.when?.age_at_previous_dose;
+    if (!ageCondition) continue;
+    let matches = true;
+    if (ageCondition.from) {
+      if (!isAgeAtLeast(birthDate, referenceDate, ageCondition.from)) matches = false;
+    }
+    if (ageCondition.to_before) {
+      if (!isAgeBefore(birthDate, referenceDate, ageCondition.to_before)) matches = false;
+    }
+    if (matches) return condition.interval as Duration;
+  }
+  return null;
+}
+
+export function isConditionalUnmatchedForDate(
+  rule: any,
+  birthDate: Date,
+  referenceDate: Date
+): boolean {
+  if (!rule?.conditional) return false;
+  return resolveDurationForDate(rule, birthDate, referenceDate) === null;
 }

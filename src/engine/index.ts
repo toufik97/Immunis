@@ -109,7 +109,9 @@ function applyDoseCaps(
     const program: any = (pack.programs as any)[need.programId];
     const caps: any[] = program?.dose_caps ?? [];
     for (const cap of caps) {
-      if (!isAgeBefore(birthDate, evaluationDate, cap.before_age)) continue;
+      // Count doses given before the cap age, no matter how old the patient
+      // is now. The old `continue` skipped the guard exactly when past the
+      // limit, hiding hyperimmunization.
       const validation = validations[cap.counter];
       const dosesBeforeCapAge = (validation?.doses ?? []).filter((d: any) => {
         if (!d.valid) return false;
@@ -120,10 +122,14 @@ function applyDoseCaps(
         );
       }).length;
       if (dosesBeforeCapAge >= Number(cap.max_doses)) {
-        need.dosesNeeded = 0;
-        need.boosterSequence = null;
-        need.status = "COMPLETE";
-        need.action = "complete";
+        // Never overwrite UNDETERMINED: no matching rule is a signal the
+        // future system must see, not silently turn into COMPLETE.
+        if (need.status !== "UNDETERMINED") {
+          need.dosesNeeded = 0;
+          need.boosterSequence = null;
+          need.status = "COMPLETE";
+          need.action = "complete";
+        }
         need.warnings.push(
           `DOSE_CAP_REACHED_PLANNING_STOPPED: ${cap.max_doses} doses already given before ${describeDuration(cap.before_age)}; no further dose planned (hyperimmunization guard).`
         );

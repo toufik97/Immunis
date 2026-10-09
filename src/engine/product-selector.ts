@@ -13,6 +13,7 @@ import {
   parseDate,
   formatDate,
   durationToMonths,
+  ageInMonthsAt,
   ageThresholdDate,
   isAgeAtLeast,
   isAgeBefore
@@ -85,7 +86,11 @@ export function selectProducts(
     );
     if (alreadyGivenAsDoseZero) continue;
 
-    if (!isAgeBefore(birthDate, evaluationDate, birthDose.plan_if_age_below)) {
+    // Missing plan_if_age_below means "plan when newborn", not "never plan".
+    if (
+      birthDose.plan_if_age_below &&
+      !isAgeBefore(birthDate, evaluationDate, birthDose.plan_if_age_below)
+    ) {
       continue;
     }
 
@@ -175,22 +180,31 @@ export function selectProducts(
       continue;
     }
 
+    // Resolve conditional product now so downstream systems never see "".
+    // Uses evaluation-date age; planner re-resolves at the actual visit date.
+    let selectedProduct: string | null =
+      typeof boosterConfig.product_group === "string"
+        ? boosterConfig.product_group
+        : resolveBoosterProductForDate(boosterConfig, birthDate, evaluationDate);
+    if (!selectedProduct) {
+      const fallback =
+        boosterConfig.product_group?.conditional?.[0]?.product ?? null;
+      warnings.push(
+        `CONDITIONAL_BOOSTER_UNRESOLVED: no age branch matched for ${need.programId} booster ${boosterSequence} at evaluation age; using ${fallback ?? "first plannable"} (needs review).`
+      );
+      selectedProduct = fallback;
+    }
+    if (!selectedProduct) continue;
+
     boosterPlans.push({
       programId: need.programId,
-      productGroupId:
-        typeof boosterConfig.product_group === "string"
-          ? boosterConfig.product_group
-          : "",
+      productGroupId: selectedProduct,
       boosterSequence,
       role: `booster_${boosterSequence}`
     });
 
     reasoning.push(
-      `Booster ${boosterSequence} needed for ${need.programId}: selected ${
-        typeof boosterConfig.product_group === "string"
-          ? boosterConfig.product_group
-          : "product chosen by age at dose"
-      }`
+      `Booster ${boosterSequence} needed for ${need.programId}: selected ${selectedProduct}`
     );
   }
 
@@ -519,5 +533,26 @@ export function resolveBoosterProduct(
     }
   }
 
+  return null;
+}
+
+/** Calendar-exact variant: matches age branches with real dates, no float drift. */
+export function resolveBoosterProductForDate(
+  config: any,
+  birthDate: Date,
+  doseDate: Date
+): string | null {
+  const pg = config?.product_group;
+  if (typeof pg === "string") return pg;
+  if (pg?.conditional) {
+    for (const branch of pg.conditional) {
+      const c = branch?.when?.age_at_dose;
+      if (!c) continue;
+      let matches = true;
+      if (c.from && !isAgeAtLeast(birthDate, doseDate, c.from)) matches = false;
+      if (c.to_before && !isAgeBefore(birthDate, doseDate, c.to_before)) matches = false;
+      if (matches) return branch.product ?? null;
+    }
+  }
   return null;
 }

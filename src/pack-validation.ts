@@ -60,6 +60,20 @@ export function validatePack(pack: SchedulePack): PackValidation {
       warnings.push(`counter ${c.id} is not used by any program`);
     }
   }
+  // Shared counters: only the first program's validity rules are used.
+  // Fail the pack so the future system never gets silent wrong intervals.
+  const ownersByCounter = new Map<string, string[]>();
+  for (const p of programs) {
+    const cid = p.program?.counter;
+    const pid = p.program?.id;
+    if (!cid || !pid) continue;
+    ownersByCounter.set(cid, [...(ownersByCounter.get(cid) ?? []), pid]);
+  }
+  for (const [cid, owners] of ownersByCounter) {
+    if (owners.length > 1) {
+      errors.push(`counter "${cid}" is shared by ${owners.join(", ")}; only the first program's validity rules apply — give each program its own counter`);
+    }
+  }
 
   // --- programs
   for (const program of programs) {

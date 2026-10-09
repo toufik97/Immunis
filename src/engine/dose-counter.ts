@@ -85,12 +85,15 @@ function buildValidityContext(
       const config = policy[`booster_${seq}`];
       if (!config) break;
 
+      // Support booster_N specific intervals; fall back to booster_1 pattern.
+      const interval =
+        seq === 1
+          ? config.min_interval_after_primary_completion
+          : (config[`min_interval_after_booster_${seq - 1}`] ??
+            config.min_interval_after_booster_1);
       boosterTargets[seq] = {
         minAge: config.min_age,
-        interval:
-          seq === 1
-            ? config.min_interval_after_primary_completion
-            : config.min_interval_after_booster_1
+        interval
       };
     }
   }
