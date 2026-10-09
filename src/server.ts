@@ -182,7 +182,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log("Temporary vaccination engine UI");
+  console.log("Immunis UI");
   console.log("--------------------------------");
   console.log(`URL: http://localhost:${PORT}`);
   console.log(`Country pack: ${COUNTRY}`);

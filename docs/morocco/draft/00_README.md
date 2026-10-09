@@ -1,4 +1,4 @@
-# Morocco Vaccination Engine - Master Rules Document
+# Immunis - Master Rules Document
 Status: DRAFT - FOR NURSE REVIEW
 
 ## 1. Scope

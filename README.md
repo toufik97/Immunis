@@ -1,4 +1,4 @@
-# Morocco Vaccination Engine
+# Immunis
 
 Prototype of a vaccination recommendation engine for the Moroccan vaccination schedule.
 

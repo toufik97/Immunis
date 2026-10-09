@@ -2,7 +2,7 @@ import { loadSchedulePack } from "./loader";
 import { evaluatePatient } from "./engine";
 import { parseDate } from "./engine/duration";
 
-console.log("=== Global Generic Vaccination Engine ===\n");
+console.log("=== Immunis ===\n");
 
 const pack = loadSchedulePack("MA");
 
