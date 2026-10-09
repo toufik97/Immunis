@@ -11,6 +11,7 @@ import { addLot, listLots, checkLotUsable } from "../infra/repos/stock";
 import { createAppointment, listDue, markAppointment, listNoShows } from "../infra/repos/appointments";
 import { insertOverride, listOverridesByChild } from "../infra/repos/audit";
 import { countCentreDosesByProduct } from "../app/analytics";
+import { exportCentre, listPendingOutbox, ackOutbox } from "../infra/sync/sync";
 import { DoseRecordSchema, ScreeningResultSchema } from "../domain/encounter";
 
 const ChildInput = z.object({
@@ -266,6 +267,23 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
 
   // ---- analytics (CENTRE only) ----
   app.get("/api/analytics/doses", async () => countCentreDosesByProduct(db));
+
+  // ---- backup & sync ----
+  app.get("/api/backup", async () => exportCentre(db));
+
+  app.get("/api/outbox", async () => listPendingOutbox(db));
+
+  app.post("/api/outbox/:id/ack", async (req, reply) => {
+    try {
+      const { syncedAt } = z
+        .object({ syncedAt: z.string().min(1) })
+        .parse(req.body);
+      ackOutbox(db, (req.params as Record<string, string>).id, syncedAt);
+      return { ok: true };
+    } catch (e) {
+      sendError(reply, e);
+    }
+  });
 
   // ---- clinical evaluation (registry history or raw playground history) ----
   app.post("/api/evaluate", async (req, reply) => {

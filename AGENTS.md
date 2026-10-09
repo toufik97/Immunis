@@ -10,7 +10,8 @@ Spec is French; all code, docs, and responses are English. UI supports en/fr/ar.
 - `npm run typecheck` — `tsc --noEmit` (must pass)
 - `npm test` — `vitest run` (engine: `tests/engine/`, 23 suites)
 - `npm run dev` — `tsx src/index.ts` (engine demo)
-- `npm run serve` — `tsx src/server.ts` (serves `app/web/` + API)
+- `npm run serve` — `tsx src/server.ts` (serves `app/web/dist` + API, needs `DB_PATH`)
+- `npm run web:dev` / `npm run web:build` — Vite dev (proxy `/api → :5173`) / prod build to `app/web/dist`
 
 ## Architecture
 
