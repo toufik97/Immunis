@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { openTestDb } from "./db-helper";
-import { addLot, getLot, consumeLot, checkLotUsable } from "../../src/infra/repos/stock";
+import { addLot, getLot, consumeLot, checkLotUsable, usableLotsFor } from "../../src/infra/repos/stock";
 
 describe("stock lots", () => {
   it("adds a lot and consumes from it", () => {
@@ -50,6 +50,20 @@ describe("stock lots", () => {
     expect(checkLotUsable(db, expired.id, "2026-10-09")).toBe("EXPIRED");
     expect(checkLotUsable(db, warm.id, "2026-10-09")).toBe("COLD_CHAIN_BROKEN");
     expect(() => consumeLot(db, expired.id, 1, "2026-10-09")).toThrow();
+    db.close();
+  });
+
+  it("lists usable lots earliest-expiry-first, hiding expired/broken/empty", () => {
+    const db = openTestDb();
+    const mk = (lotNumber: string, expiryDate: string, coldChainOk: boolean, qtyOnHand: number) =>
+      addLot(db, { productGroupId: "PENTA", lotNumber, expiryDate, coldChainOk, qtyOnHand });
+    const late = mk("LATE", "2027-06-01", true, 5);
+    mk("OLD", "2020-01-01", true, 5);
+    mk("WARM", "2027-01-01", false, 5);
+    mk("EMPTY", "2027-01-01", true, 0);
+    const early = mk("EARLY", "2027-01-01", true, 5);
+    const usable = usableLotsFor(db, "PENTA", "2026-10-09");
+    expect(usable.map((l) => l.id)).toEqual([early.id, late.id]);
     db.close();
   });
 });

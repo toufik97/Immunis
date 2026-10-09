@@ -10,7 +10,7 @@ import { registerChild } from "../app/register-child";
 import { listDosesByChild } from "../infra/repos/encounters";
 import { nowIso, todayLocal } from "../infra/time";
 import { recordVisit, RecordGateError } from "../app/record-visit";
-import { addLot, listLots, checkLotUsable } from "../infra/repos/stock";
+import { addLot, listLots, checkLotUsable, usableLotsFor } from "../infra/repos/stock";
 import { createAppointment, markAppointment } from "../infra/repos/appointments";
 import { noShowsFor, sessionFor } from "../app/sessions";
 import { insertOverride, listOverridesByChild } from "../infra/repos/audit";
@@ -201,9 +201,17 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
     }
   });
 
-  app.get("/api/lots", async (req) => {
-    const product = (req.query as Record<string, string>).product;
-    return listLots(db, product || undefined);
+  app.get("/api/lots", async (req, reply) => {
+    const q = req.query as Record<string, string>;
+    const product = q.product || undefined;
+    if (q.usableOn !== undefined) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(q.usableOn)) {
+        reply.code(400).send({ error: "usableOn must be YYYY-MM-DD" });
+        return;
+      }
+      return usableLotsFor(db, product, q.usableOn);
+    }
+    return listLots(db, product);
   });
 
   app.get("/api/lots/:id/usable", async (req) => {

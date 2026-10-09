@@ -62,6 +62,31 @@ export function listLots(db: Database.Database, productGroupId?: string): Lot[] 
 
 export type LotProblem = "OK" | "NOT_FOUND" | "EXPIRED" | "COLD_CHAIN_BROKEN" | "OUT_OF_STOCK";
 
+/**
+ * Usable lots for administration (FR-4.4): not expired on the visit date,
+ * cold chain intact, stock remaining — earliest expiry first (FEFO).
+ */
+export function usableLotsFor(
+  db: Database.Database,
+  productGroupId: string | undefined,
+  onDate = todayLocal()
+): Lot[] {
+  const rows = (
+    productGroupId
+      ? db
+          .prepare(
+            "SELECT * FROM lots WHERE product_group_id = ? AND expiry_date >= ? AND cold_chain_ok = 1 AND qty_on_hand > 0 ORDER BY expiry_date"
+          )
+          .all(productGroupId, onDate)
+      : db
+          .prepare(
+            "SELECT * FROM lots WHERE expiry_date >= ? AND cold_chain_ok = 1 AND qty_on_hand > 0 ORDER BY product_group_id, expiry_date"
+          )
+          .all(onDate)
+  ) as LotRow[];
+  return rows.map(toLot);
+}
+
 /** Pre-administration check (FR-4.4): expiry, integrity, cold chain, lot. */
 export function checkLotUsable(
   db: Database.Database,

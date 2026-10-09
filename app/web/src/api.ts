@@ -118,8 +118,14 @@ export const api = {
       `/api/sessions?date=${date}`
     ),
   noShows: (asOf: string) => req<Appointment[]>(`/api/no-shows?asOf=${asOf}`),
-  lots: (product?: string) =>
-    req<Lot[]>(product ? `/api/lots?product=${encodeURIComponent(product)}` : "/api/lots"),
+  lots: (product?: string, usableOn?: string) =>
+    req<Lot[]>(
+      product
+        ? `/api/lots?product=${encodeURIComponent(product)}${usableOn ? `&usableOn=${usableOn}` : ""}`
+        : usableOn
+          ? `/api/lots?usableOn=${usableOn}`
+          : "/api/lots"
+    ),
   addLot: (body: Record<string, unknown>) =>
     req<Lot>("/api/lots", { method: "POST", body: JSON.stringify(body) }),
   addOverride: (childId: string, body: Record<string, string>) =>

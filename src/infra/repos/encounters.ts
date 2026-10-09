@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import { EncounterSchema, type Encounter, type DoseRecord } from "../../domain/encounter";
-import { checkLotUsable, consumeLot } from "./stock";
+import { consumeLot } from "./stock";
 import { todayLocal, nowIso } from "../time";
 
 /** Re-exported for existing callers; new code imports from `../time`. */
@@ -99,8 +99,6 @@ export function storeEncounter(
   for (const dose of parsed.doses) {
     if (dose.origin === "CENTRE") {
       if (!dose.lotId) throw new Error("CENTRE dose requires a lot (FR-4.3)");
-      const problem = checkLotUsable(db, dose.lotId, parsed.date);
-      if (problem !== "OK") throw new Error(`lot ${dose.lotId} is not usable: ${problem}`);
       consumeLot(db, dose.lotId, 1, parsed.date);
     }
     db.prepare(

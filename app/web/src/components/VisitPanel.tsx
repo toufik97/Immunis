@@ -46,6 +46,7 @@ export default function VisitPanel({ child, products, onDone }: Props) {
   }, [child.id]);
 
   // Load usable lots for every product used by a CENTRE dose row.
+  // Server filters expiry + cold chain + stock (FEFO); the picker shows them as-is.
   useEffect(() => {
     const needed = [...new Set(doses.filter((d) => d.origin === "CENTRE").map((d) => d.productGroupId))].filter(
       (p) => p && !(p in lotsByProduct)
@@ -53,7 +54,7 @@ export default function VisitPanel({ child, products, onDone }: Props) {
     if (needed.length === 0) return;
     let cancelled = false;
     void (async () => {
-      const entries = await Promise.all(needed.map(async (p) => [p, await api.lots(p)] as const));
+      const entries = await Promise.all(needed.map(async (p) => [p, await api.lots(p, today())] as const));
       if (!cancelled) setLotsByProduct((m) => ({ ...m, ...Object.fromEntries(entries) }));
     })();
     return () => {

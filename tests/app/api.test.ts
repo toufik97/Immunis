@@ -141,4 +141,26 @@ describe("api", () => {
     expect(analytics.json()).toEqual({});
     db.close();
   });
+
+  it("filters lots by usability date", async () => {
+    const db = openTestDb();
+    const app = buildApp(db, pack);
+    const good = await app.inject({
+      method: "POST",
+      url: "/api/lots",
+      payload: { productGroupId: "PENTA", lotNumber: "GOOD", expiryDate: "2027-01-01", coldChainOk: true, qtyOnHand: 5 },
+    });
+    expect(good.statusCode).toBe(201);
+    await app.inject({
+      method: "POST",
+      url: "/api/lots",
+      payload: { productGroupId: "PENTA", lotNumber: "OLD", expiryDate: "2020-01-01", coldChainOk: true, qtyOnHand: 5 },
+    });
+    const usable = await app.inject({ method: "GET", url: "/api/lots?product=PENTA&usableOn=2026-10-09" });
+    expect(usable.statusCode).toBe(200);
+    expect((usable.json() as { lotNumber: string }[]).map((l) => l.lotNumber)).toEqual(["GOOD"]);
+    const badDate = await app.inject({ method: "GET", url: "/api/lots?usableOn=not-a-date" });
+    expect(badDate.statusCode).toBe(400);
+    db.close();
+  });
 });
