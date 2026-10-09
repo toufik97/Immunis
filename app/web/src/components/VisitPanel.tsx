@@ -15,15 +15,36 @@ function today(): string {
 
 export default function VisitPanel({ child, products, onDone }: Props) {
   const { t } = useTranslation();
-  const [birthDate, setBirthDate] = useState(child.birthDate);
+  // Registry birth date is read-only: identity is confirmed, never edited here.
+  const [confirmed, setConfirmed] = useState(false);
   const [screening, setScreening] = useState("VACCINATE");
   const [weightKg, setWeightKg] = useState("");
+  const [heightCm, setHeightCm] = useState("");
+  const [history, setHistory] = useState<Dose[]>([]);
   const [doses, setDoses] = useState<Dose[]>([]);
   const [lotsByProduct, setLotsByProduct] = useState<Record<string, Lot[]>>({});
   const [nextRdv, setNextRdv] = useState("");
+  const [projection, setProjection] = useState<"next" | "full">("next");
   const [result, setResult] = useState<Awaited<ReturnType<typeof api.evaluate>> | null>(null);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+
+  // Recorded history, shown read-only so the nurse never re-enters it.
+  useEffect(() => {
+    let cancelled = false;
+    setHistory([]);
+    void api
+      .childDoses(child.id)
+      .then((rows) => {
+        if (!cancelled) setHistory(rows);
+      })
+      .catch((e) => {
+        if (!cancelled) setErr(e instanceof Error ? e.message : String(e));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [child.id]);
 
   // Load usable lots for every product used by a CENTRE dose row.
   useEffect(() => {
@@ -60,9 +81,14 @@ export default function VisitPanel({ child, products, onDone }: Props) {
       const r = await api.evaluate({
         childId: child.id,
         evaluationDate: today(),
-        projection: "next",
+        projection,
       });
       setResult(r);
+      // Suggest the next appointment from the planner; the nurse may override.
+      if (!nextRdv) {
+        const upcoming = r.visitPlan.visits.find((v) => v.date > today()) ?? r.visitPlan.visits[0];
+        if (upcoming) setNextRdv(upcoming.date);
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     }
@@ -79,10 +105,11 @@ export default function VisitPanel({ child, products, onDone }: Props) {
     try {
       await api.recordEncounter({
         childId: child.id,
-        birthDate,
+        birthDate: child.birthDate,
         date: today(),
         screening,
         weightKg: weightKg ? Number(weightKg) : undefined,
+        heightCm: heightCm ? Number(heightCm) : undefined,
         doses,
         nextAppointmentDate: nextRdv || undefined,
       });
@@ -98,12 +125,11 @@ export default function VisitPanel({ child, products, onDone }: Props) {
       <h2>
         {child.givenName} {child.familyName} · {t("child.birthDate", { date: child.birthDate })}
       </h2>
-      <p className="hint">{t("visit.confirm")}</p>
+      <label className="check">
+        <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
+        {t("visit.identityVerified")}
+      </label>
       <div className="grid">
-        <label>
-          {t("register.birthDate")}
-          <input value={birthDate} onChange={(e) => setBirthDate(e.target.value)} type="date" />
-        </label>
         <label>
           {t("visit.screening")}
           <select value={screening} onChange={(e) => setScreening(e.target.value)}>
@@ -119,12 +145,40 @@ export default function VisitPanel({ child, products, onDone }: Props) {
           <input value={weightKg} onChange={(e) => setWeightKg(e.target.value)} type="number" step="0.1" />
         </label>
         <label>
+          {t("visit.height")}
+          <input value={heightCm} onChange={(e) => setHeightCm(e.target.value)} type="number" step="0.1" />
+        </label>
+        <label>
           {t("visit.nextRdv")}
           <input value={nextRdv} onChange={(e) => setNextRdv(e.target.value)} type="date" />
         </label>
       </div>
 
-      <h3>{t("visit.history")}</h3>
+      <h3>{t("visit.recordedDoses")}</h3>
+      {history.length === 0 ? (
+        <p className="hint">{t("visit.noRecorded")}</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>{t("visit.date")}</th>
+              <th>{t("visit.product")}</th>
+              <th>{t("visit.origin")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {history.map((d, i) => (
+              <tr key={i}>
+                <td>{d.administeredOn}</td>
+                <td>{d.productGroupId}</td>
+                <td>{t(`origin.${d.origin}`)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <h3>{t("visit.newDoses")}</h3>
       {doses.map((d, i) => (
         <div key={i}>
         <div className="row">
@@ -143,6 +197,7 @@ export default function VisitPanel({ child, products, onDone }: Props) {
           <input
             type="date"
             value={d.administeredOn}
+            max={today()}
             onChange={(e) =>
               setDoses((ds) => ds.map((x, j) => (j === i ? { ...x, administeredOn: e.target.value } : x)))
             }
@@ -197,10 +252,16 @@ export default function VisitPanel({ child, products, onDone }: Props) {
         <button className="secondary" onClick={addDose}>
           {t("visit.addDose")}
         </button>
-        <button onClick={evaluate}>{t("visit.evaluate")}</button>
-        <button onClick={record} disabled={screening !== "VACCINATE" && doses.length > 0}>
+        <button onClick={evaluate} disabled={!confirmed}>
+          {t("visit.evaluate")}
+        </button>
+        <button onClick={record} disabled={!confirmed || (screening !== "VACCINATE" && doses.length > 0)}>
           {t("visit.record")}
         </button>
+        <select value={projection} onChange={(e) => setProjection(e.target.value as "next" | "full")}>
+          <option value="next">{t("visit.projNext")}</option>
+          <option value="full">{t("visit.projFull")}</option>
+        </select>
       </div>
 
       {err && <div className="error">{t("common.error", { msg: err })}</div>}

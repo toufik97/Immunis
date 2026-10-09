@@ -60,6 +60,7 @@ export const api = {
     }>("/api/pack"),
   searchChildren: (q: string) =>
     req<Child[]>(`/api/children?q=${encodeURIComponent(q)}`),
+  childDoses: (childId: string) => req<Dose[]>(`/api/children/${childId}/doses`),
   registerChild: (body: Record<string, string>) =>
     req<Child>("/api/children", { method: "POST", body: JSON.stringify(body) }),
   /** Registration with duplicate surfacing: 409 carries possible matches. */

@@ -72,6 +72,10 @@ describe("api", () => {
     const noShows = await app.inject({ method: "GET", url: "/api/no-shows?asOf=2026-12-01" });
     expect((noShows.json() as unknown[])).toHaveLength(1);
 
+    const doses = await app.inject({ method: "GET", url: `/api/children/${child.id}/doses` });
+    expect(doses.statusCode).toBe(200);
+    expect((doses.json() as { productGroupId: string }[]).map((d) => d.productGroupId)).toEqual(["BCG"]);
+
     const evaluation = await app.inject({
       method: "POST",
       url: "/api/evaluate",

@@ -150,3 +150,33 @@ button.secondary {
 ul {
   padding-inline-start: 20px;
 }
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+  font-size: 14px;
+}
+
+.check input {
+  width: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+th,
+td {
+  text-align: start;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+th {
+  color: #475569;
+  font-size: 12px;
+}
