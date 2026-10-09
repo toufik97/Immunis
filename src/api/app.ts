@@ -6,9 +6,11 @@ import { evaluatePatient } from "../engine";
 import { parseDate } from "../engine/duration";
 import { toEngineHistory } from "../app/evaluate-child";
 import { createChild, findChildrenByName, getChild, allocateLocalId, findPossibleDuplicates } from "../infra/repos/children";
-import { recordEncounter, listDosesByChild, todayLocal } from "../infra/repos/encounters";
+import { listDosesByChild, todayLocal } from "../infra/repos/encounters";
+import { recordVisit, RecordGateError } from "../app/record-visit";
 import { addLot, listLots, checkLotUsable } from "../infra/repos/stock";
 import { createAppointment, listDue, markAppointment, listNoShows } from "../infra/repos/appointments";
+import type { Appointment } from "../domain/appointment";
 import { insertOverride, listOverridesByChild } from "../infra/repos/audit";
 import { countCentreDosesByProduct } from "../app/analytics";
 import { exportCentre, listPendingOutbox, ackOutbox } from "../infra/sync/sync";
@@ -38,6 +40,8 @@ const EncounterInput = z.object({
   heightCm: z.number().positive().optional(),
   doses: z.array(DoseRecordSchema).default([]),
   nextAppointmentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  /** Justification when waiving overridable engine warnings. Audited. */
+  overrideReason: z.string().optional(),
 });
 
 const LotInput = z.object({
@@ -177,8 +181,16 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
         reply.code(400).send({ error: "non-VACCINATE screening cannot record doses" });
         return;
       }
-      const encounter = recordEncounter(db, input);
-      reply.code(201).send(encounter);
+      try {
+        const { encounter } = recordVisit(db, pack, child.birthDate, listDosesByChild(db, child.id), input);
+        reply.code(201).send(encounter);
+      } catch (e) {
+        if (e instanceof RecordGateError) {
+          reply.code(e.status).send({ error: e.message, issues: e.issues });
+          return;
+        }
+        throw e;
+      }
     } catch (e) {
       sendError(reply, e);
     }
@@ -205,13 +217,22 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
   });
 
   // ---- sessions, appointments, no-shows ----
+  const withChild = (a: Appointment) => {
+    const c = getChild(db, a.childId);
+    return {
+      ...a,
+      childName: c ? `${c.givenName} ${c.familyName}` : a.childId,
+      localIds: c?.localIds ?? [],
+    };
+  };
+
   app.get("/api/sessions", async (req, reply) => {
     const date = (req.query as Record<string, string>).date;
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       reply.code(400).send({ error: "date is required (YYYY-MM-DD)" });
       return;
     }
-    const expected = listDue(db, date);
+    const expected = listDue(db, date).map(withChild);
     const dosesByProduct: Record<string, number> = {};
     for (const a of expected) {
       for (const p of a.expectedProducts) dosesByProduct[p] = (dosesByProduct[p] ?? 0) + 1;
@@ -250,7 +271,7 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
       reply.code(400).send({ error: "asOf is required (YYYY-MM-DD)" });
       return;
     }
-    return listNoShows(db, asOf);
+    return listNoShows(db, asOf).map(withChild);
   });
 
   // ---- overrides ----

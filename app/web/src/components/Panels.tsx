@@ -42,7 +42,7 @@ export function SessionPanel() {
             <ul>
               {data.expected.map((a) => (
                 <li key={a.id}>
-                  {a.childId} — {(a.expectedProducts ?? []).join(", ") || "—"}
+                  {a.childName ?? a.childId} — {(a.expectedProducts ?? []).join(", ") || "—"}
                 </li>
               ))}
             </ul>
@@ -85,7 +85,7 @@ export function NoShowPanel() {
         <ul>
           {list.map((a) => (
             <li key={a.id}>
-              {a.childId} — {t("noshow.due", { date: a.dueDate })}
+              {a.childName ?? a.childId} — {t("noshow.due", { date: a.dueDate })}
             </li>
           ))}
         </ul>

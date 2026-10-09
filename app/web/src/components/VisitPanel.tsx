@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, type Child, type Dose, type Lot } from "../api";
+import { api, type Child, type Dose, type GateIssue, type Lot } from "../api";
 
 interface Props {
   child: Child;
@@ -15,8 +15,6 @@ function today(): string {
 
 export default function VisitPanel({ child, products, onDone }: Props) {
   const { t } = useTranslation();
-  // Registry birth date is read-only: identity is confirmed, never edited here.
-  const [confirmed, setConfirmed] = useState(false);
   const [screening, setScreening] = useState("VACCINATE");
   const [weightKg, setWeightKg] = useState("");
   const [heightCm, setHeightCm] = useState("");
@@ -26,24 +24,25 @@ export default function VisitPanel({ child, products, onDone }: Props) {
   const [nextRdv, setNextRdv] = useState("");
   const [projection, setProjection] = useState<"next" | "full">("next");
   const [result, setResult] = useState<Awaited<ReturnType<typeof api.evaluate>> | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [gateIssues, setGateIssues] = useState<GateIssue[]>([]);
+  const [overrideReason, setOverrideReason] = useState("");
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
 
+  async function fetchHistory(): Promise<void> {
+    try {
+      setHistory(await api.childDoses(child.id));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   // Recorded history, shown read-only so the nurse never re-enters it.
   useEffect(() => {
-    let cancelled = false;
     setHistory([]);
-    void api
-      .childDoses(child.id)
-      .then((rows) => {
-        if (!cancelled) setHistory(rows);
-      })
-      .catch((e) => {
-        if (!cancelled) setErr(e instanceof Error ? e.message : String(e));
-      });
-    return () => {
-      cancelled = true;
-    };
+    void fetchHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [child.id]);
 
   // Load usable lots for every product used by a CENTRE dose row.
@@ -94,7 +93,7 @@ export default function VisitPanel({ child, products, onDone }: Props) {
     }
   }
 
-  async function record(): Promise<void> {
+  async function record(withOverride: boolean): Promise<void> {
     setErr("");
     setMsg("");
     const missingLot = doses.some((d) => d.origin === "CENTRE" && !d.lotId);
@@ -102,21 +101,43 @@ export default function VisitPanel({ child, products, onDone }: Props) {
       setErr(t("visit.lotRequired"));
       return;
     }
+    if (withOverride && !overrideReason.trim()) {
+      setErr(t("visit.overrideReasonRequired"));
+      return;
+    }
+    setRecording(true);
     try {
-      await api.recordEncounter({
+      const payload = doses.map((d, i) => ({
+        ...d,
+        overridden:
+          d.overridden || (withOverride && gateIssues.some((g) => g.doseIndex === i)),
+      }));
+      const r = await api.recordEncounterDetailed({
         childId: child.id,
         birthDate: child.birthDate,
         date: today(),
         screening,
         weightKg: weightKg ? Number(weightKg) : undefined,
         heightCm: heightCm ? Number(heightCm) : undefined,
-        doses,
+        doses: payload,
         nextAppointmentDate: nextRdv || undefined,
+        ...(withOverride ? { overrideReason } : {}),
       });
-      setMsg(t("visit.recorded"));
-      onDone();
+      if (r.status === "gated") {
+        setGateIssues(r.issues);
+      } else {
+        setGateIssues([]);
+        setOverrideReason("");
+        setDoses([]);
+        setNextRdv("");
+        setMsg(t("visit.recorded"));
+        await fetchHistory();
+        onDone();
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRecording(false);
     }
   }
 
@@ -130,10 +151,6 @@ export default function VisitPanel({ child, products, onDone }: Props) {
         {child.address ? ` · ${child.address}` : ""}
         {(child.localIds ?? []).map((l) => ` · ${t("child.localId", { value: l.value })}`).join("")}
       </p>
-      <label className="check">
-        <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
-        {t("visit.identityVerified")}
-      </label>
       <div className="grid">
         <label>
           {t("visit.screening")}
@@ -257,10 +274,8 @@ export default function VisitPanel({ child, products, onDone }: Props) {
         <button className="secondary" onClick={addDose}>
           {t("visit.addDose")}
         </button>
-        <button onClick={evaluate} disabled={!confirmed}>
-          {t("visit.evaluate")}
-        </button>
-        <button onClick={record} disabled={!confirmed || (screening !== "VACCINATE" && doses.length > 0)}>
+        <button onClick={evaluate}>{t("visit.evaluate")}</button>
+        <button onClick={() => record(false)} disabled={recording || (screening !== "VACCINATE" && doses.length > 0)}>
           {t("visit.record")}
         </button>
         <select value={projection} onChange={(e) => setProjection(e.target.value as "next" | "full")}>
@@ -268,6 +283,28 @@ export default function VisitPanel({ child, products, onDone }: Props) {
           <option value="full">{t("visit.projFull")}</option>
         </select>
       </div>
+
+      {gateIssues.length > 0 && (
+        <div className="error">
+          <p>{t("visit.gateTitle")}</p>
+          <ul>
+            {gateIssues.map((g, i) => (
+              <li key={i}>
+                {g.productGroupId} · {g.administeredOn} — {g.code}: {g.message}
+              </li>
+            ))}
+          </ul>
+          <label>
+            {t("visit.overrideReason")}
+            <input value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} />
+          </label>
+          <div className="toolbar">
+            <button onClick={() => record(true)} disabled={recording}>
+              {t("visit.recordOverride")}
+            </button>
+          </div>
+        </div>
+      )}
 
       {err && <div className="error">{t("common.error", { msg: err })}</div>}
       {msg && <div className="ok">{msg}</div>}

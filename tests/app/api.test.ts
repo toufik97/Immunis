@@ -67,7 +67,9 @@ describe("api", () => {
 
     const session = await app.inject({ method: "GET", url: "/api/sessions?date=2026-11-09" });
     expect(session.statusCode).toBe(200);
-    expect((session.json() as { expected: unknown[] }).expected).toHaveLength(1);
+    const body = session.json() as { expected: { childName: string }[] };
+    expect(body.expected).toHaveLength(1);
+    expect(body.expected[0].childName).toMatch(/Yasmine/);
 
     const noShows = await app.inject({ method: "GET", url: "/api/no-shows?asOf=2026-12-01" });
     expect((noShows.json() as unknown[])).toHaveLength(1);

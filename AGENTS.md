@@ -36,10 +36,11 @@ Spec is French; all code, docs, and responses are English. UI supports en/fr/ar.
 
 1. **Origin (§5.10):** engine reads CENTRE + EXTERNAL (never CAMPAIGN);
    stock/analytics read CENTRE only. Use `isClinicallyCredited` / `isCentreCounted`.
-2. **Audit append-only:** `overrides` table — INSERT only, never UPDATE/DELETE.
-3. **Identity:** confirm by `birthDate` before any action; internal id ≠ `xx/yy`.
-4. **Pack status:** `draft`/`pending` must stay visible in every result.
-5. **Engine invariants:** visit dates `YYYY-MM-DD`, no empty products; full projection
+2. **Record gate:** `recordVisit` (src/app/) runs the engine before storing — blocking warnings stop, overridable ones need flag + reason (audited), duplicates rejected. Never bypass it with `recordEncounter` from API.
+3. **Audit append-only:** `overrides` table — INSERT only, never UPDATE/DELETE.
+4. **Identity:** registry birthDate is read-only; internal id ≠ `xx/yy`.
+5. **Pack status:** `draft`/`pending` must stay visible in every result.
+6. **Engine invariants:** visit dates `YYYY-MM-DD`, no empty products; full projection
    only shows future boosters as `projected`.
 
 ## Conventions
