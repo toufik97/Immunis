@@ -71,10 +71,18 @@ export const api = {
       status: string;
       clinicalApproval: string;
       productGroups: { id: string; label_fr?: string }[];
+      programs: { id: string; label_fr?: string }[];
     }>("/api/pack"),
   searchChildren: (q: string) =>
     req<Child[]>(`/api/children?q=${encodeURIComponent(q)}`),
+  child: (id: string) => req<Child>(`/api/children/${id}`),
   childDoses: (childId: string) => req<Dose[]>(`/api/children/${childId}/doses`),
+  markAppointment: (id: string, kept: boolean) =>
+    req<{ ok: boolean }>(`/api/appointments/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ kept }),
+    }),
+  outbox: () => req<{ id: string; kind: string }[]>("/api/outbox"),
   registerChild: (body: Record<string, string>) =>
     req<Child>("/api/children", { method: "POST", body: JSON.stringify(body) }),
   /** Registration with duplicate surfacing: 409 carries possible matches. */
@@ -93,7 +101,7 @@ export const api = {
   },
   recordEncounter: (body: unknown) =>
     req<unknown>("/api/encounters", { method: "POST", body: JSON.stringify(body) }),
-  /** Recording with engine-gate surfacing: 422 carries waivable issues. */
+  /** Recording with engine-gate surfacing: 400/422 with issues become gated. */
   recordEncounterDetailed: async (
     body: Record<string, unknown>
   ): Promise<{ status: "recorded" } | { status: "gated"; issues: GateIssue[]; error: string }> => {
@@ -103,7 +111,9 @@ export const api = {
       body: JSON.stringify(body),
     });
     const data = (await res.json()) as { error?: string; issues?: GateIssue[] };
-    if (res.status === 422) return { status: "gated", issues: data.issues ?? [], error: data.error ?? "" };
+    if ((res.status === 422 || res.status === 400) && data.issues?.length) {
+      return { status: "gated", issues: data.issues, error: data.error ?? "" };
+    }
     if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
     return { status: "recorded" };
   },

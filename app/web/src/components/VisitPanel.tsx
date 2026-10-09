@@ -5,6 +5,7 @@ import { api, type Child, type Dose, type GateIssue, type Lot } from "../api";
 interface Props {
   child: Child;
   products: { id: string; label_fr?: string }[];
+  programs: { id: string; label_fr?: string }[];
   onDone: () => void;
 }
 
@@ -13,8 +14,9 @@ function today(): string {
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
 }
 
-export default function VisitPanel({ child, products, onDone }: Props) {
+export default function VisitPanel({ child, products, programs, onDone }: Props) {
   const { t } = useTranslation();
+  const [visitDate, setVisitDate] = useState(today());
   const [screening, setScreening] = useState("VACCINATE");
   const [weightKg, setWeightKg] = useState("");
   const [heightCm, setHeightCm] = useState("");
@@ -25,10 +27,14 @@ export default function VisitPanel({ child, products, onDone }: Props) {
   const [projection, setProjection] = useState<"next" | "full">("next");
   const [result, setResult] = useState<Awaited<ReturnType<typeof api.evaluate>> | null>(null);
   const [recording, setRecording] = useState(false);
+  const [evaluating, setEvaluating] = useState(false);
   const [gateIssues, setGateIssues] = useState<GateIssue[]>([]);
   const [overrideReason, setOverrideReason] = useState("");
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+
+  const productLabel = (id: string) => products.find((p) => p.id === id)?.label_fr ?? id;
+  const programLabel = (id: string) => programs.find((p) => p.id === id)?.label_fr ?? id;
 
   async function fetchHistory(): Promise<void> {
     try {
@@ -38,10 +44,34 @@ export default function VisitPanel({ child, products, onDone }: Props) {
     }
   }
 
+  async function evaluate(silent = false): Promise<void> {
+    if (!silent) setErr("");
+    setEvaluating(true);
+    try {
+      const r = await api.evaluate({
+        childId: child.id,
+        evaluationDate: visitDate,
+        projection,
+      });
+      setResult(r);
+      // Suggest the next appointment from the planner; the nurse may override.
+      if (!nextRdv) {
+        const upcoming = r.visitPlan.visits.find((v) => v.date > visitDate) ?? r.visitPlan.visits[0];
+        if (upcoming) setNextRdv(upcoming.date);
+      }
+    } catch (e) {
+      if (!silent) setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setEvaluating(false);
+    }
+  }
+
   // Recorded history, shown read-only so the nurse never re-enters it.
+  // Auto-evaluate once so the plan and next-appointment suggestion are ready.
   useEffect(() => {
     setHistory([]);
     void fetchHistory();
+    void evaluate(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [child.id]);
 
@@ -54,44 +84,32 @@ export default function VisitPanel({ child, products, onDone }: Props) {
     if (needed.length === 0) return;
     let cancelled = false;
     void (async () => {
-      const entries = await Promise.all(needed.map(async (p) => [p, await api.lots(p, today())] as const));
-      if (!cancelled) setLotsByProduct((m) => ({ ...m, ...Object.fromEntries(entries) }));
+      try {
+        const entries = await Promise.all(needed.map(async (p) => [p, await api.lots(p, visitDate)] as const));
+        if (!cancelled) setLotsByProduct((m) => ({ ...m, ...Object.fromEntries(entries) }));
+      } catch (e) {
+        if (!cancelled) setErr(e instanceof Error ? e.message : String(e));
+      }
     })();
     return () => {
       cancelled = true;
     };
   });
 
+  const blockedByScreening = screening !== "VACCINATE" && doses.length > 0;
+
   function addDose(): void {
+    if (screening !== "VACCINATE") return;
     setDoses((d) => [
       ...d,
       {
         productGroupId: products[0]?.id ?? "",
-        administeredOn: today(),
+        administeredOn: visitDate,
         origin: "CENTRE",
         overridden: false,
         recordedBy: "nurse",
       },
     ]);
-  }
-
-  async function evaluate(): Promise<void> {
-    setErr("");
-    try {
-      const r = await api.evaluate({
-        childId: child.id,
-        evaluationDate: today(),
-        projection,
-      });
-      setResult(r);
-      // Suggest the next appointment from the planner; the nurse may override.
-      if (!nextRdv) {
-        const upcoming = r.visitPlan.visits.find((v) => v.date > today()) ?? r.visitPlan.visits[0];
-        if (upcoming) setNextRdv(upcoming.date);
-      }
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    }
   }
 
   async function record(withOverride: boolean): Promise<void> {
@@ -116,7 +134,7 @@ export default function VisitPanel({ child, products, onDone }: Props) {
       const r = await api.recordEncounterDetailed({
         childId: child.id,
         birthDate: child.birthDate,
-        date: today(),
+        date: visitDate,
         screening,
         weightKg: weightKg ? Number(weightKg) : undefined,
         heightCm: heightCm ? Number(heightCm) : undefined,
@@ -136,11 +154,14 @@ export default function VisitPanel({ child, products, onDone }: Props) {
         onDone();
       }
     } catch (e) {
+      setGateIssues([]);
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
       setRecording(false);
     }
   }
+
+  const canOverride = gateIssues.some((g) => g.overridable);
 
   return (
     <section className="card">
@@ -152,7 +173,12 @@ export default function VisitPanel({ child, products, onDone }: Props) {
         {child.address ? ` · ${child.address}` : ""}
         {(child.localIds ?? []).map((l) => ` · ${t("child.localId", { value: l.value })}`).join("")}
       </p>
+      <p className="hint">{t("visit.howto")}</p>
       <div className="grid">
+        <label>
+          {t("visit.visitDate")}
+          <input type="date" value={visitDate} max={today()} onChange={(e) => setVisitDate(e.target.value)} />
+        </label>
         <label>
           {t("visit.screening")}
           <select value={screening} onChange={(e) => setScreening(e.target.value)}>
@@ -165,15 +191,15 @@ export default function VisitPanel({ child, products, onDone }: Props) {
         </label>
         <label>
           {t("visit.weight")}
-          <input value={weightKg} onChange={(e) => setWeightKg(e.target.value)} type="number" step="0.1" />
+          <input value={weightKg} onChange={(e) => setWeightKg(e.target.value)} type="number" step="0.1" min="0" />
         </label>
         <label>
           {t("visit.height")}
-          <input value={heightCm} onChange={(e) => setHeightCm(e.target.value)} type="number" step="0.1" />
+          <input value={heightCm} onChange={(e) => setHeightCm(e.target.value)} type="number" step="0.1" min="0" />
         </label>
         <label>
           {t("visit.nextRdv")}
-          <input value={nextRdv} onChange={(e) => setNextRdv(e.target.value)} type="date" />
+          <input value={nextRdv} min={visitDate} onChange={(e) => setNextRdv(e.target.value)} type="date" />
         </label>
       </div>
 
@@ -181,6 +207,7 @@ export default function VisitPanel({ child, products, onDone }: Props) {
       {history.length === 0 ? (
         <p className="hint">{t("visit.noRecorded")}</p>
       ) : (
+        <div className="tablewrap">
         <table>
           <thead>
             <tr>
@@ -193,20 +220,23 @@ export default function VisitPanel({ child, products, onDone }: Props) {
             {history.map((d, i) => (
               <tr key={i}>
                 <td>{d.administeredOn}</td>
-                <td>{d.productGroupId}</td>
+                <td>{productLabel(d.productGroupId)}</td>
                 <td>{t(`origin.${d.origin}`)}</td>
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
       )}
 
       <h3>{t("visit.newDoses")}</h3>
+      {blockedByScreening && <p className="hint">{t("visit.screeningBlocks")}</p>}
       {doses.map((d, i) => (
-        <div key={i}>
+        <div key={i} className="dose">
         <div className="row">
           <select
             value={d.productGroupId}
+            aria-label={t("visit.product")}
             onChange={(e) =>
               setDoses((ds) => ds.map((x, j) => (j === i ? { ...x, productGroupId: e.target.value, lotId: undefined } : x)))
             }
@@ -220,13 +250,15 @@ export default function VisitPanel({ child, products, onDone }: Props) {
           <input
             type="date"
             value={d.administeredOn}
-            max={today()}
+            max={visitDate}
+            aria-label={t("visit.date")}
             onChange={(e) =>
               setDoses((ds) => ds.map((x, j) => (j === i ? { ...x, administeredOn: e.target.value } : x)))
             }
           />
           <select
             value={d.origin}
+            aria-label={t("visit.origin")}
             onChange={(e) =>
               setDoses((ds) =>
                 ds.map((x, j) => (j === i ? { ...x, origin: e.target.value as Dose["origin"], lotId: undefined } : x))
@@ -247,7 +279,7 @@ export default function VisitPanel({ child, products, onDone }: Props) {
           <div className="row">
             <label>
               {t("visit.lot")}
-              {(lotsByProduct[d.productGroupId] ?? []).filter((l) => l.qtyOnHand > 0).length === 0 ? (
+              {(lotsByProduct[d.productGroupId] ?? []).length === 0 ? (
                 <span className="hint"> {t("visit.nolot")}</span>
               ) : (
                 <select
@@ -257,13 +289,11 @@ export default function VisitPanel({ child, products, onDone }: Props) {
                   }
                 >
                   <option value="">—</option>
-                  {(lotsByProduct[d.productGroupId] ?? [])
-                    .filter((l) => l.qtyOnHand > 0)
-                    .map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.lotNumber} · {l.expiryDate} · ×{l.qtyOnHand}
-                      </option>
-                    ))}
+                  {(lotsByProduct[d.productGroupId] ?? []).map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.lotNumber} · {l.expiryDate} · ×{l.qtyOnHand}
+                    </option>
+                  ))}
                 </select>
               )}
             </label>
@@ -272,14 +302,16 @@ export default function VisitPanel({ child, products, onDone }: Props) {
         </div>
       ))}
       <div className="toolbar">
-        <button className="secondary" onClick={addDose}>
+        <button className="secondary" onClick={addDose} disabled={screening !== "VACCINATE"}>
           {t("visit.addDose")}
         </button>
-        <button onClick={evaluate}>{t("visit.evaluate")}</button>
-        <button onClick={() => record(false)} disabled={recording || (screening !== "VACCINATE" && doses.length > 0)}>
-          {t("visit.record")}
+        <button className="secondary" onClick={() => void evaluate()} disabled={evaluating}>
+          {evaluating ? t("common.loading") : t("visit.evaluate")}
         </button>
-        <select value={projection} onChange={(e) => setProjection(e.target.value as "next" | "full")}>
+        <button onClick={() => record(false)} disabled={recording || blockedByScreening}>
+          {recording ? t("common.loading") : t("visit.record")}
+        </button>
+        <select value={projection} aria-label={t("visit.plan")} onChange={(e) => setProjection(e.target.value as "next" | "full")}>
           <option value="next">{t("visit.projNext")}</option>
           <option value="full">{t("visit.projFull")}</option>
         </select>
@@ -291,19 +323,25 @@ export default function VisitPanel({ child, products, onDone }: Props) {
           <ul>
             {gateIssues.map((g, i) => (
               <li key={i}>
-                {g.productGroupId} · {g.administeredOn} — {g.code}: {g.message}
+                {productLabel(g.productGroupId)} · {g.administeredOn} — {g.message} ({g.code})
               </li>
             ))}
           </ul>
-          <label>
-            {t("visit.overrideReason")}
-            <input value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} />
-          </label>
-          <div className="toolbar">
-            <button onClick={() => record(true)} disabled={recording}>
-              {t("visit.recordOverride")}
-            </button>
-          </div>
+          {!canOverride ? (
+            <p>{t("visit.hardBlock")}</p>
+          ) : (
+            <>
+              <label>
+                {t("visit.overrideReason")}
+                <input value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} />
+              </label>
+              <div className="toolbar">
+                <button onClick={() => record(true)} disabled={recording}>
+                  {t("visit.recordOverride")}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -316,7 +354,7 @@ export default function VisitPanel({ child, products, onDone }: Props) {
           <ul>
             {result.antigenNeeds.map((n) => (
               <li key={n.programId}>
-                {n.programId}: {n.status} ({n.dosesNeeded})
+                {programLabel(n.programId)}: {n.status} ({n.dosesNeeded})
               </li>
             ))}
           </ul>
@@ -327,7 +365,7 @@ export default function VisitPanel({ child, products, onDone }: Props) {
             <ul>
               {result.visitPlan.visits.map((v, i) => (
                 <li key={i}>
-                  {v.date} — {v.products.join(", ")} [{v.status}]
+                  {v.date} — {v.products.map(productLabel).join(", ")} [{v.status}]
                 </li>
               ))}
             </ul>
