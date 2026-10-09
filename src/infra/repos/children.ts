@@ -46,6 +46,24 @@ function localIdsFor(db: Database.Database, childId: string) {
     });
 }
 
+/** Single-query local ids for many children (session lists avoid N+1). */
+export function localIdsForMany(
+  db: Database.Database,
+  childIds: string[]
+): Map<string, { centreId: string; value: string }[]> {
+  const out = new Map<string, { centreId: string; value: string }[]>();
+  for (const id of childIds) out.set(id, []);
+  if (childIds.length === 0) return out;
+  const placeholders = childIds.map(() => "?").join(", ");
+  const rows = db
+    .prepare(`SELECT child_id, centre_id, value FROM local_ids WHERE child_id IN (${placeholders})`)
+    .all(...childIds) as { child_id: string; centre_id: string; value: string }[];
+  for (const r of rows) {
+    out.get(r.child_id)?.push({ centreId: r.centre_id, value: r.value });
+  }
+  return out;
+}
+
 export function createChild(db: Database.Database, input: NewChild): Child {
   const id = randomUUID();
   db.prepare(
@@ -61,7 +79,8 @@ export function findChildrenByName(db: Database.Database, query: string): Child[
       "SELECT * FROM children WHERE family_name LIKE ? OR given_name LIKE ? ORDER BY family_name, given_name LIMIT 50"
     )
     .all(`%${query}%`, `%${query}%`) as ChildRow[];
-  return rows.map((row) => toChild(row, localIdsFor(db, row.id)));
+  const ids = new Map(localIdsForMany(db, rows.map((r) => r.id)));
+  return rows.map((row) => toChild(row, ids.get(row.id) ?? []));
 }
 
 export function getChild(db: Database.Database, id: string): Child | null {
@@ -86,7 +105,8 @@ export function findPossibleDuplicates(
       "SELECT * FROM children WHERE LOWER(family_name) = LOWER(?) AND LOWER(given_name) = LOWER(?) AND birth_date = ?"
     )
     .all(familyName, givenName, birthDate) as ChildRow[];
-  return rows.map((row) => toChild(row, localIdsFor(db, row.id)));
+  const ids = new Map(localIdsForMany(db, rows.map((r) => r.id)));
+  return rows.map((row) => toChild(row, ids.get(row.id) ?? []));
 }
 
 /**

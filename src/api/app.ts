@@ -5,7 +5,8 @@ import type { SchedulePack } from "../infra/packs/loader";
 import { evaluatePatient } from "../engine";
 import { parseDate } from "../engine/duration";
 import { toEngineHistory } from "../app/evaluate-child";
-import { createChild, findChildrenByName, getChild, allocateLocalId, findPossibleDuplicates } from "../infra/repos/children";
+import { findChildrenByName, getChild } from "../infra/repos/children";
+import { registerChild } from "../app/register-child";
 import { listDosesByChild } from "../infra/repos/encounters";
 import { nowIso, todayLocal } from "../infra/time";
 import { recordVisit, RecordGateError } from "../app/record-visit";
@@ -66,6 +67,7 @@ function isDomainError(e: unknown): boolean {
     m.startsWith("child already has") ||
     m.includes("requires a lot") ||
     m.includes("not usable") ||
+    m.includes("required together") ||
     m.includes("only ") && m.includes("doses") ||
     m.includes("non-VACCINATE")
   );
@@ -126,21 +128,14 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
   app.post("/api/children", async (req, reply) => {
     try {
       const input = ChildInput.parse(req.body);
-      if (!input.force) {
-        const duplicates = findPossibleDuplicates(db, input.familyName, input.givenName, input.birthDate);
-        if (duplicates.length > 0) {
-          reply.code(409).send({ error: "Possible duplicate: a child with this name and birth date exists", duplicates });
-          return;
-        }
-      }
-      const child = createChild(db, input);
-      if (input.centreId && input.firstVisitYear) {
-        allocateLocalId(db, child.id, input.centreId, input.firstVisitYear);
-        const full = getChild(db, child.id);
-        reply.code(201).send(full);
+      const result = registerChild(db, input);
+      if (result.status === "duplicate") {
+        reply
+          .code(409)
+          .send({ error: "Possible duplicate: a child with this name and birth date exists", duplicates: result.duplicates });
         return;
       }
-      reply.code(201).send({ ...child, localIds: [] });
+      reply.code(201).send(result.child);
     } catch (e) {
       sendError(reply, e);
     }
