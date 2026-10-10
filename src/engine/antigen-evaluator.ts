@@ -92,7 +92,8 @@ export function evaluateProgram(
   const stockList = availability?.products;
   const policiesCfg =
     pack.productSelection?.product_selection?.availability_policies ?? [];
-  const policyCfg = policiesCfg.find((p) => (p as { id?: string }).id === policy) ?? policiesCfg[0];
+  const policyCfg = policiesCfg.find((p) => (p as { id?: string }).id === policy);
+  if (!policyCfg) throw new Error(`unknown availability policy "${policy}"`);
   const reserved: Array<{ product_group?: string; reserve_for?: string }> =
     (policyCfg as { reserved?: Array<{ product_group?: string; reserve_for?: string }> })?.reserved ?? [];
   const isAvailable = (pid: string): boolean => {
@@ -100,7 +101,7 @@ export function evaluateProgram(
     const res = reserved.find((r) => r.product_group === pid);
     if (!res) return true;
     if (res.reserve_for === "history_starters") return (perProduct[pid] ?? 0) > 0;
-    return true;
+    throw new Error(`unknown reserve_for "${res.reserve_for}" for "${pid}"`);
   };
 
   const env: MatchEnv = {

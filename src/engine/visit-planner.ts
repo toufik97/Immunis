@@ -18,6 +18,7 @@ import {
   resolveDurationForDate,
   isAgeBefore
 } from "./duration";
+import { mergeValidityRule } from "./dose-validator";
 import {
   isProductEligible,
   productCoversProgram,
@@ -65,10 +66,7 @@ function findDoseRule(
   );
   if (!base) return overlay ?? null;
   if (!overlay) return base;
-  const merged: DoseValidityRule = { ...base };
-  if (overlay.target_min_age) merged.target_min_age = overlay.target_min_age;
-  if (overlay.dose_amount) merged.dose_amount = overlay.dose_amount;
-  return merged;
+  return mergeValidityRule(base, overlay);
 }
 
 export function planVisits(

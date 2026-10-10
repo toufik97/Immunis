@@ -63,6 +63,9 @@ export function loadSchedulePack(
     }
     const raw = loadYaml(path.join(programsDir, file));
     const parsed = ProgramSchema.parse(raw);
+    if (programs[parsed.program.id]) {
+      throw new Error(`duplicate program id "${parsed.program.id}" (file ${file})`);
+    }
     programs[parsed.program.id] = parsed;
   }
   

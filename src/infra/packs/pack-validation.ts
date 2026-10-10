@@ -105,6 +105,11 @@ export function validatePack(pack: SchedulePack): PackValidation {
     }
     for (const rule of primary.dose_validity ?? []) {
       needProduct(rule.product_group, at(`primary_series.dose_validity dose ${rule.dose}`));
+      if (rule.product_group && (rule.min_age || rule.max_age || rule.min_interval_from_previous)) {
+        warnings.push(
+          at(`primary_series.dose_validity dose ${rule.dose}: product overlay timing is ignored (base rule wins)`)
+        );
+      }
       const amt = rule.dose_amount;
       if (amt !== undefined) {
         const okValue = typeof amt?.value === "number" && amt.value > 0;

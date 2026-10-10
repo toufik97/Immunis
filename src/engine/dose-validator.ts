@@ -34,6 +34,17 @@ export interface ValidityContext {
   doseZero: { productGroups: string[]; maxAge: PackDuration } | null;
 }
 
+/**
+ * Overlay ADDS product-specific targets, never SHADOWS base timing.
+ * Shared by the validator and the visit planner (one merge, not two).
+ */
+export function mergeValidityRule(base: DoseValidityRule, overlay: DoseValidityRule): DoseValidityRule {
+  const merged: DoseValidityRule = { ...base };
+  if (overlay.target_min_age) merged.target_min_age = overlay.target_min_age;
+  if (overlay.dose_amount) merged.dose_amount = overlay.dose_amount;
+  return merged;
+}
+
 export function validateCounterDoses(
   counterId: string,
   history: ImmunizationRecord[],
@@ -127,10 +138,7 @@ export function validateCounterDoses(
       if (!overlay) return base;
       // Overlay ADDS product-specific targets (target_min_age, dose_amount),
       // never SHADOWS base timing. Base min/max age and intervals always win.
-      const merged: DoseValidityRule = { ...base };
-      if (overlay.target_min_age) merged.target_min_age = overlay.target_min_age;
-      if (overlay.dose_amount) merged.dose_amount = overlay.dose_amount;
-      return merged;
+      return mergeValidityRule(base, overlay);
     })();
 
     let t1IntervalPassed = true;

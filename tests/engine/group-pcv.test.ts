@@ -201,4 +201,10 @@ describe("Group PCV — coexistence, policies, both products (Stage 5)", () => {
       expect(n.boosterSequence).toBe(1);
     });
   });
+
+  it("unknown availability policy fails loudly instead of planning as TRANSITION", () => {
+    expect(() => runAvail("2026-01-01", [], "2026-04-01", { policy: "TYPO" })).toThrow(
+      /unknown availability policy/
+    );
+  });
 });
