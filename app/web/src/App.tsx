@@ -38,6 +38,7 @@ import { applyLocale, type Locale } from "./i18n";
 import { api, type Child, type DuplicateChild } from "./api";
 import { formatCivilDate, formatCount } from "./format";
 import VisitPanel from "./components/VisitPanel";
+import DateField from "./components/DateField";
 import { SessionPanel, NoShowPanel, StockPanel } from "./components/Panels";
 import "./styles.css";
 
@@ -68,6 +69,11 @@ function packBadgeColor(status: string): string {
   if (s === "active" || s === "approved") return "teal";
   if (s === "draft") return "yellow";
   return "orange";
+}
+
+function today(): string {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
 }
 
 function ColorSchemeToggle() {
@@ -390,15 +396,14 @@ export default function App() {
                           onChange={(e) => setReg({ ...reg, givenName: e.target.value })}
                           error={givenMissing ? t("register.required") : undefined}
                         />
-                        <TextInput
-                          ref={birthRef}
+                        <DateField
+                          inputRef={birthRef}
                           label={t("register.birthDate")}
                           name="birthDate"
-                          type="date"
-                          autoComplete="bday"
                           required
+                          max={today()}
                           value={reg.birthDate}
-                          onChange={(e) => setReg({ ...reg, birthDate: e.target.value })}
+                          onChange={(v) => setReg({ ...reg, birthDate: v })}
                           error={birthMissing ? t("register.required") : undefined}
                         />
                         <TextInput

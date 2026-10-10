@@ -113,6 +113,10 @@ const resources = {
       "table.doses": "Planned doses",
       "table.all": "All products",
       "common.recordedBy": "Recorded by",
+      "date.placeholder": "DD/MM/YYYY",
+      "date.invalid": "Invalid date — use DD/MM/YYYY.",
+      "date.tooEarly": "Date must be {{date}} or later.",
+      "date.tooLate": "Date must be {{date}} or earlier.",
     },
   },
   fr: {
@@ -224,6 +228,10 @@ const resources = {
       "table.doses": "Doses prévues",
       "table.all": "Tous les produits",
       "common.recordedBy": "Enregistré par",
+      "date.placeholder": "JJ/MM/AAAA",
+      "date.invalid": "Date invalide — utilisez JJ/MM/AAAA.",
+      "date.tooEarly": "La date doit être le {{date}} ou après.",
+      "date.tooLate": "La date doit être le {{date}} ou avant.",
     },
   },
   ar: {
@@ -335,6 +343,10 @@ const resources = {
       "table.doses": "الجرعات المبرمجة",
       "table.all": "كل اللقاحات",
       "common.recordedBy": "سجّله",
+      "date.placeholder": "DD/MM/YYYY",
+      "date.invalid": "تاريخ غير صالح — استعمل DD/MM/YYYY.",
+      "date.tooEarly": "يجب أن يكون التاريخ {{date}} أو بعده.",
+      "date.tooLate": "يجب أن يكون التاريخ {{date}} أو قبله.",
     },
   },
 } as const;

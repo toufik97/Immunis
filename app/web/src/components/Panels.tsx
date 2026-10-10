@@ -18,6 +18,7 @@ import {
 import { IconAlertCircle, IconCalendarCheck } from "@tabler/icons-react";
 import { api, type Appointment } from "../api";
 import { formatCivilDate, formatCount } from "../format";
+import DateField from "./DateField";
 
 function today(): string {
   const n = new Date();
@@ -250,13 +251,11 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
             {t("nav.session")}
           </Title>
           <Group align="end" wrap="wrap">
-            <TextInput
+            <DateField
               label={t("session.date")}
               name="sessionDate"
-              type="date"
-              autoComplete="off"
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={setDate}
             />
             <Button
               onClick={() => void load()}
@@ -291,7 +290,7 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
                 rows={data.expected.map(toRow)}
                 showDue={false}
                 productLabel={productLabel}
-                actions={{ onOpen, onPresent: (id) => void mark(id, true), onAbsent: (id) => void mark(id, false), busyId }}
+                actions={{ onOpen, onPresent: (id) => void mark(id, true), busyId }}
               />
             </Stack>
           ))}
@@ -347,13 +346,11 @@ export function NoShowPanel({ products, onOpen }: PanelProps) {
             {t("nav.noshows")}
           </Title>
           <Group align="end" wrap="wrap">
-            <TextInput
+            <DateField
               label={t("noshow.asOf")}
               name="noShowAsOf"
-              type="date"
-              autoComplete="off"
               value={asOf}
-              onChange={(e) => setAsOf(e.target.value)}
+              onChange={setAsOf}
             />
             <Button onClick={() => void load()} loading={loading}>
               {t("session.load")}
@@ -527,14 +524,12 @@ export function StockPanel({ products }: { products: { id: string; label_fr?: st
             />
           </Grid.Col>
           <Grid.Col span={{ base: 6, md: 4 }}>
-            <TextInput
+            <DateField
               label={t("stock.expiry")}
               name="lotExpiry"
-              type="date"
-              autoComplete="off"
               required
               value={form.expiryDate}
-              onChange={(e) => setForm((f) => ({ ...f, expiryDate: e.target.value }))}
+              onChange={(v) => setForm((f) => ({ ...f, expiryDate: v }))}
               error={expiryMissing ? t("stock.requireLot") : undefined}
             />
           </Grid.Col>

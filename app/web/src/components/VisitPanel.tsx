@@ -27,6 +27,7 @@ import {
 } from "@tabler/icons-react";
 import { api, type Child, type Dose, type GateIssue, type Lot } from "../api";
 import { formatCivilDate } from "../format";
+import DateField from "./DateField";
 
 interface Props {
   child: Child;
@@ -219,14 +220,12 @@ export default function VisitPanel({ child, products, programs, onDone }: Props)
 
         <Grid>
           <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
-            <TextInput
+            <DateField
               label={t("visit.visitDate")}
               name="visitDate"
-              type="date"
-              autoComplete="off"
               value={visitDate}
               max={todayStr}
-              onChange={(e) => setVisitDate(e.target.value)}
+              onChange={setVisitDate}
             />
           </Grid.Col>
           <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
@@ -268,14 +267,12 @@ export default function VisitPanel({ child, products, programs, onDone }: Props)
             />
           </Grid.Col>
           <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
-            <TextInput
+            <DateField
               label={t("visit.nextRdv")}
               name="nextRdv"
-              type="date"
-              autoComplete="off"
               value={nextRdv}
               min={visitDate}
-              onChange={(e) => setNextRdv(e.target.value)}
+              onChange={setNextRdv}
             />
           </Grid.Col>
         </Grid>
@@ -331,16 +328,13 @@ export default function VisitPanel({ child, products, programs, onDone }: Props)
                   data={products.map((p) => ({ value: p.id, label: p.label_fr ?? p.id }))}
                   style={{ flex: 1, minWidth: 160 }}
                 />
-                <TextInput
+                <DateField
                   label={t("visit.date")}
                   name={`dose-date-${i}`}
-                  aria-label={t("visit.date")}
-                  type="date"
-                  autoComplete="off"
                   value={d.administeredOn}
                   max={visitDate}
-                  onChange={(e) =>
-                    setDoses((ds) => ds.map((x, j) => (j === i ? { ...x, administeredOn: e.target.value } : x)))
+                  onChange={(v) =>
+                    setDoses((ds) => ds.map((x, j) => (j === i ? { ...x, administeredOn: v } : x)))
                   }
                 />
                 <Select
