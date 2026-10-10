@@ -376,7 +376,7 @@ export function StockPanel({ products }: { products: { id: string; label_fr?: st
     setAdding(true);
     try {
       await api.addLot({
-        productGroupId: form.productGroupId || products[0]?.id,
+        productGroupId: form.productGroupId,
         lotNumber: form.lotNumber.trim(),
         expiryDate: form.expiryDate,
         coldChainOk: form.coldChainOk,

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
-import { ChildSchema, type Child } from "../domain/child";
-import { findPossibleDuplicates } from "../infra/repos/children";
+import type { Child } from "../domain/child";
+import { findPossibleDuplicates, toChild } from "../infra/repos/children";
 import { isValidDateString } from "../engine/duration";
 import { todayLocal } from "../infra/time";
 
@@ -21,23 +21,6 @@ export interface RegisterChildInput {
 export type RegisterChildResult =
   | { status: "created"; child: Child }
   | { status: "duplicate"; duplicates: Child[] };
-
-function toChild(
-  row: { id: string; family_name: string; given_name: string; birth_date: string; father_name: string | null; mother_name: string | null; address: string | null; national_id: string | null },
-  localIds: { centreId: string; value: string }[]
-): Child {
-  return ChildSchema.parse({
-    id: row.id,
-    familyName: row.family_name,
-    givenName: row.given_name,
-    birthDate: row.birth_date,
-    fatherName: row.father_name ?? undefined,
-    motherName: row.mother_name ?? undefined,
-    address: row.address ?? undefined,
-    localIds,
-    nationalId: row.national_id ?? undefined,
-  });
-}
 
 /**
  * Deep Child registration seam: duplicate warning + insert + `xx/YYYY`

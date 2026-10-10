@@ -22,7 +22,7 @@ interface ChildRow {
   national_id: string | null;
 }
 
-function toChild(row: ChildRow, localIds: { centreId: string; value: string }[]): Child {
+export function toChild(row: ChildRow, localIds: { centreId: string; value: string }[]): Child {
   return ChildSchema.parse({
     id: row.id,
     familyName: row.family_name,

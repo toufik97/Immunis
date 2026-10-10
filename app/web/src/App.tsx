@@ -45,14 +45,7 @@ import "./styles.css";
 type Tab = "visit" | "session" | "noshows" | "stock";
 const TABS: Tab[] = ["visit", "session", "noshows", "stock"];
 
-interface PackInfo {
-  packId: string;
-  version: string;
-  status: string;
-  clinicalApproval: string;
-  productGroups: { id: string; label_fr?: string }[];
-  programs: { id: string; label_fr?: string }[];
-}
+type PackInfo = Awaited<ReturnType<typeof api.pack>>;
 
 function readTabFromUrl(): Tab {
   try {

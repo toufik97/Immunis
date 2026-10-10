@@ -89,24 +89,6 @@ export function durationToMonths(duration?: Duration | null): number {
   return Math.round(months * 10) / 10;
 }
 
-export function durationToDays(duration?: Duration | null): number {
-  // Display-only: messages and legacy estimates. Spacing and alignment use
-  // addDurationToDate (calendar-exact), never this approximation.
-  if (!duration) {
-    return 0;
-  }
-  if (duration.birth) {
-    return 0;
-  }
-
-  let days = 0;
-  if (duration.days) days += duration.days;
-  if (duration.weeks) days += duration.weeks * 7;
-  if (duration.months) days += Math.round(duration.months * 30.44);
-  if (duration.years) days += Math.round(duration.years * 365.25);
-  return days;
-}
-
 /** Short human text for messages: {months: 84} -> "7 years", {weeks: 8} -> "8 weeks". */
 export function describeDuration(duration?: Duration | null): string {
   if (!duration) return "0 days";

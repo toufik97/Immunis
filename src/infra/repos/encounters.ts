@@ -1,11 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import { EncounterSchema, type Encounter, type DoseRecord } from "../../domain/encounter";
+import { isCentreCounted } from "../../domain/dose-origin";
 import { consumeLot } from "./stock";
 import { todayLocal, nowIso } from "../time";
-
-/** Re-exported for existing callers; new code imports from `../time`. */
-export { todayLocal, nowIso };
 
 export interface NewEncounter {
   childId: string;
@@ -97,7 +95,7 @@ export function storeEncounter(
   );
 
   for (const dose of parsed.doses) {
-    if (dose.origin === "CENTRE") {
+    if (isCentreCounted(dose.origin)) {
       if (!dose.lotId) throw new Error("CENTRE dose requires a lot (FR-4.3)");
       consumeLot(db, dose.lotId, 1, parsed.date);
     }

@@ -87,8 +87,6 @@ export const api = {
   child: (id: string) => req<Child>(`/api/children/${id}`),
   childDoses: (childId: string) => req<Dose[]>(`/api/children/${childId}/doses`),
   outbox: () => req<{ id: string; kind: string }[]>("/api/outbox"),
-  registerChild: (body: Record<string, string>) =>
-    req<Child>("/api/children", { method: "POST", body: JSON.stringify(body) }),
   /** Registration with duplicate surfacing: 409 carries possible matches. */
   registerChildDetailed: async (
     body: Record<string, unknown>
@@ -103,8 +101,6 @@ export const api = {
     if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
     return { status: "created", child: data };
   },
-  recordEncounter: (body: unknown) =>
-    req<unknown>("/api/encounters", { method: "POST", body: JSON.stringify(body) }),
   /** Recording with engine-gate surfacing: 400/422 with issues become gated. */
   recordEncounterDetailed: async (
     body: Record<string, unknown>
@@ -142,9 +138,4 @@ export const api = {
     ),
   addLot: (body: Record<string, unknown>) =>
     req<Lot>("/api/lots", { method: "POST", body: JSON.stringify(body) }),
-  addOverride: (childId: string, body: Record<string, string>) =>
-    req<unknown>(`/api/children/${childId}/overrides`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
 };
