@@ -14,6 +14,7 @@ export const WARNING_DEFS: Record<string, { severity: WarningSeverity; overridab
 
   // ---- counted-with-warning (dose still counts; show a soft notice)
   EARLY_DOSE_COUNTED:                { severity: "soft", overridable: false },
+  EXTRA_DOSE_COUNTED:                { severity: "soft", overridable: false },
   EARLY_BOOSTER_COUNTED:             { severity: "soft", overridable: false },
   SHORT_BOOSTER_INTERVAL_COUNTED:    { severity: "soft", overridable: false },
   DOSE_CAP_EXCEEDED_COUNTED:         { severity: "soft", overridable: false },

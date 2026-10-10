@@ -104,11 +104,13 @@ export function validateCounterDoses(
 
     const previousRecord = countedRecords[i - 1];
     // A same-day duplicate of the same product is a data error, not a dose.
-    const isDuplicateSameDay = Boolean(
-      previousRecord &&
-      previousRecord.productGroupId === record.productGroupId &&
-      previousRecord.administeredOn === record.administeredOn
-    );
+    const isDuplicateSameDay = countedRecords
+      .slice(0, i)
+      .some(
+        (prev) =>
+          prev.productGroupId === record.productGroupId &&
+          prev.administeredOn === record.administeredOn
+      );
     if (isDuplicateSameDay) {
       reasons.push("DUPLICATE_SAME_DAY");
     }
@@ -210,6 +212,14 @@ export function validateCounterDoses(
           `EARLY_DOSE_${doseNumber}_COUNTED: administered at ${doseAgeMonths} months, recommended target ${targetMonths} months. Dose counted (no restart).`
         );
       }
+    }
+
+    // Beyond the last schedule rule the dose still counts (G4 harmless extra),
+    // but it is flagged so nobody mistakes it for a scheduled dose.
+    if (valid && !validityRule) {
+      warnings.push(
+        `EXTRA_DOSE_COUNTED: dose ${doseNumber} has no schedule rule. Dose counted as a harmless extra.`
+      );
     }
 
     if (valid) {

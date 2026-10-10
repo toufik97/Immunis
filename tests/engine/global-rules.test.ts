@@ -27,6 +27,32 @@ describe("Global rules G3, G4, G11, G13, G14", () => {
     expect(need(r, "HB_PROGRAM").dosesNeeded).toBe(0);
   });
 
+  it("G4b: rule-less extra doses stay valid but are flagged", () => {
+    const r = run("2020-01-01", [
+      rec("2020-03-01", "PENTA"),
+      rec("2020-04-01", "PENTA"),
+      rec("2020-05-01", "PENTA"),
+      rec("2021-06-01", "PENTA"),
+      rec("2024-02-01", "PENTA"),
+      rec("2024-02-02", "PENTA")
+    ], "2024-03-01");
+    const all = doses(r, "DTP_CONTAINING_DOSES");
+    expect(all[5].valid).toBe(true);
+    expect(all[5].warnings.join(" ")).toMatch(/EXTRA_DOSE_COUNTED/);
+    expect(count(r, "DTP_CONTAINING_DOSES")).toBe(6);
+  });
+
+  it("flags non-adjacent same-day duplicates as data errors", () => {
+    const r = run("2024-01-01", [
+      rec("2024-03-01", "PENTA"),
+      rec("2024-03-01", "DTC"),
+      rec("2024-03-01", "PENTA")
+    ], "2024-12-01");
+    const all = doses(r, "DTP_CONTAINING_DOSES");
+    expect(all[2].valid).toBe(false);
+    expect(all[2].reasons).toContain("DUPLICATE_SAME_DAY");
+  });
+
   it("G11: 4th valid dose is treated as booster 1, 5th as booster 2", () => {
     const four = run("2021-02-01", [...P3("2021"), rec("2022-08-01", "DTC")], "2026-04-01");
     expect(need(four, "DTP_PROGRAM").boosterSequence).toBe(2);
