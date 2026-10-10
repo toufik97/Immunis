@@ -102,7 +102,6 @@ export function validateCounterDoses(
     const reasons: string[] = [];
     const warnings: string[] = [];
 
-    const previousRecord = countedRecords[i - 1];
     // A same-day duplicate of the same product is a data error, not a dose.
     const isDuplicateSameDay = countedRecords
       .slice(0, i)
