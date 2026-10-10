@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import { ChildSchema, type Child } from "../domain/child";
 import { findPossibleDuplicates } from "../infra/repos/children";
+import { isValidDateString } from "../engine/duration";
+import { todayLocal } from "../infra/time";
 
 export interface RegisterChildInput {
   familyName: string;
@@ -43,6 +45,12 @@ function toChild(
  * discriminated result instead of composing repos + counter transactions.
  */
 export function registerChild(db: Database.Database, input: RegisterChildInput): RegisterChildResult {
+  if (!isValidDateString(input.birthDate)) {
+    throw new Error(`birthDate ${input.birthDate} must be a real YYYY-MM-DD calendar date`);
+  }
+  if (input.birthDate > todayLocal()) {
+    throw new Error(`birthDate ${input.birthDate} is in the future`);
+  }
   if (!input.force) {
     const duplicates = findPossibleDuplicates(db, input.familyName, input.givenName, input.birthDate);
     if (duplicates.length > 0) return { status: "duplicate", duplicates };

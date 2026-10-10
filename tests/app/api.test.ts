@@ -163,4 +163,82 @@ describe("api", () => {
     expect(badDate.statusCode).toBe(400);
     db.close();
   });
+
+  it("rejects ghost references and malformed dates with 4xx, not 500s", async () => {
+    const db = openTestDb();
+    const app = buildApp(db, pack);
+
+    const appt = await app.inject({
+      method: "POST",
+      url: "/api/appointments",
+      payload: { childId: "nope", dueDate: "2026-01-01" },
+    });
+    expect(appt.statusCode).toBe(404);
+
+    const patch = await app.inject({
+      method: "PATCH",
+      url: "/api/appointments/does-not-exist",
+      payload: { kept: true },
+    });
+    expect(patch.statusCode).toBe(404);
+
+    const child = await app.inject({
+      method: "POST",
+      url: "/api/children",
+      payload: { familyName: "A", givenName: "A", birthDate: "2025-01-01" },
+    });
+    const childId = (child.json() as { id: string }).id;
+    const badChild = await app.inject({
+      method: "POST",
+      url: "/api/children/nope/overrides",
+      payload: { author: "n", what: "w", reason: "r" },
+    });
+    expect(badChild.statusCode).toBe(404);
+    const badEnc = await app.inject({
+      method: "POST",
+      url: `/api/children/${childId}/overrides`,
+      payload: { author: "n", what: "w", reason: "r", encounterId: "ghost" },
+    });
+    expect(badEnc.statusCode).toBe(400);
+
+    const ackMissing = await app.inject({
+      method: "POST",
+      url: "/api/outbox/nope/ack",
+      payload: { syncedAt: "2026-10-09T10:00:00.000Z" },
+    });
+    expect(ackMissing.statusCode).toBe(404);
+    const ackBad = await app.inject({
+      method: "POST",
+      url: "/api/outbox/nope/ack",
+      payload: { syncedAt: "garbage" },
+    });
+    expect(ackBad.statusCode).toBe(400);
+
+    const badOn = await app.inject({ method: "GET", url: "/api/lots/some-id/usable?on=garbage" });
+    expect(badOn.statusCode).toBe(400);
+
+    const badHist = await app.inject({
+      method: "POST",
+      url: "/api/evaluate",
+      payload: {
+        birthDate: "2025-01-01",
+        evaluationDate: "2026-01-01",
+        history: [{ administeredOn: "not-a-date", productGroupId: "BCG" }],
+      },
+    });
+    expect(badHist.statusCode).toBe(400);
+    const badBirth = await app.inject({
+      method: "POST",
+      url: "/api/evaluate",
+      payload: { birthDate: "2026-02-30", evaluationDate: "2026-01-01", history: [] },
+    });
+    expect(badBirth.statusCode).toBe(400);
+    const futureBirth = await app.inject({
+      method: "POST",
+      url: "/api/children",
+      payload: { familyName: "A", givenName: "A", birthDate: "2030-05-01" },
+    });
+    expect(futureBirth.statusCode).toBe(400);
+    db.close();
+  });
 });

@@ -84,6 +84,7 @@ export function listPendingOutbox(db: Database.Database): { id: string; kind: st
   }[];
 }
 
-export function ackOutbox(db: Database.Database, id: string, syncedAt: string): void {
-  db.prepare("UPDATE outbox SET synced_at = ? WHERE id = ?").run(syncedAt, id);
+export function ackOutbox(db: Database.Database, id: string, syncedAt: string): boolean {
+  const r = db.prepare("UPDATE outbox SET synced_at = ? WHERE id = ?").run(syncedAt, id);
+  return r.changes > 0;
 }

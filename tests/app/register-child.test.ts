@@ -53,4 +53,16 @@ describe("registerChild seam", () => {
     if (created.status === "created") expect(getChild(db, created.child.id)?.localIds).toEqual([]);
     db.close();
   });
+
+  it("rejects future and impossible birth dates without writing", () => {
+    const db = openTestDb();
+    expect(() => registerChild(db, { familyName: "A", givenName: "A", birthDate: "2030-05-01" })).toThrow(
+      /in the future/
+    );
+    expect(() => registerChild(db, { familyName: "A", givenName: "A", birthDate: "2026-02-30" })).toThrow(
+      /real YYYY-MM-DD/
+    );
+    expect(count(db as never, "children")).toBe(0);
+    db.close();
+  });
 });

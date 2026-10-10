@@ -4,7 +4,7 @@ import { timingSafeEqual } from "node:crypto";
 import { z, ZodError } from "zod";
 import type { SchedulePack } from "../infra/packs/loader";
 import { evaluatePatient } from "../engine";
-import { parseDate } from "../engine/duration";
+import { isValidDateString, parseDate } from "../engine/duration";
 import { toEngineHistory } from "../app/evaluate-child";
 import { findChildrenByName, getChild } from "../infra/repos/children";
 import { registerChild } from "../app/register-child";
@@ -70,7 +70,9 @@ function isDomainError(e: unknown): boolean {
     m.includes("not usable") ||
     m.includes("required together") ||
     m.includes("only ") && m.includes("doses") ||
-    m.includes("non-VACCINATE")
+    m.includes("non-VACCINATE") ||
+    m.includes("must be a real YYYY-MM-DD") ||
+    m.includes("is in the future")
   );
 }
 
@@ -234,9 +236,13 @@ export function buildApp(
     return listLots(db, product);
   });
 
-  app.get("/api/lots/:id/usable", async (req) => {
+  app.get("/api/lots/:id/usable", async (req, reply) => {
     const { id } = req.params as Record<string, string>;
     const on = (req.query as Record<string, string>).on ?? todayLocal();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(on)) {
+      reply.code(400).send({ error: "on must be YYYY-MM-DD" });
+      return;
+    }
     return { status: checkLotUsable(db, id, on) };
   });
 
@@ -259,6 +265,10 @@ export function buildApp(
           expectedProducts: z.array(z.string().min(1)).default([]),
         })
         .parse(req.body);
+      if (!getChild(db, input.childId)) {
+        reply.code(404).send({ error: "Child not found" });
+        return;
+      }
       reply.code(201).send(createAppointment(db, input));
     } catch (e) {
       sendError(reply, e);
@@ -268,7 +278,10 @@ export function buildApp(
   app.patch("/api/appointments/:id", async (req, reply) => {
     try {
       const { kept } = z.object({ kept: z.boolean() }).parse(req.body);
-      markAppointment(db, (req.params as Record<string, string>).id, kept);
+      if (!markAppointment(db, (req.params as Record<string, string>).id, kept)) {
+        reply.code(404).send({ error: "Appointment not found" });
+        return;
+      }
       return { ok: true };
     } catch (e) {
       sendError(reply, e);
@@ -287,10 +300,22 @@ export function buildApp(
   // ---- overrides ----
   app.post("/api/children/:id/overrides", async (req, reply) => {
     try {
+      const childId = (req.params as Record<string, string>).id;
+      if (!getChild(db, childId)) {
+        reply.code(404).send({ error: "Child not found" });
+        return;
+      }
       const input = OverrideInput.parse(req.body);
+      if (
+        input.encounterId &&
+        !(db.prepare("SELECT 1 FROM encounters WHERE id = ?").get(input.encounterId) as unknown)
+      ) {
+        reply.code(400).send({ error: "Encounter not found" });
+        return;
+      }
       reply.code(201).send(
         insertOverride(db, {
-          childId: (req.params as Record<string, string>).id,
+          childId,
           author: input.author,
           what: input.what,
           reason: input.reason,
@@ -318,9 +343,12 @@ export function buildApp(
   app.post("/api/outbox/:id/ack", async (req, reply) => {
     try {
       const { syncedAt } = z
-        .object({ syncedAt: z.string().min(1) })
+        .object({ syncedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/) })
         .parse(req.body);
-      ackOutbox(db, (req.params as Record<string, string>).id, syncedAt);
+      if (!ackOutbox(db, (req.params as Record<string, string>).id, syncedAt)) {
+        reply.code(404).send({ error: "Outbox entry not found" });
+        return;
+      }
       return { ok: true };
     } catch (e) {
       sendError(reply, e);
@@ -360,13 +388,17 @@ export function buildApp(
           reply.code(400).send({ error: "birthDate or childId is required" });
           return;
         }
+        if (!isValidDateString(body["birthDate"])) {
+          reply.code(400).send({ error: "birthDate must be a real YYYY-MM-DD calendar date" });
+          return;
+        }
         birthDate = body["birthDate"];
         const raw = Array.isArray(body["history"]) ? (body["history"] as unknown[]) : [];
         const errors: string[] = [];
         history = [];
         raw.forEach((row: unknown, i: number) => {
           const r = row as Record<string, unknown>;
-          if (typeof r?.["administeredOn"] !== "string") {
+          if (typeof r?.["administeredOn"] !== "string" || !isValidDateString(r["administeredOn"])) {
             errors.push(`history[${i}].administeredOn is required (YYYY-MM-DD)`);
             return;
           }
