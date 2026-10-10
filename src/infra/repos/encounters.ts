@@ -116,9 +116,13 @@ export function storeEncounter(
     );
   }
 
-  // Presence is the visit itself: any recorded encounter fulfils the child's
-  // pending appointments due on or before that day (no manual present button).
-  db.prepare("UPDATE appointments SET kept = 1 WHERE child_id = ? AND due_date <= ? AND kept IS NULL").run(
+  // Presence is the visit itself: appointments due that day are kept; overdue
+  // ones were missed, not kept — record that instead of rewriting history.
+  db.prepare("UPDATE appointments SET kept = 1 WHERE child_id = ? AND due_date = ? AND kept IS NULL").run(
+    parsed.childId,
+    parsed.date
+  );
+  db.prepare("UPDATE appointments SET kept = 0 WHERE child_id = ? AND due_date < ? AND kept IS NULL").run(
     parsed.childId,
     parsed.date
   );

@@ -24,6 +24,15 @@ describe("child registry", () => {
     db.close();
   });
 
+  it("treats % and _ as literal characters, not wildcards", () => {
+    const db = openTestDb();
+    createChild(db, { familyName: "El Amrani", givenName: "Yasmine", birthDate: "2025-03-14" });
+    expect(findChildrenByName(db, "%")).toEqual([]);
+    expect(findChildrenByName(db, "_")).toEqual([]);
+    expect(findChildrenByName(db, "amrani")).toHaveLength(1);
+    db.close();
+  });
+
   it("allocates xx/yy local ids per centre and year", () => {
     const db = openTestDb();
     const a = createChild(db, { familyName: "A", givenName: "A", birthDate: "2025-01-01" });

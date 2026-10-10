@@ -60,7 +60,8 @@ export function nextExpectedProducts(
   afterDate: string
 ): string[] {
   const visits = result.visitPlan.visits;
-  const upcoming = visits.find((v) => v.date > afterDate) ?? visits[0];
+  // Fully vaccinated: no future visit exists, so expect nothing (never repeat visit 0).
+  const upcoming = visits.find((v) => v.date > afterDate);
   return upcoming?.products ?? [];
 }
 

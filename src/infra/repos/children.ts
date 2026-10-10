@@ -77,11 +77,12 @@ export function createChild(db: Database.Database, input: NewChild): Child {
 }
 
 /** Case-insensitive name search (FR-1.1). */
-export function findChildrenByName(db: Database.Database, query: string): Child[] {  const rows = db
+export function findChildrenByName(db: Database.Database, query: string): Child[] {  const q = query.replace(/[\\%_]/g, (c) => `\\${c}`);
+  const rows = db
     .prepare(
-      "SELECT * FROM children WHERE family_name LIKE ? OR given_name LIKE ? ORDER BY family_name, given_name LIMIT 50"
+      "SELECT * FROM children WHERE family_name LIKE ? ESCAPE '\\' OR given_name LIKE ? ESCAPE '\\' ORDER BY family_name, given_name LIMIT 50"
     )
-    .all(`%${query}%`, `%${query}%`) as ChildRow[];
+    .all(`%${q}%`, `%${q}%`) as ChildRow[];
   const ids = new Map(localIdsForMany(db, rows.map((r) => r.id)));
   return rows.map((row) => toChild(row, ids.get(row.id) ?? []));
 }

@@ -64,13 +64,18 @@ describe("sessions seam", () => {
     // Same-day visit clears the session row and prevents a next-day no-show.
     expect(sessionFor(db, "2026-10-09").expected.map((e) => e.childId)).toEqual([]);
     expect(noShowsFor(db, "2026-10-10").map((r) => r.childId)).toEqual([b.id]);
+    const keptOf = (childId: string, due: string) =>
+      (db.prepare("SELECT kept AS k FROM appointments WHERE child_id = ? AND due_date = ?").get(childId, due) as { k: number | null }).k;
+    expect(keptOf(a.id, "2026-10-09")).toBe(1);
 
-    // Late visit clears the overdue row but leaves the future appointment pending.
+    // Late visit records the overdue row as missed (not kept) and leaves the future pending.
     recordEncounter(
       db,
       { childId: b.id, date: "2026-10-09", screening: "VACCINATE", doses: [] },
       { today: "2026-10-09" }
     );
+    expect(keptOf(b.id, "2026-10-01")).toBe(0);
+    expect(keptOf(b.id, "2026-12-01")).toBe(null);
     expect(noShowsFor(db, "2026-10-10")).toEqual([]);
     expect(sessionFor(db, "2026-12-01").expected.map((e) => e.childId)).toEqual([b.id]);
     db.close();
