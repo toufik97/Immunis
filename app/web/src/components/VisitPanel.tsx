@@ -58,6 +58,8 @@ export default function VisitPanel({ child, products, programs, onDone }: Props)
 
   const productLabel = (id: string) => products.find((p) => p.id === id)?.label_fr ?? id;
   const programLabel = (id: string) => programs.find((p) => p.id === id)?.label_fr ?? id;
+  // Lots usability depends on the visit date, so the cache key includes it.
+  const lotsFor = (p: string): Lot[] => lotsByProduct[`${p}|${visitDate}`] ?? [];
 
   async function fetchHistory(): Promise<void> {
     try {
@@ -91,19 +93,38 @@ export default function VisitPanel({ child, products, programs, onDone }: Props)
   useEffect(() => {
     setHistory([]);
     void fetchHistory();
-    void evaluate(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [child.id]);
 
+  // Plan follows the visit date: re-evaluate silently whenever it (or projection) changes.
   useEffect(() => {
-    const needed = [...new Set(doses.filter((d) => d.origin === "CENTRE").map((d) => d.productGroupId))].filter(
-      (p) => p && !(p in lotsByProduct)
-    );
+    void evaluate(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [child.id, visitDate, projection]);
+
+  function onVisitDateChange(v: string): void {
+    setVisitDate(v);
+    // A suggested RDV below the new visit date is no longer valid; manual entries survive.
+    setNextRdv((r) => (r && r < v ? "" : r));
+  }
+
+  useEffect(() => {
+    const needed = [...new Set(doses.filter((d) => d.origin === "CENTRE").map((d) => d.productGroupId))]
+      .map((p) => `${p}|${visitDate}`)
+      .filter((k) => {
+        const [p] = k.split("|");
+        return p && !(k in lotsByProduct);
+      });
     if (needed.length === 0) return;
     let cancelled = false;
     void (async () => {
       try {
-        const entries = await Promise.all(needed.map(async (p) => [p, await api.lots(p, visitDate)] as const));
+        const entries = await Promise.all(
+          needed.map(async (k) => {
+            const [p] = k.split("|");
+            return [k, await api.lots(p, visitDate)] as const;
+          })
+        );
         if (!cancelled) setLotsByProduct((m) => ({ ...m, ...Object.fromEntries(entries) }));
       } catch (e) {
         if (!cancelled) setErr(e instanceof Error ? e.message : String(e));
@@ -220,7 +241,7 @@ export default function VisitPanel({ child, products, programs, onDone }: Props)
               name="visitDate"
               value={visitDate}
               max={todayStr}
-              onChange={setVisitDate}
+              onChange={onVisitDateChange}
             />
           </Grid.Col>
           <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
@@ -359,7 +380,7 @@ export default function VisitPanel({ child, products, programs, onDone }: Props)
               </Group>
               {d.origin === "CENTRE" && (
                 <div>
-                  {(lotsByProduct[d.productGroupId] ?? []).length === 0 ? (
+                  {lotsFor(d.productGroupId).length === 0 ? (
                     <Text size="sm" c="dimmed">
                       {t("visit.lot")}: {t("visit.nolot")}
                     </Text>
@@ -371,7 +392,7 @@ export default function VisitPanel({ child, products, programs, onDone }: Props)
                       onChange={(v) =>
                         setDoses((ds) => ds.map((x, j) => (j === i ? { ...x, lotId: v || undefined } : x)))
                       }
-                      data={(lotsByProduct[d.productGroupId] ?? []).map((l) => ({
+                      data={lotsFor(d.productGroupId).map((l) => ({
                         value: l.id,
                         label: `${l.lotNumber} · ${formatCivilDate(l.expiryDate, lang)} · ×${l.qtyOnHand}`,
                       }))}
