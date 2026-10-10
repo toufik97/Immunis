@@ -36,7 +36,7 @@ import {
 import "./i18n";
 import { applyLocale, type Locale } from "./i18n";
 import { api, type Child, type DuplicateChild } from "./api";
-import { formatCivilDate, formatCount } from "./format";
+import { formatCivilDate, formatCount, todayCivilDate } from "./format";
 import VisitPanel from "./components/VisitPanel";
 import DateField from "./components/DateField";
 import { SessionPanel, NoShowPanel, StockPanel } from "./components/Panels";
@@ -69,11 +69,6 @@ function packBadgeColor(status: string): string {
   if (s === "active" || s === "approved") return "teal";
   if (s === "draft") return "yellow";
   return "orange";
-}
-
-function today(): string {
-  const n = new Date();
-  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
 }
 
 function ColorSchemeToggle() {
@@ -401,7 +396,7 @@ export default function App() {
                           label={t("register.birthDate")}
                           name="birthDate"
                           required
-                          max={today()}
+                          max={todayCivilDate()}
                           value={reg.birthDate}
                           onChange={(v) => setReg({ ...reg, birthDate: v })}
                           error={birthMissing ? t("register.required") : undefined}

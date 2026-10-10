@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type Ref } from "react";
 import { useTranslation } from "react-i18next";
 import { TextInput } from "@mantine/core";
-import { autoSlashDate, isoToDisplay, parseDateInput } from "./dateInput";
+import { autoSlashDate, checkDateBounds, isoToDisplay, parseDateInput } from "./dateInput";
 import { formatCivilDate } from "../format";
 
 interface DateFieldProps {
@@ -67,12 +67,13 @@ export default function DateField({
       setLocalError(t("date.invalid"));
       return;
     }
-    if (min && parsed.iso < min) {
-      setLocalError(t("date.tooEarly", { date: formatCivilDate(min, lang) }));
+    const bounds = checkDateBounds(parsed.iso, min, max);
+    if (bounds === "tooEarly") {
+      setLocalError(t("date.tooEarly", { date: formatCivilDate(min as string, lang) }));
       return;
     }
-    if (max && parsed.iso > max) {
-      setLocalError(t("date.tooLate", { date: formatCivilDate(max, lang) }));
+    if (bounds === "tooLate") {
+      setLocalError(t("date.tooLate", { date: formatCivilDate(max as string, lang) }));
       return;
     }
     setLocalError("");
@@ -104,6 +105,11 @@ export default function DateField({
         const parsed = parseDateInput(text);
         if (parsed.status === "partial" || parsed.status === "invalid") {
           // Revert half-typed text so the display never disagrees with storage.
+          setText(isoToDisplay(lastValue.current));
+          setLocalError("");
+        } else if (parsed.status === "valid" && checkDateBounds(parsed.iso, min, max) !== null) {
+          // Out-of-range dates stay editable while typing, but on leave revert
+          // so a blocked value can never look saved (parent keeps the old ISO).
           setText(isoToDisplay(lastValue.current));
           setLocalError("");
         } else {

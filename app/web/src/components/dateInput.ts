@@ -53,3 +53,10 @@ export function autoSlashDate(raw: string): string {
   if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
   return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
 }
+
+/** Bounds check on normalized ISO dates (lexicographic compare is chronological). */
+export function checkDateBounds(iso: string, min?: string, max?: string): "tooEarly" | "tooLate" | null {
+  if (min && iso < min) return "tooEarly";
+  if (max && iso > max) return "tooLate";
+  return null;
+}

@@ -26,7 +26,7 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { api, type Child, type Dose, type GateIssue, type Lot } from "../api";
-import { formatCivilDate } from "../format";
+import { formatCivilDate, todayCivilDate } from "../format";
 import DateField from "./DateField";
 
 interface Props {
@@ -36,15 +36,10 @@ interface Props {
   onDone: () => void;
 }
 
-function today(): string {
-  const n = new Date();
-  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
-}
-
 export default function VisitPanel({ child, products, programs, onDone }: Props) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
-  const [visitDate, setVisitDate] = useState(today());
+  const [visitDate, setVisitDate] = useState(todayCivilDate());
   const [screening, setScreening] = useState("VACCINATE");
   const [weightKg, setWeightKg] = useState("");
   const [heightCm, setHeightCm] = useState("");
@@ -196,7 +191,7 @@ export default function VisitPanel({ child, products, programs, onDone }: Props)
   }
 
   const canOverride = gateIssues.some((g) => g.overridable);
-  const todayStr = today();
+  const todayStr = todayCivilDate();
 
   return (
     <Card>

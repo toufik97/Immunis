@@ -77,11 +77,6 @@ export const api = {
     req<Child[]>(`/api/children?q=${encodeURIComponent(q)}`),
   child: (id: string) => req<Child>(`/api/children/${id}`),
   childDoses: (childId: string) => req<Dose[]>(`/api/children/${childId}/doses`),
-  markAppointment: (id: string, kept: boolean) =>
-    req<{ ok: boolean }>(`/api/appointments/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ kept }),
-    }),
   outbox: () => req<{ id: string; kind: string }[]>("/api/outbox"),
   registerChild: (body: Record<string, string>) =>
     req<Child>("/api/children", { method: "POST", body: JSON.stringify(body) }),

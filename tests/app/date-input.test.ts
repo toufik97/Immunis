@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { autoSlashDate, isoToDisplay, parseDateInput } from "../../app/web/src/components/dateInput";
+import { autoSlashDate, checkDateBounds, isoToDisplay, parseDateInput } from "../../app/web/src/components/dateInput";
 
 describe("date input (MA day-first entry)", () => {
   it("parses DD/MM/YYYY day-first", () => {
@@ -35,5 +35,12 @@ describe("date input (MA day-first entry)", () => {
   it("displays ISO as DD/MM/YYYY", () => {
     expect(isoToDisplay("2026-12-05")).toBe("05/12/2026");
     expect(isoToDisplay("")).toBe("");
+  });
+
+  it("flags out-of-range ISO dates for min/max bounds", () => {
+    expect(checkDateBounds("2026-10-10", "2026-10-10", "2026-10-15")).toBe(null);
+    expect(checkDateBounds("2026-10-09", "2026-10-10")).toBe("tooEarly");
+    expect(checkDateBounds("2026-10-16", undefined, "2026-10-15")).toBe("tooLate");
+    expect(checkDateBounds("2026-10-10")).toBe(null);
   });
 });

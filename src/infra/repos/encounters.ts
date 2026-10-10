@@ -116,9 +116,15 @@ export function storeEncounter(
     );
   }
 
+  // Presence is the visit itself: any recorded encounter fulfils the child's
+  // pending appointments due on or before that day (no manual present button).
+  db.prepare("UPDATE appointments SET kept = 1 WHERE child_id = ? AND due_date <= ? AND kept IS NULL").run(
+    parsed.childId,
+    parsed.date
+  );
+
   if (parsed.nextAppointmentDate) {
-    const expected = (expectedProducts ?? []).filter((p) => typeof p === "string" && p.length > 0);
-    db.prepare(
+    const expected = (expectedProducts ?? []).filter((p) => typeof p === "string" && p.length > 0);    db.prepare(
       "INSERT INTO appointments (id, child_id, due_date, expected_products, kept) VALUES (?, ?, ?, ?, NULL)"
     ).run(randomUUID(), parsed.childId, parsed.nextAppointmentDate, JSON.stringify(expected));
   }

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { openTestDb } from "./db-helper";
 import { registerChild } from "../../src/app/register-child";
 import { createAppointment, markAppointment } from "../../src/infra/repos/appointments";
+import { recordEncounter } from "../../src/infra/repos/encounters";
 import { noShowsFor, sessionFor } from "../../src/app/sessions";
 
 function child(db: never, givenName: string) {
@@ -44,6 +45,34 @@ describe("sessions seam", () => {
     const rows = noShowsFor(db, "2026-12-01");
     expect(rows.map((r) => r.childId)).toEqual([b.id]);
     expect(rows[0].childName).toBe("B F");
+    db.close();
+  });
+
+  it("marks pending appointments kept when a visit is recorded", () => {
+    const db = openTestDb();
+    const a = child(db as never, "A");
+    const b = child(db as never, "B");
+    createAppointment(db, { childId: a.id, dueDate: "2026-10-09", expectedProducts: ["BCG"] });
+    createAppointment(db, { childId: b.id, dueDate: "2026-10-01", expectedProducts: ["BCG"] });
+    createAppointment(db, { childId: b.id, dueDate: "2026-12-01", expectedProducts: ["BCG"] });
+
+    recordEncounter(
+      db,
+      { childId: a.id, date: "2026-10-09", screening: "VACCINATE", doses: [] },
+      { today: "2026-10-09" }
+    );
+    // Same-day visit clears the session row and prevents a next-day no-show.
+    expect(sessionFor(db, "2026-10-09").expected.map((e) => e.childId)).toEqual([]);
+    expect(noShowsFor(db, "2026-10-10").map((r) => r.childId)).toEqual([b.id]);
+
+    // Late visit clears the overdue row but leaves the future appointment pending.
+    recordEncounter(
+      db,
+      { childId: b.id, date: "2026-10-09", screening: "VACCINATE", doses: [] },
+      { today: "2026-10-09" }
+    );
+    expect(noShowsFor(db, "2026-10-10")).toEqual([]);
+    expect(sessionFor(db, "2026-12-01").expected.map((e) => e.childId)).toEqual([b.id]);
     db.close();
   });
 });

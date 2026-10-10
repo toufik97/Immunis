@@ -17,13 +17,8 @@ import {
 } from "@mantine/core";
 import { IconAlertCircle, IconCalendarCheck } from "@tabler/icons-react";
 import { api, type Appointment } from "../api";
-import { formatCivilDate, formatCount } from "../format";
+import { formatCivilDate, formatCount, todayCivilDate } from "../format";
 import DateField from "./DateField";
-
-function today(): string {
-  const n = new Date();
-  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
-}
 
 interface Row {
   apptId: string;
@@ -51,9 +46,6 @@ type SortKey = "localId" | "name" | "dueDate";
 
 interface TableActions {
   onOpen?: (childId: string) => void;
-  onPresent?: (apptId: string) => void;
-  onAbsent?: (apptId: string) => void;
-  busyId?: string | null;
 }
 
 /** Sortable, searchable, filterable person list shared by sessions and no-shows. */
@@ -105,7 +97,7 @@ function PersonTable({
     );
   }
 
-  const showActions = actions && (actions.onOpen || actions.onPresent || actions.onAbsent);
+  const showActions = actions?.onOpen !== undefined;
 
   return (
     <Stack gap="sm">
@@ -160,28 +152,6 @@ function PersonTable({
                           {t("session.open")}
                         </Button>
                       )}
-                      {actions?.onPresent && (
-                        <Button
-                          size="compact-xs"
-                          loading={actions.busyId === r.apptId}
-                          disabled={actions.busyId === r.apptId}
-                          onClick={() => actions.onPresent?.(r.apptId)}
-                        >
-                          {t("session.present")}
-                        </Button>
-                      )}
-                      {actions?.onAbsent && (
-                        <Button
-                          size="compact-xs"
-                          variant="light"
-                          color="gray"
-                          loading={actions.busyId === r.apptId}
-                          disabled={actions.busyId === r.apptId}
-                          onClick={() => actions.onAbsent?.(r.apptId)}
-                        >
-                          {t("session.absent")}
-                        </Button>
-                      )}
                     </Group>
                   </Table.Td>
                 )}
@@ -206,11 +176,10 @@ function labelOf(products: { id: string; label_fr?: string }[], id: string): str
 export function SessionPanel({ products, onOpen }: PanelProps) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
-  const [date, setDate] = useState(today());
+  const [date, setDate] = useState(todayCivilDate());
   const [data, setData] = useState<Awaited<ReturnType<typeof api.session>> | null>(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
   const productLabel = (id: string) => labelOf(products, id);
 
   async function load(forDate = date): Promise<void> {
@@ -226,22 +195,9 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
   }
 
   useEffect(() => {
-    void load(today());
+    void load(todayCivilDate());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  async function mark(id: string, kept: boolean): Promise<void> {
-    setErr("");
-    setBusyId(id);
-    try {
-      await api.markAppointment(id, kept);
-      await load();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusyId(null);
-    }
-  }
 
   return (
     <Card>
@@ -290,7 +246,7 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
                 rows={data.expected.map(toRow)}
                 showDue={false}
                 productLabel={productLabel}
-                actions={{ onOpen, onPresent: (id) => void mark(id, true), busyId }}
+                actions={{ onOpen }}
               />
             </Stack>
           ))}
@@ -301,11 +257,10 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
 
 export function NoShowPanel({ products, onOpen }: PanelProps) {
   const { t } = useTranslation();
-  const [asOf, setAsOf] = useState(today());
+  const [asOf, setAsOf] = useState(todayCivilDate());
   const [list, setList] = useState<Awaited<ReturnType<typeof api.noShows>>>([]);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
   const productLabel = (id: string) => labelOf(products, id);
 
   async function load(forDate = asOf): Promise<void> {
@@ -321,22 +276,9 @@ export function NoShowPanel({ products, onOpen }: PanelProps) {
   }
 
   useEffect(() => {
-    void load(today());
+    void load(todayCivilDate());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  async function mark(id: string, kept: boolean): Promise<void> {
-    setErr("");
-    setBusyId(id);
-    try {
-      await api.markAppointment(id, kept);
-      await load();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusyId(null);
-    }
-  }
 
   return (
     <Card>
@@ -369,7 +311,7 @@ export function NoShowPanel({ products, onOpen }: PanelProps) {
             rows={list.map(toRow)}
             showDue
             productLabel={productLabel}
-            actions={{ onOpen, onPresent: (id) => void mark(id, true), onAbsent: (id) => void mark(id, false), busyId }}
+            actions={{ onOpen }}
           />
         )}
       </Stack>
@@ -416,7 +358,7 @@ export function StockPanel({ products }: { products: { id: string; label_fr?: st
     label: string;
     color: string;
   } {
-    if (l.expiryDate < today()) return { key: "expired", label: t("stock.expired"), color: "red" };
+    if (l.expiryDate < todayCivilDate()) return { key: "expired", label: t("stock.expired"), color: "red" };
     if (!l.coldChainOk) return { key: "unusable", label: t("stock.unusable"), color: "orange" };
     if (l.qtyOnHand <= 0) return { key: "empty", label: t("stock.emptyQty"), color: "gray" };
     return { key: "usable", label: t("stock.usable"), color: "teal" };
