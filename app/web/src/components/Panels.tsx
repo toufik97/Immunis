@@ -1,6 +1,23 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Checkbox,
+  Grid,
+  Group,
+  Select,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Title,
+} from "@mantine/core";
+import { IconAlertCircle, IconCalendarCheck } from "@tabler/icons-react";
 import { api, type Appointment } from "../api";
+import { formatCivilDate, formatCount } from "../format";
 
 function today(): string {
   const n = new Date();
@@ -50,7 +67,8 @@ function PersonTable({
   productLabel: (id: string) => string;
   actions?: TableActions;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language;
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("dueDate");
   const [asc, setAsc] = useState(true);
@@ -72,88 +90,106 @@ function PersonTable({
   function header(key: SortKey, label: string) {
     const active = sortKey === key;
     return (
-      <th aria-sort={active ? (asc ? "ascending" : "descending") : "none"}>
-        <button
-          className="thbtn"
-          onClick={() => (active ? setAsc(!asc) : (setSortKey(key), setAsc(true)))}
+      <Table.Th aria-sort={active ? (asc ? "ascending" : "descending") : "none"}>
+        <Button
+          variant="transparent"
+          size="compact-xs"
+          px={0}
           aria-label={label}
+          onClick={() => (active ? setAsc(!asc) : (setSortKey(key), setAsc(true)))}
         >
           {label} {active ? (asc ? "▲" : "▼") : ""}
-        </button>
-      </th>
+        </Button>
+      </Table.Th>
     );
   }
 
   const showActions = actions && (actions.onOpen || actions.onPresent || actions.onAbsent);
 
   return (
-    <div>
-      <div className="row">
-        <input placeholder={t("table.search")} value={query} onChange={(e) => setQuery(e.target.value)} aria-label={t("table.search")} />
-        <select value={product} onChange={(e) => setProduct(e.target.value)} aria-label={t("table.doses")}>
-          <option value="all">{t("table.all")}</option>
-          {allProducts.map((p) => (
-            <option key={p} value={p}>
-              {productLabel(p)}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="tablewrap">
-      <table>
-        <thead>
-          <tr>
-            {header("localId", t("table.localId"))}
-            {header("name", t("table.name"))}
-            <th>{t("table.address")}</th>
-            {showDue && header("dueDate", t("table.due"))}
-            <th>{t("table.doses")}</th>
-            {showActions && <th aria-label="actions" />}
-          </tr>
-        </thead>
-        <tbody>
-          {filtered.map((r) => (
-            <tr key={r.apptId}>
-              <td>{r.localId}</td>
-              <td>{r.name}</td>
-              <td>{r.address}</td>
-              {showDue && <td>{r.dueDate}</td>}
-              <td>{r.products.map(productLabel).join(", ") || "—"}</td>
-              {showActions && (
-                <td>
-                  <span className="actions">
-                    {actions?.onOpen && (
-                      <button className="secondary small" onClick={() => actions.onOpen?.(r.childId)}>
-                        {t("session.open")}
-                      </button>
-                    )}
-                    {actions?.onPresent && (
-                      <button
-                        className="small"
-                        disabled={actions.busyId === r.apptId}
-                        onClick={() => actions.onPresent?.(r.apptId)}
-                      >
-                        {t("session.present")}
-                      </button>
-                    )}
-                    {actions?.onAbsent && (
-                      <button
-                        className="secondary small"
-                        disabled={actions.busyId === r.apptId}
-                        onClick={() => actions.onAbsent?.(r.apptId)}
-                      >
-                        {t("session.absent")}
-                      </button>
-                    )}
-                  </span>
-                </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      </div>
-    </div>
+    <Stack gap="sm">
+      <Group align="end" wrap="wrap">
+        <TextInput
+          label={t("table.search")}
+          placeholder={t("table.search")}
+          aria-label={t("table.search")}
+          name="tableSearch"
+          type="search"
+          autoComplete="off"
+          spellCheck={false}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          style={{ flex: 1, minWidth: 200 }}
+        />
+        <Select
+          label={t("table.doses")}
+          aria-label={t("table.doses")}
+          name="tableProduct"
+          value={product}
+          onChange={(v) => v && setProduct(v)}
+          data={[{ value: "all", label: t("table.all") }, ...allProducts.map((p) => ({ value: p, label: productLabel(p) }))]}
+          style={{ minWidth: 180 }}
+        />
+      </Group>
+      <Table.ScrollContainer minWidth={640}>
+        <Table striped highlightOnHover withTableBorder>
+          <Table.Thead>
+            <Table.Tr>
+              {header("localId", t("table.localId"))}
+              {header("name", t("table.name"))}
+              <Table.Th>{t("table.address")}</Table.Th>
+              {showDue && header("dueDate", t("table.due"))}
+              <Table.Th>{t("table.doses")}</Table.Th>
+              {showActions && <Table.Th aria-label="actions" />}
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody className="tabular">
+            {filtered.map((r) => (
+              <Table.Tr key={r.apptId}>
+                <Table.Td className="break-words">{r.localId}</Table.Td>
+                <Table.Td className="break-words">{r.name}</Table.Td>
+                <Table.Td className="break-words">{r.address}</Table.Td>
+                {showDue && <Table.Td>{formatCivilDate(r.dueDate, lang)}</Table.Td>}
+                <Table.Td>{r.products.map(productLabel).join(", ") || "—"}</Table.Td>
+                {showActions && (
+                  <Table.Td>
+                    <Group gap={6} wrap="wrap">
+                      {actions?.onOpen && (
+                        <Button size="compact-xs" variant="light" onClick={() => actions.onOpen?.(r.childId)}>
+                          {t("session.open")}
+                        </Button>
+                      )}
+                      {actions?.onPresent && (
+                        <Button
+                          size="compact-xs"
+                          loading={actions.busyId === r.apptId}
+                          disabled={actions.busyId === r.apptId}
+                          onClick={() => actions.onPresent?.(r.apptId)}
+                        >
+                          {t("session.present")}
+                        </Button>
+                      )}
+                      {actions?.onAbsent && (
+                        <Button
+                          size="compact-xs"
+                          variant="light"
+                          color="gray"
+                          loading={actions.busyId === r.apptId}
+                          disabled={actions.busyId === r.apptId}
+                          onClick={() => actions.onAbsent?.(r.apptId)}
+                        >
+                          {t("session.absent")}
+                        </Button>
+                      )}
+                    </Group>
+                  </Table.Td>
+                )}
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      </Table.ScrollContainer>
+    </Stack>
   );
 }
 
@@ -167,7 +203,8 @@ function labelOf(products: { id: string; label_fr?: string }[], id: string): str
 }
 
 export function SessionPanel({ products, onOpen }: PanelProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language;
   const [date, setDate] = useState(today());
   const [data, setData] = useState<Awaited<ReturnType<typeof api.session>> | null>(null);
   const [err, setErr] = useState("");
@@ -206,40 +243,60 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
   }
 
   return (
-    <section className="card">
-      <h2>{t("nav.session")}</h2>
-      <div className="row">
-        <label>
-          {t("session.date")}
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </label>
-        <button onClick={() => void load()} disabled={loading}>
-          {loading ? t("common.loading") : t("session.load")}
-        </button>
-      </div>
-      {err && <div className="error">{t("common.error", { msg: err })}</div>}
-      {data &&
-        (data.expected.length === 0 ? (
-          <p className="hint">{t("session.empty")}</p>
-        ) : (
-          <div>
-            <p>{t("session.expected", { n: data.counters.children })}</p>
-            <p className="chips">
-              {Object.entries(data.counters.dosesByProduct).map(([p, n]) => (
-                <span key={p} className="chip">
-                  {productLabel(p)} ×{n}
-                </span>
-              ))}
-            </p>
-            <PersonTable
-              rows={data.expected.map(toRow)}
-              showDue={false}
-              productLabel={productLabel}
-              actions={{ onOpen, onPresent: (id) => void mark(id, true), onAbsent: (id) => void mark(id, false), busyId }}
+    <Card>
+      <Stack gap="sm">
+        <Group justify="space-between" wrap="wrap">
+          <Title order={2} size="h4">
+            {t("nav.session")}
+          </Title>
+          <Group align="end" wrap="wrap">
+            <TextInput
+              label={t("session.date")}
+              name="sessionDate"
+              type="date"
+              autoComplete="off"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
             />
-          </div>
-        ))}
-    </section>
+            <Button
+              onClick={() => void load()}
+              loading={loading}
+              leftSection={<IconCalendarCheck size={15} aria-hidden="true" />}
+            >
+              {t("session.load")}
+            </Button>
+          </Group>
+        </Group>
+        <div aria-live="polite">
+          {err && <Alert color="red" icon={<IconAlertCircle size={16} aria-hidden="true" />} title={err} />}
+        </div>
+        {data &&
+          (data.expected.length === 0 ? (
+            <Text size="sm" c="dimmed">
+              {t("session.empty")}
+            </Text>
+          ) : (
+            <Stack gap="sm">
+              <Text size="sm" fw={600} className="tabular">
+                {t("session.expected", { n: formatCount(data.counters.children, lang) })}
+              </Text>
+              <Group gap="xs">
+                {Object.entries(data.counters.dosesByProduct).map(([p, n]) => (
+                  <Badge key={p} variant="light" color="teal" className="tabular">
+                    {productLabel(p)} ×{formatCount(n, lang)}
+                  </Badge>
+                ))}
+              </Group>
+              <PersonTable
+                rows={data.expected.map(toRow)}
+                showDue={false}
+                productLabel={productLabel}
+                actions={{ onOpen, onPresent: (id) => void mark(id, true), onAbsent: (id) => void mark(id, false), busyId }}
+              />
+            </Stack>
+          ))}
+      </Stack>
+    </Card>
   );
 }
 
@@ -283,36 +340,52 @@ export function NoShowPanel({ products, onOpen }: PanelProps) {
   }
 
   return (
-    <section className="card">
-      <h2>{t("nav.noshows")}</h2>
-      <div className="row">
-        <label>
-          {t("noshow.asOf")}
-          <input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} />
-        </label>
-        <button onClick={() => void load()} disabled={loading}>
-          {loading ? t("common.loading") : t("session.load")}
-        </button>
-      </div>
-      {err && <div className="error">{t("common.error", { msg: err })}</div>}
-      {list.length === 0 && !loading ? (
-        <p className="hint">{t("noshow.empty")}</p>
-      ) : (
-        <PersonTable
-          rows={list.map(toRow)}
-          showDue
-          productLabel={productLabel}
-          actions={{ onOpen, onPresent: (id) => void mark(id, true), onAbsent: (id) => void mark(id, false), busyId }}
-        />
-      )}
-    </section>
+    <Card>
+      <Stack gap="sm">
+        <Group justify="space-between" wrap="wrap">
+          <Title order={2} size="h4">
+            {t("nav.noshows")}
+          </Title>
+          <Group align="end" wrap="wrap">
+            <TextInput
+              label={t("noshow.asOf")}
+              name="noShowAsOf"
+              type="date"
+              autoComplete="off"
+              value={asOf}
+              onChange={(e) => setAsOf(e.target.value)}
+            />
+            <Button onClick={() => void load()} loading={loading}>
+              {t("session.load")}
+            </Button>
+          </Group>
+        </Group>
+        <div aria-live="polite">
+          {err && <Alert color="red" icon={<IconAlertCircle size={16} aria-hidden="true" />} title={err} />}
+        </div>
+        {list.length === 0 && !loading ? (
+          <Text size="sm" c="dimmed">
+            {t("noshow.empty")}
+          </Text>
+        ) : (
+          <PersonTable
+            rows={list.map(toRow)}
+            showDue
+            productLabel={productLabel}
+            actions={{ onOpen, onPresent: (id) => void mark(id, true), onAbsent: (id) => void mark(id, false), busyId }}
+          />
+        )}
+      </Stack>
+    </Card>
   );
 }
 
 export function StockPanel({ products }: { products: { id: string; label_fr?: string }[] }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language;
   const [lots, setLots] = useState<Awaited<ReturnType<typeof api.lots>>>([]);
   const [form, setForm] = useState({ productGroupId: "", lotNumber: "", expiryDate: "", qtyOnHand: "10", coldChainOk: true });
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [usableOnly, setUsableOnly] = useState(false);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
@@ -335,26 +408,28 @@ export function StockPanel({ products }: { products: { id: string; label_fr?: st
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const productMissing = submitAttempted && form.productGroupId === "";
+  const lotMissing = submitAttempted && form.lotNumber.trim() === "";
+  const expiryMissing = submitAttempted && form.expiryDate === "";
   const lotValid =
-    (form.productGroupId || products[0]?.id) !== undefined &&
-    form.productGroupId !== "" &&
-    form.lotNumber.trim() !== "" &&
-    form.expiryDate !== "";
+    form.productGroupId !== "" && form.lotNumber.trim() !== "" && form.expiryDate !== "";
 
   function statusOf(l: { expiryDate: string; coldChainOk: boolean; qtyOnHand: number }): {
     key: "usable" | "expired" | "unusable" | "empty";
     label: string;
+    color: string;
   } {
-    if (l.expiryDate < today()) return { key: "expired", label: t("stock.expired") };
-    if (!l.coldChainOk) return { key: "unusable", label: t("stock.unusable") };
-    if (l.qtyOnHand <= 0) return { key: "empty", label: t("stock.emptyQty") };
-    return { key: "usable", label: t("stock.usable") };
+    if (l.expiryDate < today()) return { key: "expired", label: t("stock.expired"), color: "red" };
+    if (!l.coldChainOk) return { key: "unusable", label: t("stock.unusable"), color: "orange" };
+    if (l.qtyOnHand <= 0) return { key: "empty", label: t("stock.emptyQty"), color: "gray" };
+    return { key: "usable", label: t("stock.usable"), color: "teal" };
   }
 
   const shown = usableOnly ? lots.filter((l) => statusOf(l).key === "usable") : lots;
 
   async function add(): Promise<void> {
     setErr("");
+    setSubmitAttempted(true);
     if (!lotValid) {
       setErr(t("stock.requireLot"));
       return;
@@ -369,6 +444,7 @@ export function StockPanel({ products }: { products: { id: string; label_fr?: st
         qtyOnHand: Number(form.qtyOnHand),
       });
       setForm((f) => ({ ...f, lotNumber: "", expiryDate: "" }));
+      setSubmitAttempted(false);
       await load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -378,87 +454,126 @@ export function StockPanel({ products }: { products: { id: string; label_fr?: st
   }
 
   return (
-    <section className="card">
-      <h2>{t("nav.stock")}</h2>
-      <div className="toolbar">
-        <button className="secondary" onClick={() => void load()} disabled={loading}>
-          {loading ? t("common.loading") : t("session.load")}
-        </button>
-        <label className="check">
-          <input type="checkbox" checked={usableOnly} onChange={(e) => setUsableOnly(e.target.checked)} />
-          {t("stock.usable")}
-        </label>
-      </div>
-      {shown.length === 0 ? (
-        <p className="hint">{t("stock.empty")}</p>
-      ) : (
-        <ul className="lots">
-          {shown.map((l) => {
-            const s = statusOf(l);
-            return (
-              <li key={l.id}>
-                <span>
-                  {l.productGroupId} · {l.lotNumber} · {l.expiryDate} · {l.qtyOnHand}
-                </span>{" "}
-                <span className={`badge ${s.key}`}>{s.label}</span>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      <h3>{t("stock.add")}</h3>
-      <div className="grid">
-        <label>
-          {t("stock.product")}
-          <select
-            value={form.productGroupId}
-            onChange={(e) => setForm((f) => ({ ...f, productGroupId: e.target.value }))}
-          >
-            <option value="">—</option>
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label_fr ?? p.id}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          {t("stock.lotNumber")}
-          <input value={form.lotNumber} onChange={(e) => setForm((f) => ({ ...f, lotNumber: e.target.value }))} />
-        </label>
-        <label>
-          {t("stock.expiry")}
-          <input
-            type="date"
-            value={form.expiryDate}
-            onChange={(e) => setForm((f) => ({ ...f, expiryDate: e.target.value }))}
-          />
-        </label>
-        <label>
-          {t("stock.qty")}
-          <input
-            type="number"
-            min="0"
-            value={form.qtyOnHand}
-            onChange={(e) => setForm((f) => ({ ...f, qtyOnHand: e.target.value }))}
-          />
-        </label>
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={form.coldChainOk}
-            onChange={(e) => setForm((f) => ({ ...f, coldChainOk: e.target.checked }))}
-          />
-          {t("stock.coldchain")}
-        </label>
-      </div>
-      <div className="toolbar">
-        <button onClick={() => void add()} disabled={adding || !lotValid}>
-          {adding ? t("common.loading") : t("stock.add")}
-        </button>
-      </div>
-      {!lotValid && <p className="hint">{t("stock.requireLot")}</p>}
-      {err && <div className="error">{t("common.error", { msg: err })}</div>}
-    </section>
+    <Card>
+      <Stack gap="sm">
+        <Group justify="space-between" wrap="wrap">
+          <Title order={2} size="h4">
+            {t("nav.stock")}
+          </Title>
+          <Group wrap="wrap" align="center">
+            <Button variant="light" onClick={() => void load()} loading={loading}>
+              {t("session.load")}
+            </Button>
+            <Checkbox
+              label={t("stock.usable")}
+              name="usableOnly"
+              checked={usableOnly}
+              onChange={(e) => setUsableOnly(e.target.checked)}
+            />
+          </Group>
+        </Group>
+        {shown.length === 0 ? (
+          <Text size="sm" c="dimmed">
+            {t("stock.empty")}
+          </Text>
+        ) : (
+          <Stack gap="xs">
+            {shown.map((l) => {
+              const s = statusOf(l);
+              return (
+                <Card key={l.id} withBorder shadow="none" padding="sm" radius="md">
+                  <Group justify="space-between" wrap="wrap">
+                    <Text size="sm" className="tabular break-words" style={{ flex: 1, minWidth: 0 }}>
+                      <span translate="no">{l.productGroupId}</span> ·{" "}
+                      <span translate="no">{l.lotNumber}</span> · {formatCivilDate(l.expiryDate, lang)} · ×
+                      {formatCount(l.qtyOnHand, lang)}
+                    </Text>
+                    <Badge color={s.color} variant="light">
+                      {s.label}
+                    </Badge>
+                  </Group>
+                </Card>
+              );
+            })}
+          </Stack>
+        )}
+        <Title order={3} size="h5">
+          {t("stock.add")}
+        </Title>
+        <Grid>
+          <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+            <Select
+              label={t("stock.product")}
+              name="lotProduct"
+              required
+              value={form.productGroupId}
+              onChange={(v) => v && setForm((f) => ({ ...f, productGroupId: v }))}
+              data={[
+                { value: "", label: "—" },
+                ...products.map((p) => ({ value: p.id, label: p.label_fr ?? p.id })),
+              ]}
+              error={productMissing ? t("stock.requireLot") : undefined}
+            />
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+            <TextInput
+              label={t("stock.lotNumber")}
+              name="lotNumber"
+              autoComplete="off"
+              required
+              value={form.lotNumber}
+              onChange={(e) => setForm((f) => ({ ...f, lotNumber: e.target.value }))}
+              error={lotMissing ? t("stock.requireLot") : undefined}
+            />
+          </Grid.Col>
+          <Grid.Col span={{ base: 6, md: 4 }}>
+            <TextInput
+              label={t("stock.expiry")}
+              name="lotExpiry"
+              type="date"
+              autoComplete="off"
+              required
+              value={form.expiryDate}
+              onChange={(e) => setForm((f) => ({ ...f, expiryDate: e.target.value }))}
+              error={expiryMissing ? t("stock.requireLot") : undefined}
+            />
+          </Grid.Col>
+          <Grid.Col span={{ base: 6, md: 4 }}>
+            <TextInput
+              label={t("stock.qty")}
+              name="lotQty"
+              type="number"
+              inputMode="numeric"
+              autoComplete="off"
+              min={0}
+              value={form.qtyOnHand}
+              onChange={(e) => setForm((f) => ({ ...f, qtyOnHand: e.target.value }))}
+            />
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, md: 8 }}>
+            <Checkbox
+              label={t("stock.coldchain")}
+              name="coldChainOk"
+              checked={form.coldChainOk}
+              onChange={(e) => setForm((f) => ({ ...f, coldChainOk: e.target.checked }))}
+              mt="xl"
+            />
+          </Grid.Col>
+        </Grid>
+        <Group>
+          <Button onClick={() => void add()} loading={adding}>
+            {t("stock.add")}
+          </Button>
+        </Group>
+        {submitAttempted && !lotValid && (
+          <Text size="sm" c="red" role="alert">
+            {t("stock.requireLot")}
+          </Text>
+        )}
+        <div aria-live="polite">
+          {err && <Alert color="red" icon={<IconAlertCircle size={16} aria-hidden="true" />} title={err} />}
+        </div>
+      </Stack>
+    </Card>
   );
 }

@@ -48,7 +48,7 @@ app.get("/assets/:file", async (req, reply) => {
   reply.header("Content-Type", MIME[path.extname(full)] ?? "application/octet-stream").send(fs.readFileSync(full));
 });
 
-app.listen({ port: PORT }, (err) => {
+app.listen({ port: PORT, host: "0.0.0.0" }, (err) => {
   if (err) {
     console.error(err);
     process.exit(1);
