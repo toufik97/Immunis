@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import type Database from "better-sqlite3";
+import { timingSafeEqual } from "node:crypto";
 import { z, ZodError } from "zod";
 import type { SchedulePack } from "../infra/packs/loader";
 import { evaluatePatient } from "../engine";
@@ -86,8 +87,27 @@ function sendError(reply: { code(n: number): { send(b: unknown): void } }, e: un
 }
 
 /** Fastify app over an opened DB (per-centre file in prod, :memory: in tests). */
-export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInstance {
+export function buildApp(
+  db: Database.Database,
+  pack: SchedulePack,
+  opts?: { apiToken?: string }
+): FastifyInstance {
   const app = Fastify({ logger: false });
+  // Optional shared centre token (IMMUNIS_TOKEN): when set, every /api route
+  // except the liveness probe requires it as `x-api-token`.
+  const apiToken = opts?.apiToken ?? process.env.IMMUNIS_TOKEN ?? "";
+  if (apiToken) {
+    app.addHook("onRequest", async (req, reply) => {
+      const path = req.url.split("?")[0];
+      if (!path.startsWith("/api/") || path === "/api/health") return;
+      const got = req.headers["x-api-token"];
+      const ok =
+        typeof got === "string" &&
+        got.length === apiToken.length &&
+        timingSafeEqual(Buffer.from(got), Buffer.from(apiToken));
+      if (!ok) reply.code(401).send({ error: "Unauthorized: set the centre token" });
+    });
+  }
   const catalog = pack.catalog as unknown as Record<string, unknown>;
   const meta = catalog["meta"] as Record<string, unknown>;
   const packMeta = {

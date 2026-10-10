@@ -113,6 +113,14 @@ export default function App() {
     state: "checking",
     pending: 0,
   });
+  // Centre token for LAN/tailnet use (IMMUNIS_TOKEN server-side); kept in this browser only.
+  const [token, setToken] = useState(() => {
+    try {
+      return localStorage.getItem("immunis-token") ?? "";
+    } catch {
+      return "";
+    }
+  });
 
   const familyRef = useRef<HTMLInputElement>(null);
   const givenRef = useRef<HTMLInputElement>(null);
@@ -258,6 +266,23 @@ export default function App() {
                 )}
               </Group>
               <Group gap="xs" wrap="nowrap">
+                <TextInput
+                  aria-label={t("common.token")}
+                  name="apiToken"
+                  type="password"
+                  autoComplete="off"
+                  placeholder={t("common.token")}
+                  value={token}
+                  onChange={(e) => {
+                    setToken(e.target.value);
+                    try {
+                      localStorage.setItem("immunis-token", e.target.value);
+                    } catch {
+                      /* private mode: token lasts this session */
+                    }
+                  }}
+                  style={{ maxWidth: 130 }}
+                />
                 <ColorSchemeToggle />
                 <SegmentedControl
                   size="xs"

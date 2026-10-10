@@ -6,6 +6,8 @@ import { buildApp } from "./api/app";
 
 const COUNTRY = process.env.COUNTRY_PACK ?? "MA";
 const PORT = Number(process.env.PORT ?? 5173);
+// Localhost only by default; set HOST=0.0.0.0 to expose on tailnet/LAN (with IMMUNIS_TOKEN).
+const HOST = process.env.HOST ?? "127.0.0.1";
 const DB_PATH = process.env.DB_PATH ?? path.resolve(process.cwd(), "data", "immunis.db");
 
 const pack = loadSchedulePack(COUNTRY);
@@ -48,15 +50,21 @@ app.get("/assets/:file", async (req, reply) => {
   reply.header("Content-Type", MIME[path.extname(full)] ?? "application/octet-stream").send(fs.readFileSync(full));
 });
 
-app.listen({ port: PORT, host: "0.0.0.0" }, (err) => {
+app.listen({ port: PORT, host: HOST }, (err) => {
   if (err) {
     console.error(err);
     process.exit(1);
   }
   console.log("Immunis");
   console.log("--------------------------------");
-  console.log(`URL: http://localhost:${PORT}`);
+  console.log(`URL: http://${HOST === "0.0.0.0" ? "<this-machine-ip>" : HOST}:${PORT}`);
   console.log(`Country pack: ${COUNTRY}`);
   console.log(`DB: ${DB_PATH}`);
+  console.log(
+    HOST === "127.0.0.1"
+      ? "LAN: off (localhost only; set HOST=0.0.0.0 for tailnet/LAN)"
+      : "LAN: on — set IMMUNIS_TOKEN or anyone on the network can read/write"
+  );
+  console.log(`API auth: ${process.env.IMMUNIS_TOKEN ? "on" : "off (set IMMUNIS_TOKEN to require the centre token)"}`);
   console.log("Press Ctrl+C to stop.");
 });

@@ -1,6 +1,15 @@
+function authHeaders(): Record<string, string> {
+  try {
+    const t = localStorage.getItem("immunis-token");
+    return t ? { "x-api-token": t } : {};
+  } catch {
+    return {};
+  }
+}
+
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     ...init,
   });
   const data = (await res.json()) as T & { error?: string };
@@ -86,7 +95,7 @@ export const api = {
   ): Promise<{ status: "created"; child: Child } | { status: "duplicate"; duplicates: DuplicateChild[] }> => {
     const res = await fetch("/api/children", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify(body),
     });
     const data = (await res.json()) as Child & { error?: string; duplicates?: DuplicateChild[] };
@@ -102,7 +111,7 @@ export const api = {
   ): Promise<{ status: "recorded" } | { status: "gated"; issues: GateIssue[]; error: string }> => {
     const res = await fetch("/api/encounters", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify(body),
     });
     const data = (await res.json()) as { error?: string; issues?: GateIssue[] };
