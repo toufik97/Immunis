@@ -33,10 +33,12 @@ interface Props {
   child: Child;
   products: { id: string; label_fr?: string }[];
   programs: { id: string; label_fr?: string }[];
+  /** Appointment products the child was opened from: prefilled as pending rows. */
+  expectedProducts?: string[];
   onDone: () => void;
 }
 
-export default function VisitPanel({ child, products, programs, onDone }: Props) {
+export default function VisitPanel({ child, products, programs, expectedProducts, onDone }: Props) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
   const [visitDate, setVisitDate] = useState(todayCivilDate());
@@ -93,6 +95,18 @@ export default function VisitPanel({ child, products, programs, onDone }: Props)
   useEffect(() => {
     setHistory([]);
     void fetchHistory();
+    // Scheduled opening: prefill one pending CENTRE row per expected product.
+    if (expectedProducts && expectedProducts.length > 0) {
+      const today = todayCivilDate();
+      const rows: Dose[] = expectedProducts.map((productGroupId) => ({
+        productGroupId,
+        administeredOn: today,
+        origin: "CENTRE" as const,
+        overridden: false,
+        recordedBy: "nurse",
+      }));
+      setDoses(rows);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [child.id]);
 
@@ -326,6 +340,17 @@ export default function VisitPanel({ child, products, programs, onDone }: Props)
         <Title order={3} size="h5">
           {t("visit.newDoses")}
         </Title>
+        {result && (
+          <Text size="sm" c="dimmed">
+            {t("visit.stillNeeded", {
+              needs:
+                result.antigenNeeds
+                  .filter((n) => n.dosesNeeded > 0)
+                  .map((n) => `${programLabel(n.programId)} (${n.dosesNeeded})`)
+                  .join(", ") || t("visit.noneDue"),
+            })}
+          </Text>
+        )}
         {blockedByScreening && (
           <Alert color="yellow" title={t("visit.screeningBlocks")} />
         )}

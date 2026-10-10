@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type Ref } from "react";
 import { useTranslation } from "react-i18next";
-import { TextInput } from "@mantine/core";
+import { ActionIcon, TextInput } from "@mantine/core";
+import { IconCalendar } from "@tabler/icons-react";
 import { autoSlashDate, checkDateBounds, isoToDisplay, parseDateInput } from "./dateInput";
 import { formatCivilDate } from "../format";
 
@@ -41,6 +42,7 @@ export default function DateField({
   const [text, setText] = useState(() => isoToDisplay(value));
   const [localError, setLocalError] = useState("");
   const lastValue = useRef(value);
+  const pickerRef = useRef<HTMLInputElement>(null);
 
   // Sync when the ISO value changes from outside (suggestions, navigation).
   useEffect(() => {
@@ -84,6 +86,7 @@ export default function DateField({
   }
 
   return (
+    <>
     <TextInput
       ref={inputRef}
       label={label}
@@ -95,6 +98,21 @@ export default function DateField({
       placeholder={t("date.placeholder")}
       styles={{ input: { direction: "ltr" } }}
       value={text}
+      rightSection={
+        <ActionIcon
+          variant="subtle"
+          aria-label={t("date.pick")}
+          onClick={() => {
+            const el = pickerRef.current;
+            if (!el || disabled) return;
+            el.value = lastValue.current;
+            if (typeof el.showPicker === "function") el.showPicker();
+            else el.focus();
+          }}
+        >
+          <IconCalendar size={16} aria-hidden="true" />
+        </ActionIcon>
+      }
       onChange={(e) => {
         const raw = e.target.value;
         const next = raw.length < text.length ? raw : autoSlashDate(raw);
@@ -118,5 +136,21 @@ export default function DateField({
       }}
       error={error ? error : localError || undefined}
     />
+    {/* Native calendar as a picker only: the text field stays the display. */}
+    <input
+      ref={pickerRef}
+      type="date"
+      tabIndex={-1}
+      aria-hidden="true"
+      min={min}
+      max={max}
+      style={{ position: "absolute", opacity: 0, width: 1, height: 1, pointerEvents: "none" }}
+      onChange={(e) => {
+        if (!e.target.value) return;
+        setText(isoToDisplay(e.target.value));
+        commit(e.target.value);
+      }}
+    />
+    </>
   );
 }

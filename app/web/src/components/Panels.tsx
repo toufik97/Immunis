@@ -45,7 +45,7 @@ function toRow(a: Appointment): Row {
 type SortKey = "localId" | "name" | "dueDate";
 
 interface TableActions {
-  onOpen?: (childId: string) => void;
+  onOpen?: (childId: string, products: string[]) => void;
 }
 
 /** Sortable, searchable, filterable person list shared by sessions and no-shows. */
@@ -148,7 +148,7 @@ function PersonTable({
                   <Table.Td>
                     <Group gap={6} wrap="wrap">
                       {actions?.onOpen && (
-                        <Button size="compact-xs" variant="light" onClick={() => actions.onOpen?.(r.childId)}>
+                        <Button size="compact-xs" variant="light" onClick={() => actions.onOpen?.(r.childId, r.products)}>
                           {t("session.open")}
                         </Button>
                       )}
@@ -166,7 +166,7 @@ function PersonTable({
 
 interface PanelProps {
   products: { id: string; label_fr?: string }[];
-  onOpen: (childId: string) => void;
+  onOpen: (childId: string, expectedProducts: string[]) => void;
 }
 
 function labelOf(products: { id: string; label_fr?: string }[], id: string): string {
@@ -204,7 +204,7 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
       <Stack gap="sm">
         <Group justify="space-between" wrap="wrap">
           <Title order={2} size="h4">
-            {t("nav.session")}
+            {t("nav.today")}
           </Title>
           <Group align="end" wrap="wrap">
             <DateField

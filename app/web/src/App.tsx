@@ -1,20 +1,16 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ActionIcon,
   Alert,
   AppShell,
   Badge,
-  Button,
-  Card,
   Container,
   Group,
   ScrollArea,
   SegmentedControl,
-  SimpleGrid,
   Stack,
   Tabs,
-  Text,
   TextInput,
   Title,
   useMantineColorScheme,
@@ -24,9 +20,7 @@ import {
   IconCalendarCheck,
   IconMoon,
   IconPackages,
-  IconSearch,
   IconShieldCheck,
-  IconStethoscope,
   IconSun,
   IconUserExclamation,
   IconUserPlus,
@@ -35,26 +29,36 @@ import {
 } from "@tabler/icons-react";
 import "./i18n";
 import { applyLocale, type Locale } from "./i18n";
-import { api, type Child, type DuplicateChild } from "./api";
-import { formatCivilDate, formatCount, todayCivilDate } from "./format";
+import { api, type Child } from "./api";
+import { formatCount, todayCivilDate } from "./format";
+import { isTab, resolveInitialTab, type Tab } from "./tabs";
 import VisitPanel from "./components/VisitPanel";
-import DateField from "./components/DateField";
+import RegistryPanel from "./components/RegistryPanel";
 import { SessionPanel, NoShowPanel, StockPanel } from "./components/Panels";
 import "./styles.css";
 
-type Tab = "visit" | "session" | "noshows" | "stock";
-const TABS: Tab[] = ["visit", "session", "noshows", "stock"];
-
 type PackInfo = Awaited<ReturnType<typeof api.pack>>;
 
-function readTabFromUrl(): Tab {
+function readTabFromUrl(): string | null {
   try {
-    const v = new URLSearchParams(window.location.search).get("tab") as Tab | null;
-    if (v && (TABS as string[]).includes(v)) return v;
+    return new URLSearchParams(window.location.search).get("tab");
   } catch {
-    /* ignore */
+    return null;
   }
-  return "visit";
+}
+
+function readStoredTab(): { tab: string | null; date: string | null } {
+  try {
+    const raw = localStorage.getItem("immunis-tab");
+    if (!raw) return { tab: null, date: null };
+    const v = JSON.parse(raw) as { tab?: unknown; date?: unknown };
+    return {
+      tab: typeof v.tab === "string" ? v.tab : null,
+      date: typeof v.date === "string" ? v.date : null,
+    };
+  } catch {
+    return { tab: null, date: null };
+  }
 }
 
 function packBadgeColor(status: string): string {
@@ -82,25 +86,14 @@ function ColorSchemeToggle() {
 
 export default function App() {
   const { t, i18n } = useTranslation();
-  const [tab, setTab] = useState<Tab>(() => readTabFromUrl());
-  const [pack, setPack] = useState<PackInfo | null>(null);
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Child[]>([]);
-  const [child, setChild] = useState<Child | null>(null);
-  const [reg, setReg] = useState({
-    familyName: "",
-    givenName: "",
-    birthDate: "",
-    fatherName: "",
-    motherName: "",
-    address: "",
-    centreId: "CS01",
-    firstVisitYear: "2026",
+  const [tab, setTab] = useState<Tab>(() => {
+    const stored = readStoredTab();
+    return resolveInitialTab(readTabFromUrl(), stored.tab, stored.date, todayCivilDate());
   });
-  const [submitAttempted, setSubmitAttempted] = useState(false);
-  const [duplicates, setDuplicates] = useState<DuplicateChild[] | null>(null);
-  const [registering, setRegistering] = useState(false);
-  const [searching, setSearching] = useState(false);
+  const [pack, setPack] = useState<PackInfo | null>(null);
+  const [child, setChild] = useState<Child | null>(null);
+  // Expected products of the appointment the child was opened from (auto-fill).
+  const [pendingExpected, setPendingExpected] = useState<string[]>([]);
   const [err, setErr] = useState("");
   const [net, setNet] = useState<{ state: "checking" | "online" | "offline"; pending: number }>({
     state: "checking",
@@ -115,10 +108,6 @@ export default function App() {
     }
   });
 
-  const familyRef = useRef<HTMLInputElement>(null);
-  const givenRef = useRef<HTMLInputElement>(null);
-  const birthRef = useRef<HTMLInputElement>(null);
-
   useEffect(() => {
     applyLocale(i18n.language as Locale);
     api.pack().then(setPack).catch((e) => setErr(e instanceof Error ? e.message : String(e)));
@@ -129,10 +118,18 @@ export default function App() {
     const url = new URL(window.location.href);
     url.searchParams.set("tab", tab);
     window.history.replaceState(null, "", url.toString());
+    try {
+      localStorage.setItem("immunis-tab", JSON.stringify({ tab, date: todayCivilDate() }));
+    } catch {
+      /* private mode: tab memory lasts this session */
+    }
   }, [tab]);
 
   useEffect(() => {
-    const onPop = () => setTab(readTabFromUrl());
+    const onPop = () => {
+      const t = readTabFromUrl();
+      if (isTab(t)) setTab(t);
+    };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
@@ -151,64 +148,23 @@ export default function App() {
     void refreshNet();
   }, [tab]);
 
-  async function search(): Promise<void> {
-    if (!query.trim() || searching) return;
-    setErr("");
-    setSearching(true);
-    try {
-      setResults(await api.searchChildren(query.trim()));
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSearching(false);
-    }
-  }
-
-  const familyMissing = submitAttempted && reg.familyName.trim() === "";
-  const givenMissing = submitAttempted && reg.givenName.trim() === "";
-  const birthMissing = submitAttempted && reg.birthDate === "";
-  const regValid =
-    reg.familyName.trim() !== "" && reg.givenName.trim() !== "" && reg.birthDate !== "";
-
-  async function register(force = false): Promise<void> {
-    setErr("");
-    setSubmitAttempted(true);
-    if (!regValid) {
-      const msg = t("register.required");
-      setErr(msg);
-      if (reg.familyName.trim() === "") familyRef.current?.focus();
-      else if (reg.givenName.trim() === "") givenRef.current?.focus();
-      else birthRef.current?.focus();
-      return;
-    }
-    setRegistering(true);
-    try {
-      const r = await api.registerChildDetailed({ ...reg, ...(force ? { force: true } : {}) });
-      if (r.status === "duplicate") {
-        setDuplicates(r.duplicates);
-      } else {
-        setDuplicates(null);
-        setSubmitAttempted(false);
-        setChild(r.child);
-        setResults([]);
-        void refreshNet();
-      }
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setRegistering(false);
-    }
-  }
-
-  async function openChildById(id: string): Promise<void> {
+  async function openChildById(id: string, expectedProducts: string[] = []): Promise<void> {
     setErr("");
     try {
       const c = await api.child(id);
       setChild(c);
-      setTab("visit");
+      setPendingExpected(expectedProducts);
+      setTab("today");
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     }
+  }
+
+  function handoffToToday(c: Child): void {
+    setChild(c);
+    setPendingExpected([]);
+    setTab("today");
+    void refreshNet();
   }
 
   const products = pack?.productGroups ?? [];
@@ -293,14 +249,14 @@ export default function App() {
                 />
               </Group>
             </Group>
-            <Tabs value={tab} onChange={(v) => v && setTab(v as Tab)} aria-label="tabs">
+            <Tabs value={tab} onChange={(v) => v && isTab(v) && setTab(v)} aria-label="tabs">
               <ScrollArea type="auto" offsetScrollbars={false}>
                 <Tabs.List style={{ flexWrap: "nowrap" }}>
-                  <Tabs.Tab value="visit" leftSection={<IconStethoscope size={14} aria-hidden="true" />}>
-                    {t("nav.visit")}
+                  <Tabs.Tab value="today" leftSection={<IconCalendarCheck size={14} aria-hidden="true" />}>
+                    {t("nav.today")}
                   </Tabs.Tab>
-                  <Tabs.Tab value="session" leftSection={<IconCalendarCheck size={14} aria-hidden="true" />}>
-                    {t("nav.session")}
+                  <Tabs.Tab value="registry" leftSection={<IconUserPlus size={14} aria-hidden="true" />}>
+                    {t("nav.registry")}
                   </Tabs.Tab>
                   <Tabs.Tab value="noshows" leftSection={<IconUserExclamation size={14} aria-hidden="true" />}>
                     {t("nav.noshows")}
@@ -325,192 +281,20 @@ export default function App() {
                 )}
               </div>
 
-              <Tabs value={tab} onChange={(v) => v && setTab(v as Tab)}>
-                <Tabs.Panel value="visit">
+              <Tabs value={tab} onChange={(v) => v && isTab(v) && setTab(v)}>
+                <Tabs.Panel value="today">
                   <Stack gap="md">
-                    <Card>
-                      <form
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          void search();
-                        }}
-                      >
-                        <Group align="end" wrap="wrap">
-                          <TextInput
-                            label={t("search.button")}
-                            placeholder={t("search.placeholder")}
-                            name="search"
-                            autoComplete="off"
-                            type="search"
-                            spellCheck={false}
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            style={{ flex: 1, minWidth: 200 }}
-                          />
-                          <Button
-                            type="submit"
-                            loading={searching}
-                            disabled={!query.trim()}
-                            leftSection={<IconSearch size={15} aria-hidden="true" />}
-                          >
-                            {t("search.button")}
-                          </Button>
-                        </Group>
-                      </form>
-                      {results.length === 0 && query && !searching && (
-                        <Text size="sm" c="dimmed" mt="sm">
-                          {t("search.noresults")}
-                        </Text>
-                      )}
-                      {results.length > 0 && (
-                        <Stack gap="xs" mt="sm">
-                          {results.map((c) => (
-                            <Card key={c.id} withBorder shadow="none" padding="sm" radius="md">
-                              <Group justify="space-between" wrap="wrap" className="min-w-0">
-                                <Text size="sm" className="break-words tabular" style={{ flex: 1, minWidth: 0 }}>
-                                  {c.givenName} {c.familyName} ·{" "}
-                                  {t("child.birthDate", { date: formatCivilDate(c.birthDate, lang) })}{" "}
-                                  {(c.localIds ?? [])
-                                    .map((l) => t("child.localId", { value: l.value }))
-                                    .join(" ")}
-                                </Text>
-                                <Button size="xs" variant="light" onClick={() => setChild(c)}>
-                                  {t("child.select")}
-                                </Button>
-                              </Group>
-                            </Card>
-                          ))}
-                        </Stack>
-                      )}
-                    </Card>
-
-                    <Card>
-                      <Title order={2} size="h4" mb="sm">
-                        {t("register.title")}
-                      </Title>
-                      <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
-                        <TextInput
-                          ref={familyRef}
-                          label={t("register.familyName")}
-                          name="familyName"
-                          autoComplete="family-name"
-                          required
-                          value={reg.familyName}
-                          onChange={(e) => setReg({ ...reg, familyName: e.target.value })}
-                          error={familyMissing ? t("register.required") : undefined}
-                        />
-                        <TextInput
-                          ref={givenRef}
-                          label={t("register.givenName")}
-                          name="givenName"
-                          autoComplete="given-name"
-                          required
-                          value={reg.givenName}
-                          onChange={(e) => setReg({ ...reg, givenName: e.target.value })}
-                          error={givenMissing ? t("register.required") : undefined}
-                        />
-                        <DateField
-                          inputRef={birthRef}
-                          label={t("register.birthDate")}
-                          name="birthDate"
-                          required
-                          max={todayCivilDate()}
-                          value={reg.birthDate}
-                          onChange={(v) => setReg({ ...reg, birthDate: v })}
-                          error={birthMissing ? t("register.required") : undefined}
-                        />
-                        <TextInput
-                          label={t("register.fatherName")}
-                          name="fatherName"
-                          autoComplete="off"
-                          value={reg.fatherName}
-                          onChange={(e) => setReg({ ...reg, fatherName: e.target.value })}
-                        />
-                        <TextInput
-                          label={t("register.motherName")}
-                          name="motherName"
-                          autoComplete="off"
-                          value={reg.motherName}
-                          onChange={(e) => setReg({ ...reg, motherName: e.target.value })}
-                        />
-                        <TextInput
-                          label={t("register.address")}
-                          name="address"
-                          autoComplete="street-address"
-                          value={reg.address}
-                          onChange={(e) => setReg({ ...reg, address: e.target.value })}
-                        />
-                        <TextInput
-                          label={t("register.centre")}
-                          name="centreId"
-                          autoComplete="off"
-                          value={reg.centreId}
-                          onChange={(e) => setReg({ ...reg, centreId: e.target.value })}
-                        />
-                        <TextInput
-                          label={t("register.firstVisitYear")}
-                          name="firstVisitYear"
-                          autoComplete="off"
-                          inputMode="numeric"
-                          pattern="\d{4}"
-                          value={reg.firstVisitYear}
-                          onChange={(e) => setReg({ ...reg, firstVisitYear: e.target.value })}
-                        />
-                      </SimpleGrid>
-                      <Group mt="md">
-                        <Button
-                          onClick={() => register(false)}
-                          loading={registering}
-                          leftSection={<IconUserPlus size={15} aria-hidden="true" />}
-                        >
-                          {t("register.add")}
-                        </Button>
-                      </Group>
-                      {submitAttempted && !regValid && (
-                        <Text size="sm" c="red" mt="xs" role="alert">
-                          {t("register.required")}
-                        </Text>
-                      )}
-                      {duplicates && duplicates.length > 0 && (
-                        <Alert color="red" mt="md" title={t("register.duplicate")}>
-                          <Stack gap="xs" mt="xs">
-                            {duplicates.map((c) => (
-                              <Group key={c.id} justify="space-between" wrap="wrap">
-                                <Text size="sm" className="tabular">
-                                  {c.givenName} {c.familyName} ·{" "}
-                                  {t("child.birthDate", { date: formatCivilDate(c.birthDate, lang) })}
-                                </Text>
-                                <Button
-                                  size="xs"
-                                  variant="light"
-                                  onClick={() => {
-                                    setChild(c);
-                                    setDuplicates(null);
-                                  }}
-                                >
-                                  {t("child.select")}
-                                </Button>
-                              </Group>
-                            ))}
-                            <Group>
-                              <Button size="xs" color="red" onClick={() => register(true)} loading={registering}>
-                                {t("register.force")}
-                              </Button>
-                              <Button size="xs" variant="default" onClick={() => setDuplicates(null)}>
-                                {t("common.dismiss")}
-                              </Button>
-                            </Group>
-                          </Stack>
-                        </Alert>
-                      )}
-                    </Card>
-
+                    <SessionPanel
+                      products={products}
+                      onOpen={(id, expected) => void openChildById(id, expected)}
+                    />
                     {child && pack && (
                       <VisitPanel
-                        key={child.id}
+                        key={`${child.id}|${pendingExpected.join(",")}`}
                         child={child}
                         products={pack.productGroups}
                         programs={pack.programs}
+                        expectedProducts={pendingExpected}
                         onDone={() => {
                           setChild({ ...child });
                           void refreshNet();
@@ -520,11 +304,14 @@ export default function App() {
                   </Stack>
                 </Tabs.Panel>
 
-                <Tabs.Panel value="session">
-                  <SessionPanel products={products} onOpen={(id) => void openChildById(id)} />
+                <Tabs.Panel value="registry">
+                  <RegistryPanel onSelect={handoffToToday} />
                 </Tabs.Panel>
                 <Tabs.Panel value="noshows">
-                  <NoShowPanel products={products} onOpen={(id) => void openChildById(id)} />
+                  <NoShowPanel
+                    products={products}
+                    onOpen={(id, expected) => void openChildById(id, expected)}
+                  />
                 </Tabs.Panel>
                 <Tabs.Panel value="stock">
                   <StockPanel products={products} />
