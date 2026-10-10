@@ -53,13 +53,16 @@ export function localIdsForMany(
 ): Map<string, { centreId: string; value: string }[]> {
   const out = new Map<string, { centreId: string; value: string }[]>();
   for (const id of childIds) out.set(id, []);
-  if (childIds.length === 0) return out;
-  const placeholders = childIds.map(() => "?").join(", ");
-  const rows = db
-    .prepare(`SELECT child_id, centre_id, value FROM local_ids WHERE child_id IN (${placeholders})`)
-    .all(...childIds) as { child_id: string; centre_id: string; value: string }[];
-  for (const r of rows) {
-    out.get(r.child_id)?.push({ centreId: r.centre_id, value: r.value });
+  // Chunked: SQLite caps bound variables, so huge lists go in batches of 500.
+  for (let i = 0; i < childIds.length; i += 500) {
+    const slice = childIds.slice(i, i + 500);
+    const placeholders = slice.map(() => "?").join(", ");
+    const rows = db
+      .prepare(`SELECT child_id, centre_id, value FROM local_ids WHERE child_id IN (${placeholders})`)
+      .all(...slice) as { child_id: string; centre_id: string; value: string }[];
+    for (const r of rows) {
+      out.get(r.child_id)?.push({ centreId: r.centre_id, value: r.value });
+    }
   }
   return out;
 }

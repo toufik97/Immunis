@@ -16,9 +16,19 @@ describe("appointments and no-shows", () => {
     const apptA = createAppointment(db, { childId: a.id, dueDate: "2026-10-01", expectedProducts: ["PENTA"] });
     createAppointment(db, { childId: b.id, dueDate: "2026-10-01", expectedProducts: ["BCG"] });
     expect(listDue(db, "2026-10-01")).toHaveLength(2);
-    markAppointment(db, apptA.id, true);
+    expect(markAppointment(db, apptA.id, true)).toBe(true);
+    expect(markAppointment(db, "does-not-exist", true)).toBe(false);
     const noShows = listNoShows(db, "2026-10-09");
     expect(noShows.map((n) => n.childId)).toEqual([b.id]);
+    db.close();
+  });
+
+  it("survives a corrupt expected_products cell instead of crashing reads", () => {
+    const db = openTestDb();
+    const a = createChild(db, { familyName: "A", givenName: "A", birthDate: "2025-01-01" });
+    const appt = createAppointment(db, { childId: a.id, dueDate: "2026-10-01", expectedProducts: ["PENTA"] });
+    db.prepare("UPDATE appointments SET expected_products = 'oops' WHERE id = ?").run(appt.id);
+    expect(listDue(db, "2026-10-01")[0].expectedProducts).toEqual([]);
     db.close();
   });
 });

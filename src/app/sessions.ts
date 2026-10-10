@@ -13,11 +13,16 @@ export interface SessionRow extends Appointment {
 export function enrichAppointments(db: Database.Database, appointments: Appointment[]): SessionRow[] {
   if (appointments.length === 0) return [];
   const childIds = [...new Set(appointments.map((a) => a.childId))];
-  const placeholders = childIds.map(() => "?").join(", ");
-  const rows = db
-    .prepare(`SELECT id, given_name, family_name, address FROM children WHERE id IN (${placeholders})`)
-    .all(...childIds) as { id: string; given_name: string; family_name: string; address: string | null }[];
-  const byId = new Map(rows.map((r) => [r.id, r]));
+  const byId = new Map<string, { id: string; given_name: string; family_name: string; address: string | null }>();
+  // Chunked: SQLite caps bound variables, so huge lists go in batches of 500.
+  for (let i = 0; i < childIds.length; i += 500) {
+    const slice = childIds.slice(i, i + 500);
+    const placeholders = slice.map(() => "?").join(", ");
+    const rows = db
+      .prepare(`SELECT id, given_name, family_name, address FROM children WHERE id IN (${placeholders})`)
+      .all(...slice) as { id: string; given_name: string; family_name: string; address: string | null }[];
+    for (const r of rows) byId.set(r.id, r);
+  }
   const ids = localIdsForMany(db, childIds);
   return appointments.map((a) => {
     const c = byId.get(a.childId);

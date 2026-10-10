@@ -110,9 +110,14 @@ export function consumeLot(
 ): void {
   const problem = checkLotUsable(db, lotId, onDate);
   if (problem !== "OK") throw new Error(`lot ${lotId} is not usable: ${problem}`);
-  const lot = getLot(db, lotId);
-  if (lot && lot.qtyOnHand < qty) {
-    throw new Error(`lot ${lotId} has only ${lot.qtyOnHand} doses, cannot consume ${qty}`);
+  // Single atomic decrement: concurrent writers cannot both pass the check.
+  const r = db
+    .prepare(
+      "UPDATE lots SET qty_on_hand = qty_on_hand - ? WHERE id = ? AND qty_on_hand >= ? AND expiry_date >= ? AND cold_chain_ok = 1"
+    )
+    .run(qty, lotId, qty, onDate);
+  if (r.changes === 0) {
+    const raced = checkLotUsable(db, lotId, onDate);
+    throw new Error(`lot ${lotId} is not usable: ${raced}`);
   }
-  db.prepare("UPDATE lots SET qty_on_hand = qty_on_hand - ? WHERE id = ?").run(qty, lotId);
 }

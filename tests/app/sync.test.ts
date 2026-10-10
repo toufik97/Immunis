@@ -60,6 +60,19 @@ describe("sync and hardening", () => {
     dst.close();
   });
 
+  it("rejects hostile dump columns and counts inserted rows, not totals", () => {
+    const db = openTestDb();
+    const evil = {
+      version: 1,
+      exportedAt: "2026-10-09T00:00:00.000Z",
+      tables: { children: [{ id: "x", '"); DROP TABLE children; --': "y" }] },
+    };
+    expect(() => importCentre(db as never, evil as never)).toThrow(/bad children columns/);
+    expect((db.prepare("SELECT * FROM children").all() as unknown[])).toHaveLength(0);
+    expect(() => importCentre(db as never, { version: 2, tables: {} } as never)).toThrow(/unsupported dump/);
+    db.close();
+  });
+
   it("blocks audit mutation and invalid origins at the DB level", () => {
     const db = openTestDb();
     const child = createChild(db, { familyName: "A", givenName: "A", birthDate: "2025-01-01" });

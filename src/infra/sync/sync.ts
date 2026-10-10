@@ -39,22 +39,33 @@ export interface ImportStats {
  */
 export function importCentre(db: Database.Database, dump: CentreDump): ImportStats {
   if (dump.version !== 1) throw new Error(`unsupported dump version ${dump.version}`);
+  if (!dump.tables || typeof dump.tables !== "object") throw new Error("bad dump: tables missing");
   const stats = db.transaction(() => {
+    // Column names come from the dump file, so allow only safe identifiers.
     const put = (table: string, rows: Record<string, unknown>[]) => {
+      if (!Array.isArray(rows)) throw new Error(`bad ${table} rows`);
+      let inserted = 0;
       for (const row of rows) {
+        if (!row || typeof row !== "object" || Array.isArray(row)) throw new Error(`bad ${table} row`);
         const cols = Object.keys(row);
+        if (cols.length === 0 || cols.some((c) => !/^[a-z_][a-z0-9_]*$/.test(c))) {
+          throw new Error(`bad ${table} columns`);
+        }
         const placeholders = cols.map(() => "?").join(", ");
-        db.prepare(
-          `INSERT OR IGNORE INTO ${table} (${cols.join(", ")}) VALUES (${placeholders})`
-        ).run(...cols.map((c) => row[c] as unknown));
+        inserted += (
+          db
+            .prepare(`INSERT OR IGNORE INTO ${table} (${cols.join(", ")}) VALUES (${placeholders})`)
+            .run(...cols.map((c) => row[c] as unknown)) as { changes: number }
+        ).changes;
       }
+      return inserted;
     };
-    put("children", dump.tables["children"] ?? []);
+    const children = put("children", dump.tables["children"] ?? []);
     put("lots", dump.tables["lots"] ?? []);
     put("encounters", dump.tables["encounters"] ?? []);
     put("appointments", dump.tables["appointments"] ?? []);
     put("local_ids", dump.tables["local_ids"] ?? []);
-    put("doses", dump.tables["doses"] ?? []);
+    const doses = put("doses", dump.tables["doses"] ?? []);
     put("overrides", dump.tables["overrides"] ?? []);
     put("outbox", dump.tables["outbox"] ?? []);
     for (const row of dump.tables["id_counters"] ?? []) {
@@ -68,10 +79,7 @@ export function importCentre(db: Database.Database, dump: CentreDump): ImportSta
         "INSERT INTO id_counters (centre_id, year, last_xx) VALUES (?, ?, ?) ON CONFLICT (centre_id, year) DO UPDATE SET last_xx = ?"
       ).run(row["centre_id"] as string, row["year"] as string, merged, merged);
     }
-    return {
-      children: (db.prepare("SELECT COUNT(*) AS n FROM children").get() as { n: number }).n,
-      doses: (db.prepare("SELECT COUNT(*) AS n FROM doses").get() as { n: number }).n,
-    };
+    return { children, doses };
   })();
   return stats;
 }

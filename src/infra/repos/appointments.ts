@@ -17,11 +17,18 @@ interface AppointmentRow {
 }
 
 function toAppointment(row: AppointmentRow): Appointment {
+  let expectedProducts: string[] = [];
+  try {
+    const v: unknown = JSON.parse(row.expected_products);
+    if (Array.isArray(v)) expectedProducts = v.filter((x): x is string => typeof x === "string");
+  } catch {
+    expectedProducts = [];
+  }
   return AppointmentSchema.parse({
     id: row.id,
     childId: row.child_id,
     dueDate: row.due_date,
-    expectedProducts: JSON.parse(row.expected_products) as string[],
+    expectedProducts,
     kept: row.kept === null ? null : row.kept === 1,
   });
 }

@@ -26,7 +26,7 @@ describe("stock lots", () => {
       coldChainOk: true,
       qtyOnHand: 1,
     });
-    expect(() => consumeLot(db, lot.id, 2)).toThrow();
+    expect(() => consumeLot(db, lot.id, 2)).toThrow(/not usable/);
     expect(getLot(db, lot.id)?.qtyOnHand).toBe(1);
     db.close();
   });

@@ -1,29 +1,29 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
-
-let db: Database.Database | null = null;
 
 import { runMigrations } from "./migrate";
 
-/** Open (or create) the per-centre SQLite file and apply schema.sql. */
+const open = new Map<string, Database.Database>();
+
+/** Open (or reuse) the per-centre SQLite file and apply schema.sql. */
 export function openDb(filePath: string): Database.Database {
-  if (db) return db;
-  const dir = path.dirname(filePath);
+  const key = path.resolve(filePath);
+  const hit = open.get(key);
+  if (hit) return hit;
+  const dir = path.dirname(key);
   fs.mkdirSync(dir, { recursive: true });
-  db = new Database(filePath);
+  const db = new Database(key);
   db.pragma("journal_mode = WAL");
+  db.pragma("busy_timeout = 5000");
   db.pragma("foreign_keys = ON");
   const schema = fs.readFileSync(
-    path.resolve(process.cwd(), "src", "infra", "db", "schema.sql"),
+    path.join(path.dirname(fileURLToPath(import.meta.url)), "schema.sql"),
     "utf8"
   );
   db.exec(schema);
   runMigrations(db);
-  return db;
-}
-
-export function getDb(): Database.Database {
-  if (!db) throw new Error("DB not opened: call openDb() first");
+  open.set(key, db);
   return db;
 }

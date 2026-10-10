@@ -75,4 +75,17 @@ describe("sessions seam", () => {
     expect(sessionFor(db, "2026-12-01").expected.map((e) => e.childId)).toEqual([b.id]);
     db.close();
   });
+
+  it("enriches large lists in chunks without hitting variable limits", () => {
+    const db = openTestDb();
+    for (let i = 0; i < 600; i++) {
+      const c = child(db as never, `K${i}`);
+      createAppointment(db, { childId: c.id, dueDate: "2026-10-01", expectedProducts: ["BCG"] });
+    }
+    const s = sessionFor(db, "2026-10-01");
+    expect(s.expected).toHaveLength(600);
+    expect(s.expected.every((e) => e.childName && e.localIds.length === 1)).toBe(true);
+    expect(noShowsFor(db, "2026-10-02")).toHaveLength(600);
+    db.close();
+  });
 });
