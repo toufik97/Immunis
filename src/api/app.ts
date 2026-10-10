@@ -6,7 +6,7 @@ import type { SchedulePack } from "../infra/packs/loader";
 import { evaluatePatient } from "../engine";
 import { isValidDateString, parseDate } from "../engine/duration";
 import { toEngineHistory } from "../app/evaluate-child";
-import { findChildrenByName, getChild } from "../infra/repos/children";
+import { findChildrenByName, getChild, listChildren } from "../infra/repos/children";
 import { registerChild } from "../app/register-child";
 import { listDosesByChild } from "../infra/repos/encounters";
 import { nowIso, todayLocal } from "../infra/time";
@@ -165,7 +165,7 @@ export function buildApp(
 
   app.get("/api/children", async (req) => {
     const q = ((req.query as Record<string, string>).q ?? "").trim();
-    if (!q) return [];
+    if (!q) return listChildren(db);
     return findChildrenByName(db, q);
   });
 

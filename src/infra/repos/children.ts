@@ -93,6 +93,15 @@ export function getChild(db: Database.Database, id: string): Child | null {
   return toChild(row, localIdsFor(db, id));
 }
 
+/** All registered children with local ids (registry browser; centres are small). */
+export function listChildren(db: Database.Database): Child[] {
+  const rows = db
+    .prepare("SELECT * FROM children ORDER BY family_name, given_name LIMIT 500")
+    .all() as ChildRow[];
+  const ids = new Map(localIdsForMany(db, rows.map((r) => r.id)));
+  return rows.map((row) => toChild(row, ids.get(row.id) ?? []));
+}
+
 /**
  * Possible duplicates for the registration guard: same names
  * (case-insensitive) and same birthDate. Homonyms exist, so callers

@@ -4,7 +4,7 @@ import { migrateTab, resolveInitialTab } from "../../app/web/src/tabs";
 describe("tab memory", () => {
   it("maps legacy tabs to the split pages", () => {
     expect(migrateTab("visit")).toBe("registry");
-    expect(migrateTab("session")).toBe("today");
+    expect(migrateTab("session")).toBe("session");
     expect(migrateTab("today")).toBe("today");
     expect(migrateTab("nope")).toBe(null);
     expect(migrateTab(null)).toBe(null);

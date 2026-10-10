@@ -84,6 +84,7 @@ export const api = {
     }>("/api/pack"),
   searchChildren: (q: string) =>
     req<Child[]>(`/api/children?q=${encodeURIComponent(q)}`),
+  allChildren: () => req<Child[]>("/api/children"),
   child: (id: string) => req<Child>(`/api/children/${id}`),
   childDoses: (childId: string) => req<Dose[]>(`/api/children/${childId}/doses`),
   outbox: () => req<{ id: string; kind: string }[]>("/api/outbox"),

@@ -204,7 +204,7 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
       <Stack gap="sm">
         <Group justify="space-between" wrap="wrap">
           <Title order={2} size="h4">
-            {t("nav.today")}
+            {t("nav.session")}
           </Title>
           <Group align="end" wrap="wrap">
             <DateField

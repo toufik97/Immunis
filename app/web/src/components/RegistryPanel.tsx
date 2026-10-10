@@ -1,27 +1,34 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Alert,
   Button,
   Card,
   Group,
+  Modal,
   SimpleGrid,
   Stack,
+  Table,
   Text,
   TextInput,
-  Title,
 } from "@mantine/core";
-import { IconAlertCircle, IconSearch, IconUserPlus } from "@tabler/icons-react";
+import { IconAlertCircle, IconUserPlus } from "@tabler/icons-react";
 import { api, type Child, type DuplicateChild } from "../api";
 import { formatCivilDate, todayCivilDate } from "../format";
 import DateField from "./DateField";
 
-/** Registry: find children, register newborns, hand off to Today for recording. */
+type SortKey = "name" | "birthDate";
+
+/** Registry: browse every child (search/sort), register newborns via popup. */
 export default function RegistryPanel({ onSelect }: { onSelect: (child: Child) => void }) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
+  const [children, setChildren] = useState<Child[]>([]);
+  const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Child[]>([]);
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [asc, setAsc] = useState(true);
+  const [modal, setModal] = useState(false);
   const [reg, setReg] = useState({
     familyName: "",
     givenName: "",
@@ -35,24 +42,60 @@ export default function RegistryPanel({ onSelect }: { onSelect: (child: Child) =
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [duplicates, setDuplicates] = useState<DuplicateChild[] | null>(null);
   const [registering, setRegistering] = useState(false);
-  const [searching, setSearching] = useState(false);
   const [err, setErr] = useState("");
 
   const familyRef = useRef<HTMLInputElement>(null);
   const givenRef = useRef<HTMLInputElement>(null);
   const birthRef = useRef<HTMLInputElement>(null);
 
-  async function search(): Promise<void> {
-    if (!query.trim() || searching) return;
+  async function load(): Promise<void> {
     setErr("");
-    setSearching(true);
+    setLoading(true);
     try {
-      setResults(await api.searchChildren(query.trim()));
+      setChildren(await api.allChildren());
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
-      setSearching(false);
+      setLoading(false);
     }
+  }
+
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const q = query.trim().toLowerCase();
+  const shown = children
+    .filter(
+      (c) =>
+        !q ||
+        `${c.givenName} ${c.familyName}`.toLowerCase().includes(q) ||
+        (c.localIds ?? []).some((l) => l.value.toLowerCase().includes(q)) ||
+        (c.address ?? "").toLowerCase().includes(q)
+    )
+    .sort((a, b) => {
+      const av = sortKey === "name" ? `${a.familyName} ${a.givenName}` : a.birthDate;
+      const bv = sortKey === "name" ? `${b.familyName} ${b.givenName}` : b.birthDate;
+      const cmp = av.localeCompare(bv);
+      return asc ? cmp : -cmp;
+    });
+
+  function header(key: SortKey, label: string) {
+    const active = sortKey === key;
+    return (
+      <Table.Th aria-sort={active ? (asc ? "ascending" : "descending") : "none"}>
+        <Button
+          variant="transparent"
+          size="compact-xs"
+          px={0}
+          aria-label={label}
+          onClick={() => (active ? setAsc(!asc) : (setSortKey(key), setAsc(true)))}
+        >
+          {label} {active ? (asc ? "▲" : "▼") : ""}
+        </Button>
+      </Table.Th>
+    );
   }
 
   const familyMissing = submitAttempted && reg.familyName.trim() === "";
@@ -60,6 +103,13 @@ export default function RegistryPanel({ onSelect }: { onSelect: (child: Child) =
   const birthMissing = submitAttempted && reg.birthDate === "";
   const regValid =
     reg.familyName.trim() !== "" && reg.givenName.trim() !== "" && reg.birthDate !== "";
+
+  function openModal(): void {
+    setSubmitAttempted(false);
+    setDuplicates(null);
+    setErr("");
+    setModal(true);
+  }
 
   async function register(force = false): Promise<void> {
     setErr("");
@@ -79,7 +129,8 @@ export default function RegistryPanel({ onSelect }: { onSelect: (child: Child) =
       } else {
         setDuplicates(null);
         setSubmitAttempted(false);
-        setResults([]);
+        setModal(false);
+        await load();
         onSelect(r.child);
       }
     } catch (e) {
@@ -91,72 +142,76 @@ export default function RegistryPanel({ onSelect }: { onSelect: (child: Child) =
 
   return (
     <Stack gap="md">
-      <div aria-live="polite">
-        {err && (
-          <Alert color="red" icon={<IconAlertCircle size={16} aria-hidden="true" />} title={err} />
-        )}
-      </div>
       <Card>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void search();
-          }}
-        >
-          <Group align="end" wrap="wrap">
-            <TextInput
-              label={t("search.button")}
-              placeholder={t("search.placeholder")}
-              name="search"
-              autoComplete="off"
-              type="search"
-              spellCheck={false}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              style={{ flex: 1, minWidth: 200 }}
+        <Group justify="space-between" wrap="wrap">
+          <TextInput
+            label={t("table.search")}
+            placeholder={t("table.search")}
+            aria-label={t("table.search")}
+            name="registrySearch"
+            type="search"
+            autoComplete="off"
+            spellCheck={false}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            style={{ flex: 1, minWidth: 200 }}
+          />
+          <Button onClick={openModal} leftSection={<IconUserPlus size={15} aria-hidden="true" />}>
+            {t("register.add")}
+          </Button>
+        </Group>
+        <div aria-live="polite">
+          {err && !modal && (
+            <Alert
+              color="red"
+              mt="sm"
+              icon={<IconAlertCircle size={16} aria-hidden="true" />}
+              title={err}
             />
-            <Button
-              type="submit"
-              loading={searching}
-              disabled={!query.trim()}
-              leftSection={<IconSearch size={15} aria-hidden="true" />}
-            >
-              {t("search.button")}
-            </Button>
-          </Group>
-        </form>
-        {results.length === 0 && query && !searching && (
+          )}
+        </div>
+        {shown.length === 0 && !loading ? (
           <Text size="sm" c="dimmed" mt="sm">
             {t("search.noresults")}
           </Text>
-        )}
-        {results.length > 0 && (
-          <Stack gap="xs" mt="sm">
-            {results.map((c) => (
-              <Card key={c.id} withBorder shadow="none" padding="sm" radius="md">
-                <Group justify="space-between" wrap="wrap" className="min-w-0">
-                  <Text size="sm" className="break-words tabular" style={{ flex: 1, minWidth: 0 }}>
-                    {c.givenName} {c.familyName} ·{" "}
-                    {t("child.birthDate", { date: formatCivilDate(c.birthDate, lang) })}{" "}
-                    {(c.localIds ?? [])
-                      .map((l) => t("child.localId", { value: l.value }))
-                      .join(" ")}
-                  </Text>
-                  <Button size="xs" variant="light" onClick={() => onSelect(c)}>
-                    {t("child.select")}
-                  </Button>
-                </Group>
-              </Card>
-            ))}
-          </Stack>
+        ) : (
+          <Table.ScrollContainer minWidth={560} mt="sm">
+            <Table striped highlightOnHover withTableBorder>
+              <Table.Thead>
+                <Table.Tr>
+                  {header("name", t("table.name"))}
+                  <Table.Th>{t("table.localId")}</Table.Th>
+                  {header("birthDate", t("register.birthDate"))}
+                  <Table.Th>{t("table.address")}</Table.Th>
+                  <Table.Th aria-label="actions" />
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody className="tabular">
+                {shown.map((c) => (
+                  <Table.Tr key={c.id}>
+                    <Table.Td className="break-words">
+                      {c.givenName} {c.familyName}
+                    </Table.Td>
+                    <Table.Td className="break-words">
+                      {(c.localIds ?? []).map((l) => l.value).join(" ") || "—"}
+                    </Table.Td>
+                    <Table.Td>{formatCivilDate(c.birthDate, lang)}</Table.Td>
+                    <Table.Td className="break-words">{c.address || "—"}</Table.Td>
+                    <Table.Td>
+                      <Button size="compact-xs" variant="light" onClick={() => onSelect(c)}>
+                        {t("child.select")}
+                      </Button>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
         )}
       </Card>
 
-      <Card>
-        <Title order={2} size="h4" mb="sm">
-          {t("register.title")}
-        </Title>
-        <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
+      <Modal opened={modal} onClose={() => setModal(false)} title={t("register.title")} size="lg">
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
           <TextInput
             ref={familyRef}
             label={t("register.familyName")}
@@ -225,6 +280,16 @@ export default function RegistryPanel({ onSelect }: { onSelect: (child: Child) =
             onChange={(e) => setReg({ ...reg, firstVisitYear: e.target.value })}
           />
         </SimpleGrid>
+        <div aria-live="polite">
+          {err && (
+            <Alert
+              color="red"
+              mt="sm"
+              icon={<IconAlertCircle size={16} aria-hidden="true" />}
+              title={err}
+            />
+          )}
+        </div>
         <Group mt="md">
           <Button
             onClick={() => register(false)}
@@ -254,6 +319,7 @@ export default function RegistryPanel({ onSelect }: { onSelect: (child: Child) =
                     onClick={() => {
                       onSelect(c);
                       setDuplicates(null);
+                      setModal(false);
                     }}
                   >
                     {t("child.select")}
@@ -271,7 +337,7 @@ export default function RegistryPanel({ onSelect }: { onSelect: (child: Child) =
             </Stack>
           </Alert>
         )}
-      </Card>
+      </Modal>
     </Stack>
   );
 }

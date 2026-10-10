@@ -5,12 +5,14 @@ import {
   Alert,
   AppShell,
   Badge,
+  Card,
   Container,
   Group,
   ScrollArea,
   SegmentedControl,
   Stack,
   Tabs,
+  Text,
   TextInput,
   Title,
   useMantineColorScheme,
@@ -21,6 +23,7 @@ import {
   IconMoon,
   IconPackages,
   IconShieldCheck,
+  IconStethoscope,
   IconSun,
   IconUserExclamation,
   IconUserPlus,
@@ -252,11 +255,14 @@ export default function App() {
             <Tabs value={tab} onChange={(v) => v && isTab(v) && setTab(v)} aria-label="tabs">
               <ScrollArea type="auto" offsetScrollbars={false}>
                 <Tabs.List style={{ flexWrap: "nowrap" }}>
-                  <Tabs.Tab value="today" leftSection={<IconCalendarCheck size={14} aria-hidden="true" />}>
+                  <Tabs.Tab value="today" leftSection={<IconStethoscope size={14} aria-hidden="true" />}>
                     {t("nav.today")}
                   </Tabs.Tab>
                   <Tabs.Tab value="registry" leftSection={<IconUserPlus size={14} aria-hidden="true" />}>
                     {t("nav.registry")}
+                  </Tabs.Tab>
+                  <Tabs.Tab value="session" leftSection={<IconCalendarCheck size={14} aria-hidden="true" />}>
+                    {t("nav.session")}
                   </Tabs.Tab>
                   <Tabs.Tab value="noshows" leftSection={<IconUserExclamation size={14} aria-hidden="true" />}>
                     {t("nav.noshows")}
@@ -283,29 +289,35 @@ export default function App() {
 
               <Tabs value={tab} onChange={(v) => v && isTab(v) && setTab(v)}>
                 <Tabs.Panel value="today">
-                  <Stack gap="md">
-                    <SessionPanel
-                      products={products}
-                      onOpen={(id, expected) => void openChildById(id, expected)}
+                  {child && pack ? (
+                    <VisitPanel
+                      key={`${child.id}|${pendingExpected.join(",")}`}
+                      child={child}
+                      products={pack.productGroups}
+                      programs={pack.programs}
+                      expectedProducts={pendingExpected}
+                      onDone={() => {
+                        setChild({ ...child });
+                        void refreshNet();
+                      }}
                     />
-                    {child && pack && (
-                      <VisitPanel
-                        key={`${child.id}|${pendingExpected.join(",")}`}
-                        child={child}
-                        products={pack.productGroups}
-                        programs={pack.programs}
-                        expectedProducts={pendingExpected}
-                        onDone={() => {
-                          setChild({ ...child });
-                          void refreshNet();
-                        }}
-                      />
-                    )}
-                  </Stack>
+                  ) : (
+                    <Card>
+                      <Text size="sm" c="dimmed">
+                        {t("today.empty")}
+                      </Text>
+                    </Card>
+                  )}
                 </Tabs.Panel>
 
                 <Tabs.Panel value="registry">
                   <RegistryPanel onSelect={handoffToToday} />
+                </Tabs.Panel>
+                <Tabs.Panel value="session">
+                  <SessionPanel
+                    products={products}
+                    onOpen={(id, expected) => void openChildById(id, expected)}
+                  />
                 </Tabs.Panel>
                 <Tabs.Panel value="noshows">
                   <NoShowPanel

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import Database from "better-sqlite3";
 import { openTestDb } from "./db-helper";
 import { runMigrations } from "../../src/infra/db/migrate";
-import { createChild, findChildrenByName, allocateLocalId, getChild } from "../../src/infra/repos/children";
+import { createChild, findChildrenByName, allocateLocalId, getChild, listChildren } from "../../src/infra/repos/children";
 
 describe("child registry", () => {
   it("creates a child and finds it by name", () => {
@@ -30,6 +30,18 @@ describe("child registry", () => {
     expect(findChildrenByName(db, "%")).toEqual([]);
     expect(findChildrenByName(db, "_")).toEqual([]);
     expect(findChildrenByName(db, "amrani")).toHaveLength(1);
+    db.close();
+  });
+
+  it("lists every child for the registry browser", () => {
+    const db = openTestDb();
+    expect(listChildren(db)).toEqual([]);
+    const a = createChild(db, { familyName: "B", givenName: "B", birthDate: "2025-01-01" });
+    allocateLocalId(db, a.id, "CS01", "2026");
+    createChild(db, { familyName: "A", givenName: "A", birthDate: "2025-01-01" });
+    const all = listChildren(db);
+    expect(all.map((c) => c.familyName)).toEqual(["A", "B"]);
+    expect(all[1].localIds).toEqual([{ centreId: "CS01", value: "1/2026" }]);
     db.close();
   });
 
