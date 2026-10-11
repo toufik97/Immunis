@@ -28,6 +28,8 @@ interface Row {
   address: string;
   dueDate: string;
   products: string[];
+  lastVisitDate: string | null;
+  daysOverdue: number | null;
 }
 
 function toRow(a: Appointment): Row {
@@ -39,10 +41,12 @@ function toRow(a: Appointment): Row {
     address: a.address ?? "—",
     dueDate: a.dueDate,
     products: a.expectedProducts ?? [],
+    lastVisitDate: a.lastVisitDate ?? null,
+    daysOverdue: typeof a.daysOverdue === "number" ? a.daysOverdue : null,
   };
 }
 
-type SortKey = "localId" | "name" | "dueDate";
+type SortKey = "localId" | "name" | "dueDate" | "daysOverdue" | "lastVisit";
 
 interface TableActions {
   onOpen?: (childId: string, products: string[]) => void;
@@ -52,11 +56,13 @@ interface TableActions {
 function PersonTable({
   rows,
   showDue,
+  showNoShow,
   productLabel,
   actions,
 }: {
   rows: Row[];
   showDue: boolean;
+  showNoShow?: boolean;
   productLabel: (id: string) => string;
   actions?: TableActions;
 }) {
@@ -72,11 +78,21 @@ function PersonTable({
   const filtered = rows
     .filter(
       (r) =>
-        (!q || r.name.toLowerCase().includes(q) || r.localId.toLowerCase().includes(q) || r.address.toLowerCase().includes(q)) &&
+        (!q ||
+          r.name.toLowerCase().includes(q) ||
+          r.localId.toLowerCase().includes(q) ||
+          r.address.toLowerCase().includes(q) ||
+          r.products.map(productLabel).join(" ").toLowerCase().includes(q)) &&
         (product === "all" || r.products.includes(product))
     )
     .sort((a, b) => {
-      const cmp = a[sortKey].localeCompare(b[sortKey]);
+      if (sortKey === "daysOverdue") {
+        const cmp = (a.daysOverdue ?? -1) - (b.daysOverdue ?? -1);
+        return asc ? cmp : -cmp;
+      }
+      const av = sortKey === "lastVisit" ? (a.lastVisitDate ?? "") : String(a[sortKey] ?? "");
+      const bv = sortKey === "lastVisit" ? (b.lastVisitDate ?? "") : String(b[sortKey] ?? "");
+      const cmp = av.localeCompare(bv);
       return asc ? cmp : -cmp;
     });
 
@@ -118,6 +134,8 @@ function PersonTable({
           label={t("table.doses")}
           aria-label={t("table.doses")}
           name="tableProduct"
+          searchable
+          limit={20}
           value={product}
           onChange={(v) => v && setProduct(v)}
           data={[{ value: "all", label: t("table.all") }, ...allProducts.map((p) => ({ value: p, label: productLabel(p) }))]}
@@ -132,6 +150,8 @@ function PersonTable({
               {header("name", t("table.name"))}
               <Table.Th>{t("table.address")}</Table.Th>
               {showDue && header("dueDate", t("table.due"))}
+              {showNoShow && header("daysOverdue", t("noshow.overdue"))}
+              {showNoShow && header("lastVisit", t("noshow.lastVisit"))}
               <Table.Th>{t("table.doses")}</Table.Th>
               {showActions && <Table.Th aria-label="actions" />}
             </Table.Tr>
@@ -143,6 +163,8 @@ function PersonTable({
                 <Table.Td className="break-words">{r.name}</Table.Td>
                 <Table.Td className="break-words">{r.address}</Table.Td>
                 {showDue && <Table.Td>{formatCivilDate(r.dueDate, lang)}</Table.Td>}
+                {showNoShow && <Table.Td>{r.daysOverdue ?? "—"}</Table.Td>}
+                {showNoShow && <Table.Td>{r.lastVisitDate ? formatCivilDate(r.lastVisitDate, lang) : "—"}</Table.Td>}
                 <Table.Td>{r.products.map(productLabel).join(", ") || "—"}</Table.Td>
                 {showActions && (
                   <Table.Td>
@@ -178,6 +200,7 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
   const lang = i18n.language;
   const [date, setDate] = useState(todayCivilDate());
   const [data, setData] = useState<Awaited<ReturnType<typeof api.session>> | null>(null);
+  const [agenda, setAgenda] = useState<Awaited<ReturnType<typeof api.agenda>>>([]);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
   const productLabel = (id: string) => labelOf(products, id);
@@ -187,6 +210,12 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
     setLoading(true);
     try {
       setData(await api.session(forDate));
+      // Agenda is a hint: refresh silently so new RDVs appear without extra clicks.
+      try {
+        setAgenda(await api.agenda());
+      } catch {
+        /* session load already succeeded; stale agenda is harmless */
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -198,6 +227,8 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
     void load(todayCivilDate());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const nextSession = agenda.find((d) => d.date > date) ?? (agenda[0]?.date === date ? undefined : agenda[0]);
 
   return (
     <Card>
@@ -225,11 +256,54 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
         <div aria-live="polite">
           {err && <Alert color="red" icon={<IconAlertCircle size={16} aria-hidden="true" />} title={err} />}
         </div>
+        {agenda.length > 0 && (
+          <Stack gap="xs">
+            <Text size="sm" fw={600}>
+              {t("session.upcoming")}
+            </Text>
+            <Group gap="xs" wrap="wrap">
+              {agenda.map((d) => (
+                <Button
+                  key={d.date}
+                  size="compact-sm"
+                  variant={d.date === date ? "filled" : "light"}
+                  onClick={() => {
+                    setDate(d.date);
+                    void load(d.date);
+                  }}
+                >
+                  <span className="tabular">
+                    {formatCivilDate(d.date, lang)} · ×{formatCount(d.children, lang)}
+                  </span>
+                </Button>
+              ))}
+            </Group>
+          </Stack>
+        )}
         {data &&
           (data.expected.length === 0 ? (
-            <Text size="sm" c="dimmed">
-              {t("session.empty")}
-            </Text>
+            <Stack gap="xs">
+              <Text size="sm" c="dimmed">
+                {t("session.empty")}
+              </Text>
+              {nextSession && (
+                <div>
+                  <Button
+                    size="compact-sm"
+                    variant="subtle"
+                    onClick={() => {
+                      setDate(nextSession.date);
+                      void load(nextSession.date);
+                    }}
+                  >
+                    {t("session.next", {
+                      date: formatCivilDate(nextSession.date, lang),
+                      n: formatCount(nextSession.children, lang),
+                    })}
+                  </Button>
+                </div>
+              )}
+            </Stack>
           ) : (
             <Stack gap="sm">
               <Text size="sm" fw={600} className="tabular">
@@ -310,6 +384,7 @@ export function NoShowPanel({ products, onOpen }: PanelProps) {
           <PersonTable
             rows={list.map(toRow)}
             showDue
+            showNoShow
             productLabel={productLabel}
             actions={{ onOpen }}
           />
@@ -445,6 +520,8 @@ export function StockPanel({ products }: { products: { id: string; label_fr?: st
               label={t("stock.product")}
               name="lotProduct"
               required
+              searchable
+              limit={20}
               value={form.productGroupId}
               onChange={(v) => v && setForm((f) => ({ ...f, productGroupId: v }))}
               data={[

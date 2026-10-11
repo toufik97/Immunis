@@ -55,6 +55,8 @@ export interface Appointment {
   dueDate: string;
   expectedProducts: string[];
   kept: boolean | null;
+  lastVisitDate?: string | null;
+  daysOverdue?: number;
 }
 
 export interface DuplicateChild extends Child {
@@ -128,6 +130,10 @@ export const api = {
     req<{ expected: Appointment[]; counters: { children: number; dosesByProduct: Record<string, number> } }>(
       `/api/sessions?date=${date}`
     ),
+  agenda: (from?: string, to?: string) => {
+    const q = [from ? `from=${from}` : "", to ? `to=${to}` : ""].filter(Boolean).join("&");
+    return req<{ date: string; children: number; doses: number }[]>(`/api/sessions/agenda${q ? `?${q}` : ""}`);
+  },
   noShows: (asOf: string) => req<Appointment[]>(`/api/no-shows?asOf=${asOf}`),
   lots: (product?: string, usableOn?: string) =>
     req<Lot[]>(

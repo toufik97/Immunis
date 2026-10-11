@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import { listDue, listNoShows } from "../infra/repos/appointments";
+import { listDue, listNoShows, listPendingInRange, lastVisitByChild } from "../infra/repos/appointments";
 import type { Appointment } from "../domain/appointment";
 import { localIdsForMany } from "../infra/repos/children";
 
@@ -52,6 +52,49 @@ export function sessionFor(db: Database.Database, date: string): SessionSummary 
 }
 
 /** Past-due appointments never honoured (FR-7.1). */
-export function noShowsFor(db: Database.Database, asOf: string): SessionRow[] {
-  return enrichAppointments(db, listNoShows(db, asOf));
+export function noShowsFor(db: Database.Database, asOf: string): NoShowRow[] {
+  const appointments = listNoShows(db, asOf);
+  const rows = enrichAppointments(db, appointments);
+  const lastVisits = lastVisitByChild(
+    db,
+    rows.map((r) => r.childId)
+  );
+  return rows.map((r) => ({
+    ...r,
+    lastVisitDate: lastVisits.get(r.childId) ?? null,
+    daysOverdue: daysBetween(r.dueDate, asOf),
+  }));
+}
+
+export interface AgendaDay {
+  date: string;
+  children: number;
+  doses: number;
+}
+
+/** Pending-appointment load per day in a window (session agenda, no trial-and-error). */
+export function agendaFor(db: Database.Database, from: string, to: string): AgendaDay[] {
+  const byDate = new Map<string, { children: Set<string>; doses: number }>();
+  for (const a of listPendingInRange(db, from, to)) {
+    let day = byDate.get(a.dueDate);
+    if (!day) byDate.set(a.dueDate, (day = { children: new Set(), doses: 0 }));
+    day.children.add(a.childId);
+    day.doses += a.expectedProducts.length;
+  }
+  return [...byDate.entries()]
+    .map(([date, d]) => ({ date, children: d.children.size, doses: d.doses }))
+    .sort((x, y) => (x.date < y.date ? -1 : 1));
+}
+
+export interface NoShowRow extends SessionRow {
+  lastVisitDate: string | null;
+  /** Whole days asOf is past the due date (civil dates, UTC). */
+  daysOverdue: number;
+}
+
+/** Whole days between two YYYY-MM-DD civil dates (b - a). */
+function daysBetween(a: string, b: string): number {
+  const ms = Date.UTC(Number(b.slice(0, 4)), Number(b.slice(5, 7)) - 1, Number(b.slice(8, 10))) -
+    Date.UTC(Number(a.slice(0, 4)), Number(a.slice(5, 7)) - 1, Number(a.slice(8, 10)));
+  return Math.round(ms / 86_400_000);
 }

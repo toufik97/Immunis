@@ -61,3 +61,26 @@ export function listNoShows(db: Database.Database, asOf: string): Appointment[] 
     .all(asOf) as AppointmentRow[];
   return rows.map(toAppointment);
 }
+
+/** Pending appointments in a window, oldest first (session agenda). */
+export function listPendingInRange(db: Database.Database, from: string, to: string): Appointment[] {
+  const rows = db
+    .prepare("SELECT * FROM appointments WHERE due_date >= ? AND due_date <= ? AND kept IS NULL ORDER BY due_date")
+    .all(from, to) as AppointmentRow[];
+  return rows.map(toAppointment);
+}
+
+/** Latest recorded visit date per child (no-show context; null when never seen). */
+export function lastVisitByChild(db: Database.Database, childIds: string[]): Map<string, string | null> {
+  const out = new Map<string, string | null>();
+  for (const id of childIds) out.set(id, null);
+  for (let i = 0; i < childIds.length; i += 500) {
+    const slice = childIds.slice(i, i + 500);
+    const placeholders = slice.map(() => "?").join(", ");
+    const rows = db
+      .prepare(`SELECT child_id, MAX(date) AS last_visit FROM encounters WHERE child_id IN (${placeholders}) GROUP BY child_id`)
+      .all(...slice) as { child_id: string; last_visit: string | null }[];
+    for (const r of rows) out.set(r.child_id, r.last_visit);
+  }
+  return out;
+}

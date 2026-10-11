@@ -9,6 +9,7 @@ import {
   Grid,
   Group,
   List,
+  MultiSelect,
   Paper,
   Select,
   Stack,
@@ -55,6 +56,7 @@ export default function VisitPanel({ child, products, programs, expectedProducts
   const [evaluating, setEvaluating] = useState(false);
   const [gateIssues, setGateIssues] = useState<GateIssue[]>([]);
   const [overrideReason, setOverrideReason] = useState("");
+  const [batch, setBatch] = useState<string[]>([]);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
 
@@ -173,6 +175,35 @@ export default function VisitPanel({ child, products, programs, expectedProducts
         recordedBy: "nurse",
       },
     ]);
+  }
+
+  /** Append one CENTRE row per product id, skipping ids already listed. */
+  function addProducts(ids: string[]): void {
+    if (screening !== "VACCINATE" || ids.length === 0) return;
+    setDoses((ds) => {
+      const seen = new Set(ds.map((x) => x.productGroupId));
+      const rows: Dose[] = ids
+        .filter((id) => id && !seen.has(id))
+        .map((productGroupId) => {
+          seen.add(productGroupId);
+          return {
+            productGroupId,
+            administeredOn: visitDate,
+            origin: "CENTRE" as const,
+            overridden: false,
+            recordedBy: "nurse",
+          };
+        });
+      return rows.length > 0 ? [...ds, ...rows] : ds;
+    });
+  }
+
+  /** Products of the next planned visit (the "due" batch). */
+  function dueProducts(): string[] {
+    const visits = result?.visitPlan.visits ?? [];
+    if (visits.length === 0) return [];
+    const upcoming = visits.find((v) => v.date >= visitDate) ?? visits[0];
+    return upcoming?.products ?? [];
   }
 
   async function record(withOverride: boolean): Promise<void> {
@@ -362,6 +393,8 @@ export default function VisitPanel({ child, products, programs, expectedProducts
                   label={t("visit.product")}
                   name={`dose-product-${i}`}
                   aria-label={t("visit.product")}
+                  searchable
+                  limit={20}
                   value={d.productGroupId}
                   onChange={(v) =>
                     v && setDoses((ds) => ds.map((x, j) => (j === i ? { ...x, productGroupId: v, lotId: undefined } : x)))
@@ -413,6 +446,8 @@ export default function VisitPanel({ child, products, programs, expectedProducts
                     <Select
                       label={t("visit.lot")}
                       name={`dose-lot-${i}`}
+                      searchable
+                      limit={20}
                       value={d.lotId ?? ""}
                       onChange={(v) =>
                         setDoses((ds) => ds.map((x, j) => (j === i ? { ...x, lotId: v || undefined } : x)))
@@ -429,6 +464,38 @@ export default function VisitPanel({ child, products, programs, expectedProducts
             </Stack>
           </Paper>
         ))}
+        <Group align="end" wrap="wrap">
+          <MultiSelect
+            label={t("visit.batchProducts")}
+            name="dose-batch"
+            aria-label={t("visit.batchProducts")}
+            searchable
+            limit={20}
+            disabled={screening !== "VACCINATE"}
+            value={batch}
+            onChange={setBatch}
+            data={products.map((p) => ({ value: p.id, label: p.label_fr ?? p.id }))}
+            style={{ flex: 1, minWidth: 200 }}
+          />
+          <Button
+            variant="light"
+            leftSection={<IconPlus size={15} aria-hidden="true" />}
+            onClick={() => {
+              addProducts(batch);
+              setBatch([]);
+            }}
+            disabled={screening !== "VACCINATE" || batch.length === 0}
+          >
+            {t("visit.addSelected", { n: batch.length })}
+          </Button>
+          <Button
+            variant="default"
+            onClick={() => addProducts(dueProducts())}
+            disabled={screening !== "VACCINATE" || dueProducts().length === 0}
+          >
+            {t("visit.addDue", { n: dueProducts().length })}
+          </Button>
+        </Group>
         <Group wrap="wrap">
           <Button
             variant="light"

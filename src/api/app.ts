@@ -13,7 +13,7 @@ import { nowIso, todayLocal } from "../infra/time";
 import { recordVisit, RecordGateError } from "../app/record-visit";
 import { addLot, listLots, checkLotUsable, usableLotsFor } from "../infra/repos/stock";
 import { createAppointment, markAppointment } from "../infra/repos/appointments";
-import { noShowsFor, sessionFor } from "../app/sessions";
+import { noShowsFor, sessionFor, agendaFor } from "../app/sessions";
 import { insertOverride, listOverridesByChild } from "../infra/repos/audit";
 import { countCentreDosesByProduct } from "../app/analytics";
 import { exportCentre, listPendingOutbox, ackOutbox } from "../infra/sync/sync";
@@ -62,8 +62,13 @@ const OverrideInput = z.object({
   encounterId: z.string().optional(),
 });
 
-function isDomainError(e: unknown): boolean {
-  const m = e instanceof Error ? e.message : "";
+/** Civil-date plus N days (UTC calendar arithmetic). */
+function plusDays(date: string, n: number): string {
+  const t = Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10))) + n * 86_400_000;
+  return new Date(t).toISOString().slice(0, 10);
+}
+
+function isDomainError(e: unknown): boolean {  const m = e instanceof Error ? e.message : "";
   return (
     m.startsWith("child already has") ||
     m.includes("requires a lot") ||
@@ -254,6 +259,23 @@ export function buildApp(
       return;
     }
     return sessionFor(db, date);
+  });
+
+  // Pending-appointment load per day (agenda): no more trial-and-error dates.
+  app.get("/api/sessions/agenda", async (req, reply) => {
+    const q = req.query as Record<string, string>;
+    const today = todayLocal();
+    const from = q.from ?? today;
+    const to = q.to ?? plusDays(today, 180);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      reply.code(400).send({ error: "from/to must be YYYY-MM-DD" });
+      return;
+    }
+    if (from > to) {
+      reply.code(400).send({ error: "from must not be after to" });
+      return;
+    }
+    return agendaFor(db, from, to);
   });
 
   app.post("/api/appointments", async (req, reply) => {
