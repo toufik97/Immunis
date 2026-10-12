@@ -120,7 +120,12 @@ export default function VisitPanel({ child, products, programs, expectedProducts
   }, [child.id, visitDate]);
 
   function onVisitDateChange(v: string): void {
+    const prev = visitDate;
     setVisitDate(v);
+    // Rows still on the old default follow the visit date; edited dates are respected.
+    if (v !== prev) {
+      setDoses((ds) => ds.map((x) => (x.administeredOn === prev ? { ...x, administeredOn: v } : x)));
+    }
   }
 
   useEffect(() => {
@@ -430,9 +435,9 @@ export default function VisitPanel({ child, products, programs, expectedProducts
           <Alert color="yellow" title={t("visit.screeningBlocks")} />
         )}
         {doses.map((d, i) => (
-          <Paper key={i} withBorder p="sm" radius="md">
-            <Stack gap="sm">
-              <Group align="end" wrap="wrap">
+          <Paper key={i} withBorder p="xs" radius="md">
+            <Grid gutter="xs" align="end">
+              <Grid.Col span={7}>
                 <Select
                   label={t("visit.product")}
                   name={`dose-product-${i}`}
@@ -444,8 +449,9 @@ export default function VisitPanel({ child, products, programs, expectedProducts
                     v && setDoses((ds) => ds.map((x, j) => (j === i ? { ...x, productGroupId: v, lotId: undefined } : x)))
                   }
                   data={products.map((p) => ({ value: p.id, label: p.label_fr ?? p.id }))}
-                  style={{ flex: 1, minWidth: 160 }}
                 />
+              </Grid.Col>
+              <Grid.Col span={4}>
                 <DateField
                   label={t("visit.date")}
                   name={`dose-date-${i}`}
@@ -455,22 +461,8 @@ export default function VisitPanel({ child, products, programs, expectedProducts
                     setDoses((ds) => ds.map((x, j) => (j === i ? { ...x, administeredOn: v } : x)))
                   }
                 />
-                <Select
-                  label={t("visit.origin")}
-                  name={`dose-origin-${i}`}
-                  aria-label={t("visit.origin")}
-                  value={d.origin}
-                  onChange={(v) =>
-                    v &&
-                    setDoses((ds) =>
-                      ds.map((x, j) => (j === i ? { ...x, origin: v as Dose["origin"], lotId: undefined } : x))
-                    )
-                  }
-                  data={(["CENTRE", "EXTERNAL", "CAMPAIGN"] as const).map((o) => ({
-                    value: o,
-                    label: t(`origin.${o}`),
-                  }))}
-                />
+              </Grid.Col>
+              <Grid.Col span={1}>
                 <ActionIcon
                   color="red"
                   variant="light"
@@ -479,10 +471,10 @@ export default function VisitPanel({ child, products, programs, expectedProducts
                 >
                   <IconTrash size={16} aria-hidden="true" />
                 </ActionIcon>
-              </Group>
-              {d.origin === "CENTRE" && (
-                <div>
-                  {lotsFor(d.productGroupId).length === 0 ? (
+              </Grid.Col>
+              <Grid.Col span={7}>
+                {d.origin === "CENTRE" ? (
+                  lotsFor(d.productGroupId).length === 0 ? (
                     <Text size="sm" c="dimmed">
                       {t("visit.lot")}: {t("visit.nolot")}
                     </Text>
@@ -502,10 +494,32 @@ export default function VisitPanel({ child, products, programs, expectedProducts
                       }))}
                       placeholder="—"
                     />
-                  )}
-                </div>
-              )}
-            </Stack>
+                  )
+                ) : (
+                  <Text size="sm" c="dimmed">
+                    {t("visit.lot")}: —
+                  </Text>
+                )}
+              </Grid.Col>
+              <Grid.Col span={5}>
+                <Select
+                  label={t("visit.origin")}
+                  name={`dose-origin-${i}`}
+                  aria-label={t("visit.origin")}
+                  value={d.origin}
+                  onChange={(v) =>
+                    v &&
+                    setDoses((ds) =>
+                      ds.map((x, j) => (j === i ? { ...x, origin: v as Dose["origin"], lotId: undefined } : x))
+                    )
+                  }
+                  data={(["CENTRE", "EXTERNAL", "CAMPAIGN"] as const).map((o) => ({
+                    value: o,
+                    label: t(`origin.${o}`),
+                  }))}
+                />
+              </Grid.Col>
+            </Grid>
           </Paper>
         ))}
         <Group align="end" wrap="wrap">
