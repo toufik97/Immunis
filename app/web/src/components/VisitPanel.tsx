@@ -42,9 +42,13 @@ interface Props {
   /** Appointment products the child was opened from: prefilled as pending rows. */
   expectedProducts?: string[];
   onDone: () => void;
+  /** Visit fully handled (RDV confirmed or skipped): back to search. */
+  onFinished: () => void;
+  /** Leave without recording: back to search. */
+  onClose: () => void;
 }
 
-export default function VisitPanel({ child, products, programs, expectedProducts, onDone }: Props) {
+export default function VisitPanel({ child, products, programs, expectedProducts, onDone, onFinished, onClose }: Props) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
   const [visitDate, setVisitDate] = useState(todayCivilDate());
@@ -178,7 +182,7 @@ export default function VisitPanel({ child, products, programs, expectedProducts
       await api.createAppointment({ childId: child.id, dueDate: rdvDate, expectedProducts: rdv.products });
       setRdv(null);
       setMsg(t("visit.rdvRecorded"));
-      onDone();
+      onFinished();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -325,7 +329,7 @@ export default function VisitPanel({ child, products, programs, expectedProducts
     <Grid>
       <Grid.Col span={{ base: 12, lg: 8 }}>
         <Stack gap="sm">
-          <ChildCard child={child} />
+          <ChildCard child={child} onClose={onClose} />
           <Card>
             <Stack gap="sm">
               <Text size="sm" c="dimmed">
@@ -595,7 +599,7 @@ export default function VisitPanel({ child, products, programs, expectedProducts
                   variant="default"
                   onClick={() => {
                     setRdv(null);
-                    onDone();
+                    onFinished();
                   }}
                 >
                   {t("visit.rdvSkip")}
@@ -647,6 +651,13 @@ export default function VisitPanel({ child, products, programs, expectedProducts
           )}
           {msg && (
             <Alert color="teal" icon={<IconCheck size={16} aria-hidden="true" />} title={msg} mt="sm" />
+          )}
+          {msg && !rdv && doses.length === 0 && gateIssues.length === 0 && (
+            <div>
+              <Button variant="light" onClick={onFinished}>
+                {t("visit.nextChild")}
+              </Button>
+            </div>
           )}
         </div>
             </Stack>

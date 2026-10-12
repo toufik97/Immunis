@@ -301,6 +301,15 @@ export default function App() {
                         setChild({ ...child });
                         void refreshNet();
                       }}
+                      onFinished={() => {
+                        setChild(null);
+                        setPendingExpected([]);
+                        void refreshNet();
+                      }}
+                      onClose={() => {
+                        setChild(null);
+                        setPendingExpected([]);
+                      }}
                     />
                   ) : (
                     <Card>
