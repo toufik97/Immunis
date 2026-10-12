@@ -38,6 +38,15 @@ describe("engine warning localization", () => {
     ).toContain("المكورات الرئوية");
   });
 
+  it("translates spacing violations", () => {
+    const raw = "SPACING_VIOLATION: PCV_PRIMOVAX too close to PENTA (0 days apart, minimum 15 days).";
+    expect(formatEngineWarning(raw, "en")).toBe(
+      "PCV_PRIMOVAX too close to PENTA (0 days apart, minimum 15 days)."
+    );
+    expect(formatEngineWarning(raw, "fr")).toContain("trop proche de PENTA");
+    expect(formatEngineWarning(raw, "ar")).toContain("قريب جداً");
+  });
+
   it("falls back to raw English for unknown sentences", () => {
     expect(formatEngineWarning("Program is missing id or counter", "fr")).toBe("Program is missing id or counter");
     expect(formatEngineWarning("", "fr")).toBe("");

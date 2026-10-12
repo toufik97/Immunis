@@ -1,14 +1,18 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Accordion,
+  ActionIcon,
   Badge,
   Card,
+  Collapse,
   Group,
   Stack,
   Text,
   Timeline,
   Title,
 } from "@mantine/core";
+import { IconChevronDown, IconChevronUp } from "@tabler/icons-react";
 import type { EvaluateResult } from "../api";
 import { formatCivilDate } from "../format";
 import { formatEngineWarning } from "../engineWarnings";
@@ -23,6 +27,7 @@ interface Props {
 export default function EvalRail({ result, products, programs }: Props) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
+  const [needsOpen, setNeedsOpen] = useState(false);
 
   const productLabel = (id: string) => products.find((p) => p.id === id)?.label_fr ?? id;
   const programLabel = (id: string) => programs.find((p) => p.id === id)?.label_fr ?? id;
@@ -90,6 +95,19 @@ export default function EvalRail({ result, products, programs }: Props) {
         <Title order={3} size="h5">
           {t("visit.needs")}
         </Title>
+        <Group justify="space-between" wrap="wrap">
+          <Badge color={dueCount > 0 ? "yellow" : "teal"} className="tabular">
+            {t("visit.needsDue", { n: dueCount })}
+          </Badge>
+          <ActionIcon
+            variant="subtle"
+            aria-label={needsOpen ? t("needs.hide") : t("needs.show")}
+            onClick={() => setNeedsOpen((o) => !o)}
+          >
+            {needsOpen ? <IconChevronUp size={16} aria-hidden="true" /> : <IconChevronDown size={16} aria-hidden="true" />}
+          </ActionIcon>
+        </Group>
+        <Collapse in={needsOpen}>
         <Accordion variant="separated" radius="md">
           {needs.map((n) => {
             const total = n.validDosesReceived + n.dosesNeeded;
@@ -141,6 +159,7 @@ export default function EvalRail({ result, products, programs }: Props) {
             );
           })}
         </Accordion>
+        </Collapse>
 
         {notes.length > 0 && (
           <Stack gap={2}>

@@ -5,6 +5,7 @@ import { evaluatePatient } from "../engine";
 import { parseDate } from "../engine/duration";
 import { toStructured } from "../engine/warnings";
 import { canonicalProductId, nextExpectedProducts, toGatedEngineHistory } from "./evaluate-child";
+import { checkSpacing } from "./spacing-guard";
 import type { DoseRecord, Encounter } from "../domain/encounter";
 import { EncounterSchema } from "../domain/encounter";
 import {
@@ -152,6 +153,22 @@ export function recordVisit(
     }
   }
 
+  // Spacing rules (e.g. PrimoVax 15d off DTP) live in the same rule book
+  // the planner uses, so plan-conformant recordings pass by construction.
+  // Only new doses are blamed; history already happened.
+  const spacingIssues: GateIssue[] = checkSpacing(
+    prior,
+    doses.map((dose, index) => ({ dose, index })).filter((x) => x.dose.origin === "CENTRE"),
+    pack
+  ).map((s) => ({
+    doseIndex: s.doseIndex,
+    productGroupId: s.productGroupId,
+    administeredOn: s.administeredOn,
+    code: s.code,
+    message: s.message,
+    overridable: true,
+  }));
+
   // Engine cross-check on history + new doses, overrides stripped to find issues.
   const engineHistory = toGatedEngineHistory(prior, doses, pack);
   const evaluationDate = parsed.date;
@@ -189,7 +206,7 @@ export function recordVisit(
 
   const hard = dedupeIssues(issues.filter((i) => !i.overridable));
   if (hard.length > 0) throw new RecordGateError(400, hard);
-  const soft = dedupeIssues(issues.filter((i) => i.overridable));
+  const soft = dedupeIssues([...issues.filter((i) => i.overridable), ...spacingIssues]);
   const waived = soft.filter((s) => doses[s.doseIndex].overridden);
   const unwaived = soft.filter((s) => !doses[s.doseIndex].overridden);
   if (unwaived.length > 0 || (soft.length > 0 && !input.overrideReason?.trim())) {

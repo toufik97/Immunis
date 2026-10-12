@@ -245,6 +245,16 @@ const TEMPLATES: Template[] = [
       ar: fill("نُقل {product} من {from} إلى {to} (الفاصل منذ الجرعة السابقة).", p),
     }),
   },
+  {
+    code: "SPACING_VIOLATION",
+    match: /^SPACING_VIOLATION: (\S+) too close to (\S+) \((\d+) days apart, minimum (\d+) days\)/,
+    names: ["product", "other", "gap", "min"],
+    text: (p) => ({
+      en: fill("{product} too close to {other} ({gap} days apart, minimum {min} days).", p),
+      fr: fill("{product} trop proche de {other} ({gap} jours d’écart, minimum {min} jours).", p),
+      ar: fill("{product} قريب جداً من {other} (الفارق {gap} أيام، الأدنى {min} أيام).", p),
+    }),
+  },
   // ---- clinician-facing sentences without a machine code
   {
     code: "ENGINE_NOTICE",

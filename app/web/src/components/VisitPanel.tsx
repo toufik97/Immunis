@@ -25,7 +25,6 @@ import {
   IconChevronDown,
   IconChevronUp,
   IconPlus,
-  IconSearch,
   IconTrash,
 } from "@tabler/icons-react";
 import { api, type Child, type Dose, type GateIssue, type Lot } from "../api";
@@ -54,7 +53,6 @@ export default function VisitPanel({ child, products, programs, expectedProducts
   const [history, setHistory] = useState<Dose[]>([]);
   const [doses, setDoses] = useState<Dose[]>([]);
   const [lotsByProduct, setLotsByProduct] = useState<Record<string, Lot[]>>({});
-  const [projection, setProjection] = useState<"next" | "full">("next");
   const [result, setResult] = useState<Awaited<ReturnType<typeof api.evaluate>> | null>(null);
   const [historyAsc, setHistoryAsc] = useState(true);
   const [railOpen, setRailOpen] = useState(true);
@@ -62,7 +60,6 @@ export default function VisitPanel({ child, products, programs, expectedProducts
   const [rdvDate, setRdvDate] = useState("");
   const [rdvSaving, setRdvSaving] = useState(false);
   const [recording, setRecording] = useState(false);
-  const [evaluating, setEvaluating] = useState(false);
   const [gateIssues, setGateIssues] = useState<GateIssue[]>([]);
   const [overrideReason, setOverrideReason] = useState("");
   const [batch, setBatch] = useState<string[]>([]);
@@ -84,18 +81,16 @@ export default function VisitPanel({ child, products, programs, expectedProducts
 
   async function evaluate(silent = false): Promise<void> {
     if (!silent) setErr("");
-    setEvaluating(true);
     try {
+      // The rail always shows the full projection; no manual refresh needed.
       const r = await api.evaluate({
         childId: child.id,
         evaluationDate: visitDate,
-        projection,
+        projection: "full",
       });
       setResult(r);
     } catch (e) {
       if (!silent) setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setEvaluating(false);
     }
   }
 
@@ -117,11 +112,11 @@ export default function VisitPanel({ child, products, programs, expectedProducts
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [child.id]);
 
-  // Plan follows the visit date: re-evaluate silently whenever it (or projection) changes.
+  // Plan follows the visit date: re-evaluate silently whenever it changes.
   useEffect(() => {
     void evaluate(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [child.id, visitDate, projection]);
+  }, [child.id, visitDate]);
 
   function onVisitDateChange(v: string): void {
     setVisitDate(v);
@@ -222,12 +217,13 @@ export default function VisitPanel({ child, products, programs, expectedProducts
     });
   }
 
-  /** Products of the next planned visit (the "due" batch). */
+  /** Next planned visit due today or overdue, minus products already recorded that day. */
   function dueProducts(): string[] {
     const visits = result?.visitPlan.visits ?? [];
-    if (visits.length === 0) return [];
-    const upcoming = visits.find((v) => v.date >= visitDate) ?? visits[0];
-    return upcoming?.products ?? [];
+    const due = visits.find((v) => v.date <= visitDate);
+    if (!due) return [];
+    const given = new Set(history.filter((h) => h.administeredOn === visitDate).map((h) => h.productGroupId));
+    return due.products.filter((p) => !given.has(p));
   }
 
   async function record(withOverride: boolean): Promise<void> {
@@ -270,7 +266,7 @@ export default function VisitPanel({ child, products, programs, expectedProducts
         await fetchHistory();
         // Engine recommends the next appointment only after the doses exist.
         try {
-          const fresh = await api.evaluate({ childId: child.id, evaluationDate: visitDate, projection: "next" });
+          const fresh = await api.evaluate({ childId: child.id, evaluationDate: visitDate, projection: "full" });
           setResult(fresh);
           const rec = fresh.visitPlan.visits.find((v) => v.date > visitDate);
           if (rec) {
@@ -532,28 +528,9 @@ export default function VisitPanel({ child, products, programs, expectedProducts
           >
             {t("visit.addDose")}
           </Button>
-          <Button
-            variant="default"
-            leftSection={<IconSearch size={15} aria-hidden="true" />}
-            onClick={() => void evaluate()}
-            loading={evaluating}
-          >
-            {t("visit.evaluate")}
-          </Button>
           <Button onClick={() => record(false)} loading={recording} disabled={blockedByScreening}>
             {t("visit.record")}
           </Button>
-          <Select
-            aria-label={t("visit.plan")}
-            name="projection"
-            value={projection}
-            onChange={(v) => v && setProjection(v as "next" | "full")}
-            data={[
-              { value: "next", label: t("visit.projNext") },
-              { value: "full", label: t("visit.projFull") },
-            ]}
-            style={{ maxWidth: 200 }}
-          />
         </Group>
 
         {rdv && (
