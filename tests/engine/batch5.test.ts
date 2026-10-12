@@ -71,7 +71,7 @@ describe("full plans are valid and spaced, projected visits included (children w
           if (x.administeredOn >= y.administeredOn) continue;
           const gap = days(x.administeredOn, y.administeredOn);
           const primoVsDtp = (x.productGroupId === "PCV_PRIMOVAX" && dtp.has(y.productGroupId)) || (y.productGroupId === "PCV_PRIMOVAX" && dtp.has(x.productGroupId));
-          if (primoVsDtp && gap < 15) problems.push(`${birth}@${ev} PRIMOVAX offset ${x.productGroupId} ${y.productGroupId} gap ${gap}`);
+          if (primoVsDtp && gap < 14) problems.push(`${birth}@${ev} PRIMOVAX offset ${x.productGroupId} ${y.productGroupId} gap ${gap}`);
           const exempt = [x.productGroupId, y.productGroupId].sort().join() === "ROTAVIRUS,VPO";
           if (live[x.productGroupId] && live[y.productGroupId] && !exempt && gap < 28) problems.push(`${birth}@${ev} live gap ${x.productGroupId} ${y.productGroupId} ${gap}`);
         }

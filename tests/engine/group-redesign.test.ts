@@ -39,7 +39,7 @@ describe("Group Z — redesign regression locks", () => {
   it("Z4 (item 8a): newborn TT starter, full projection → PCV booster_1 projected", () => {
     const r = run("2026-01-01", [], "2026-01-15", "full");
     const booster = r.visitPlan.visits.find(
-      v => v.status === "PROJECTED" && v.role === "booster_1" && v.products.includes("PCV_PRIMOVAX")
+      v => v.role.includes("booster_1") && (v.doses ?? []).some((d: { productGroupId: string; projected?: boolean }) => d.productGroupId === "PCV_PRIMOVAX" && d.projected === true)
     );
     expect(booster).toBeDefined();
   });

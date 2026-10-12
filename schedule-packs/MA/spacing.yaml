@@ -14,13 +14,13 @@ spacing_rules:
       - product_a: VPO
         product_b: ROTAVIRUS
 
-  - id: PCV13TT_DTP_OFFSET_15D
-    label_fr: Décalage 15 jours PrimoVax13/PCV13-TT vs vaccins DTP
+  - id: PCV13TT_DTP_OFFSET_14D
+    label_fr: Décalage 2 semaines PrimoVax13/PCV13-TT vs vaccins DTP
     description_fr: >
-      Toujours décaler de 15 jours la vaccination par PrimoVax13/
+      Toujours décaler de 2 semaines (14 jours) la vaccination par PrimoVax13/
       PCV13-TT par rapport au pentavalent, DTC ou Td (fiche transition),
       dans les deux sens. La dose due en premier garde sa date; l'autre
-      est décalée d'au moins 15 jours. Si les deux sont dues le même jour,
+      est décalée d'au moins 14 jours. Si les deux sont dues le même jour,
       PrimoVax est décalé. Prevenar n'est pas concerné.
     applies_when:
       pairs:
@@ -31,6 +31,6 @@ spacing_rules:
         - product_a: PCV_PRIMOVAX
           product_b: TD
     min_gap:
-      days: 15
+      days: 14
     same_day_allowed: false
     move_on_tie: PCV_PRIMOVAX

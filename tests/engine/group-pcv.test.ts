@@ -139,8 +139,8 @@ describe("Group PCV — coexistence, policies, both products (Stage 5)", () => {
     });
   });
 
-  describe("PC-E: 15-day spacing offset (PrimoVax vs Penta)", () => {
-    it("PC-E1: PrimoVax never shares a day with Penta, ≥15 days after", () => {
+  describe("PC-E: 14-day spacing offset (PrimoVax vs Penta)", () => {
+    it("PC-E1: PrimoVax never shares a day with Penta, ≥14 days after", () => {
       const r = run("2026-01-01", [], "2026-04-01");
       const penta = r.visitPlan.visits.find(v => v.products.includes("PENTA"));
       const pcv = r.visitPlan.visits.find(v => v.products.includes("PCV_PRIMOVAX"));
@@ -150,12 +150,12 @@ describe("Group PCV — coexistence, policies, both products (Stage 5)", () => {
       const gap = Math.round(
         (parseDate(pcv!.date).getTime() - parseDate(penta!.date).getTime()) / 86400000
       );
-      expect(gap).toBeGreaterThanOrEqual(15);
+      expect(gap).toBeGreaterThanOrEqual(14);
     });
 
     it("PC-E2: offset warning is emitted", () => {
       const r = run("2026-01-01", [], "2026-04-01");
-      expect(r.visitPlan.warnings.join(" ")).toContain("PCV13TT_DTP_OFFSET_15D");
+      expect(r.visitPlan.warnings.join(" ")).toContain("PCV13TT_DTP_OFFSET_14D");
     });
   });
 

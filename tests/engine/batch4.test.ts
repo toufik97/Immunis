@@ -1,4 +1,4 @@
-// Batch 4: the PrimoVax 15-day offset, dose intervals kept during spacing, calendar-month intervals.
+// Batch 4: the PrimoVax 14-day offset, dose intervals kept during spacing, calendar-month intervals.
 // Expects ./src next to ./test and the pack in ./schedule-packs (run from the project root).
 import { describe, it, expect } from "vitest";
 
@@ -16,30 +16,30 @@ const datesOf = (r: any, product: string) =>
 const days = (a: string, b: string) => Math.round((parseDate(b).getTime() - parseDate(a).getTime()) / 86400000);
 const warns = (r: any, re: RegExp) => r.visitPlan.warnings.filter((w: string) => re.test(w));
 
-describe("PrimoVax and Penta/DTC/Td are 15 days apart; whoever is due first keeps its date", () => {
-  it("example 1: both due now -> Penta now, PrimoVax 15 days later, next Penta 15 after PrimoVax", () => {
+describe("PrimoVax and Penta/DTC/Td are 14 days apart; whoever is due first keeps its date", () => {
+  it("example 1: both due now -> Penta now, PrimoVax 14 days later, next Penta 14 after PrimoVax", () => {
     const r = run("2026-01-01", "2026-03-16", [], { projection: "full" });
     const penta = datesOf(r, "PENTA"), primo = datesOf(r, "PCV_PRIMOVAX");
     expect(penta[0]).toBe("2026-03-16");
-    expect(primo[0]).toBe("2026-03-31");
-    expect(days(primo[0], penta[1])).toBeGreaterThanOrEqual(15);
+    expect(primo[0]).toBe("2026-03-30");
+    expect(days(primo[0], penta[1])).toBeGreaterThanOrEqual(14);
     expect(days(penta[0], penta[1])).toBeGreaterThanOrEqual(28); // Penta interval still respected
   });
-  it("example 2: Penta given at 2 months, PrimoVax due now -> PrimoVax now (exactly 15 days after is fine)", () => {
+  it("example 2: Penta given at 2 months, PrimoVax due now -> PrimoVax now (14 days after is fine)", () => {
     const r = run("2026-01-01", "2026-03-16", [{ administeredOn: "2026-03-01", productGroupId: "PENTA" }], { projection: "full" });
     expect(datesOf(r, "PCV_PRIMOVAX")[0]).toBe("2026-03-16");
-    expect(days("2026-03-16", datesOf(r, "PENTA")[0])).toBeGreaterThanOrEqual(15);
+    expect(days("2026-03-16", datesOf(r, "PENTA")[0])).toBeGreaterThanOrEqual(14);
   });
   it("example 2b: PrimoVax due now, next Penta would be too close -> the Penta moves, not the PrimoVax", () => {
     const r = run("2026-01-01", "2026-03-20", [{ administeredOn: "2026-03-01", productGroupId: "PENTA" }], { projection: "full" });
     expect(datesOf(r, "PCV_PRIMOVAX")[0]).toBe("2026-03-20");
-    expect(datesOf(r, "PENTA")[0]).toBe("2026-04-04"); // 15 days after the PrimoVax
+    expect(datesOf(r, "PENTA")[0]).toBe("2026-04-03"); // 14 days after the PrimoVax
     expect(warns(r, /^SPACING_SHIFT: PENTA/).length).toBe(1);
     expect(warns(r, /^SPACING_SHIFT: PCV_PRIMOVAX/).length).toBe(0);
   });
   it("a recorded PrimoVax pushes the next planned Penta, never the other way round", () => {
     const r = run("2026-01-01", "2026-03-20", [{ administeredOn: "2026-03-10", productGroupId: "PCV_PRIMOVAX" }], { projection: "full" });
-    expect(days("2026-03-10", datesOf(r, "PENTA")[0])).toBeGreaterThanOrEqual(15);
+    expect(days("2026-03-10", datesOf(r, "PENTA")[0])).toBeGreaterThanOrEqual(14);
   });
   it("Prevenar has no offset: it can share a day with Penta", () => {
     const r = run("2026-01-01", "2026-05-01", [{ administeredOn: "2026-03-01", productGroupId: "PCV_PREVENAR" }], { projection: "full" });
@@ -57,7 +57,7 @@ describe("PrimoVax and Penta/DTC/Td are 15 days apart; whoever is due first keep
     expect(primo.length).toBe(3);
     for (let i = 1; i < primo.length; i++) expect(days(primo[i - 1], primo[i])).toBeGreaterThanOrEqual(59);
     for (const p of [...datesOf(r, "PENTA"), ...datesOf(r, "DTC"), ...datesOf(r, "TD")]) {
-      for (const q of primo) expect(Math.abs(days(p, q))).toBeGreaterThanOrEqual(15);
+      for (const q of primo) expect(Math.abs(days(p, q))).toBeGreaterThanOrEqual(14);
     }
   });
 });
@@ -139,7 +139,7 @@ describe("the plan is valid when recorded as given (children with no history)", 
           if (x.administeredOn >= y.administeredOn) continue;
           const gap = days(x.administeredOn, y.administeredOn);
           const primoVsDtp = (x.productGroupId === "PCV_PRIMOVAX" && dtp.has(y.productGroupId)) || (y.productGroupId === "PCV_PRIMOVAX" && dtp.has(x.productGroupId));
-          if (primoVsDtp && gap < 15) problems.push(`${birth}@${ev} PRIMOVAX offset ${x.productGroupId} ${y.productGroupId} gap ${gap}`);
+          if (primoVsDtp && gap < 14) problems.push(`${birth}@${ev} PRIMOVAX offset ${x.productGroupId} ${y.productGroupId} gap ${gap}`);
           const liveLive = live[x.productGroupId] && live[y.productGroupId];
           const exempt = [x.productGroupId, y.productGroupId].sort().join() === "ROTAVIRUS,VPO";
           if (liveLive && !exempt && gap < 28) problems.push(`${birth}@${ev} live gap ${x.productGroupId} ${y.productGroupId} ${gap}`);

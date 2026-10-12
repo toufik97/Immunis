@@ -22,12 +22,12 @@ describe("spacing guard (saving-time rule-book check)", () => {
     const issues = checkSpacing([dose("PENTA", "2026-03-01", "EXTERNAL")], [{ dose: dose("PCV_PRIMOVAX", "2026-03-10"), index: 0 }], pack);
     expect(issues).toHaveLength(1);
     expect(issues[0].code).toBe("SPACING_VIOLATION");
-    expect(issues[0].message).toContain("minimum 15 days");
+    expect(issues[0].message).toContain("minimum 14 days");
   });
 
-  it("passes at exactly 15 days and spares Prevenar and exempt pairs", () => {
+  it("passes at exactly 14 days and spares Prevenar and exempt pairs", () => {
     const prior = [dose("PENTA", "2026-03-01", "EXTERNAL")];
-    expect(checkSpacing(prior, [{ dose: dose("PCV_PRIMOVAX", "2026-03-16"), index: 0 }], pack)).toHaveLength(0);
+    expect(checkSpacing(prior, [{ dose: dose("PCV_PRIMOVAX", "2026-03-15"), index: 0 }], pack)).toHaveLength(0);
     expect(checkSpacing(prior, [{ dose: dose("PCV_PREVENAR", "2026-03-01"), index: 0 }], pack)).toHaveLength(0);
     expect(
       checkSpacing([dose("VPO", "2026-03-01", "EXTERNAL")], [{ dose: dose("ROTAVIRUS", "2026-03-01"), index: 0 }], pack)
