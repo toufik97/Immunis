@@ -17,6 +17,7 @@ describe("api", () => {
         familyName: "El Amrani",
         givenName: "Yasmine",
         birthDate: "2025-03-14",
+        sex: "F",
         address: "Rue 12",
         centreId: "CS01",
         firstVisitYear: "2026",
@@ -97,6 +98,7 @@ describe("api", () => {
       familyName: "El Amrani",
       givenName: "Yasmine",
       birthDate: "2025-03-14",
+      sex: "F",
       centreId: "CS01",
       firstVisitYear: "2026",
     };
@@ -185,7 +187,7 @@ describe("api", () => {
     const child = await app.inject({
       method: "POST",
       url: "/api/children",
-      payload: { familyName: "A", givenName: "A", birthDate: "2025-01-01" },
+      payload: { familyName: "A", givenName: "A", birthDate: "2025-01-01", sex: "M" },
     });
     const childId = (child.json() as { id: string }).id;
     const badChild = await app.inject({
@@ -236,7 +238,7 @@ describe("api", () => {
     const futureBirth = await app.inject({
       method: "POST",
       url: "/api/children",
-      payload: { familyName: "A", givenName: "A", birthDate: "2030-05-01" },
+      payload: { familyName: "A", givenName: "A", birthDate: "2030-05-01", sex: "M" },
     });
     expect(futureBirth.statusCode).toBe(400);
     db.close();

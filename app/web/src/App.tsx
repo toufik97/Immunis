@@ -36,6 +36,7 @@ import { api, type Child } from "./api";
 import { formatCount, todayCivilDate } from "./format";
 import { isTab, resolveInitialTab, type Tab } from "./tabs";
 import VisitPanel from "./components/VisitPanel";
+import ChildSearch from "./components/ChildSearch";
 import RegistryPanel from "./components/RegistryPanel";
 import { SessionPanel, NoShowPanel, StockPanel } from "./components/Panels";
 import "./styles.css";
@@ -303,9 +304,12 @@ export default function App() {
                     />
                   ) : (
                     <Card>
-                      <Text size="sm" c="dimmed">
-                        {t("today.empty")}
-                      </Text>
+                      <Stack gap="sm">
+                        <Text size="sm" c="dimmed">
+                          {t("today.empty")}
+                        </Text>
+                        <ChildSearch onPick={handoffToToday} />
+                      </Stack>
                     </Card>
                   )}
                 </Tabs.Panel>

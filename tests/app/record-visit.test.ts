@@ -140,6 +140,20 @@ describe("record gate (engine cross-check)", () => {
     db.close();
   });
 
+  it("creates no appointment when no next RDV is given (RDV comes after recording)", () => {
+    const { db, child, lot } = setup();
+    const penta = lot("PENTA");
+    recordVisit(db, pack, child.birthDate, [], {
+      childId: child.id,
+      date: "2026-03-01",
+      screening: "VACCINATE",
+      doses: [{ ...dose("PENTA", "2026-03-01"), lotId: penta.id }],
+    });
+    expect(listDue(db, "2026-04-01")).toHaveLength(0);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM appointments").get()).toEqual({ n: 0 });
+    db.close();
+  });
+
   it("records a transcribed EXTERNAL dose without engine interference", () => {
     const { db, child } = setup("2023-01-01");
     const { encounter } = recordVisit(db, pack, child.birthDate, [], {

@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Alert,
+  Badge,
   Button,
   Card,
   Group,
   Modal,
+  SegmentedControl,
   SimpleGrid,
   Stack,
   Table,
@@ -33,6 +35,7 @@ export default function RegistryPanel({ onSelect }: { onSelect: (child: Child) =
     familyName: "",
     givenName: "",
     birthDate: "",
+    sex: "",
     fatherName: "",
     motherName: "",
     address: "",
@@ -101,8 +104,9 @@ export default function RegistryPanel({ onSelect }: { onSelect: (child: Child) =
   const familyMissing = submitAttempted && reg.familyName.trim() === "";
   const givenMissing = submitAttempted && reg.givenName.trim() === "";
   const birthMissing = submitAttempted && reg.birthDate === "";
+  const sexMissing = submitAttempted && reg.sex === "";
   const regValid =
-    reg.familyName.trim() !== "" && reg.givenName.trim() !== "" && reg.birthDate !== "";
+    reg.familyName.trim() !== "" && reg.givenName.trim() !== "" && reg.birthDate !== "" && reg.sex !== "";
 
   function openModal(): void {
     setSubmitAttempted(false);
@@ -182,6 +186,7 @@ export default function RegistryPanel({ onSelect }: { onSelect: (child: Child) =
                   {header("name", t("table.name"))}
                   <Table.Th>{t("table.localId")}</Table.Th>
                   {header("birthDate", t("register.birthDate"))}
+                  <Table.Th>{t("child.sex")}</Table.Th>
                   <Table.Th>{t("table.address")}</Table.Th>
                   <Table.Th aria-label="actions" />
                 </Table.Tr>
@@ -196,6 +201,15 @@ export default function RegistryPanel({ onSelect }: { onSelect: (child: Child) =
                       {(c.localIds ?? []).map((l) => l.value).join(" ") || "—"}
                     </Table.Td>
                     <Table.Td>{formatCivilDate(c.birthDate, lang)}</Table.Td>
+                    <Table.Td>
+                      {c.sex ? (
+                        <Badge variant="light" size="sm" color={c.sex === "F" ? "pink" : "blue"}>
+                          {t(`child.sex.${c.sex}`)}
+                        </Badge>
+                      ) : (
+                        "—"
+                      )}
+                    </Table.Td>
                     <Table.Td className="break-words">{c.address || "—"}</Table.Td>
                     <Table.Td>
                       <Button size="compact-xs" variant="light" onClick={() => onSelect(c)}>
@@ -242,6 +256,26 @@ export default function RegistryPanel({ onSelect }: { onSelect: (child: Child) =
             onChange={(v) => setReg({ ...reg, birthDate: v })}
             error={birthMissing ? t("register.required") : undefined}
           />
+          <Stack gap={2}>
+            <Text size="sm" fw={500}>
+              {t("child.sex")} <span aria-hidden="true">*</span>
+            </Text>
+            <SegmentedControl
+              name="sex"
+              aria-label={t("child.sex")}
+              value={reg.sex}
+              onChange={(v) => setReg({ ...reg, sex: v })}
+              data={[
+                { label: t("child.sex.M"), value: "M" },
+                { label: t("child.sex.F"), value: "F" },
+              ]}
+            />
+            {sexMissing && (
+              <Text size="xs" c="red" role="alert">
+                {t("register.required")}
+              </Text>
+            )}
+          </Stack>
           <TextInput
             label={t("register.fatherName")}
             name="fatherName"

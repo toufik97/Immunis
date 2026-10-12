@@ -5,6 +5,7 @@ const MIGRATIONS: { table: string; column: string; ddl: string }[] = [
   { table: "children", column: "father_name", ddl: "TEXT" },
   { table: "children", column: "mother_name", ddl: "TEXT" },
   { table: "children", column: "address", ddl: "TEXT" },
+  { table: "children", column: "sex", ddl: "TEXT" },
 ];
 
 export function runMigrations(db: Database.Database): void {

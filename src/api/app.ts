@@ -23,6 +23,7 @@ const ChildInput = z.object({
   familyName: z.string().min(1),
   givenName: z.string().min(1),
   birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  sex: z.enum(["M", "F"]),
   fatherName: z.string().optional(),
   motherName: z.string().optional(),
   address: z.string().optional(),

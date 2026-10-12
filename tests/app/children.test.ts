@@ -75,15 +75,28 @@ describe("child registry", () => {
     runMigrations(db);
     const child = getChild(db, "old-1");
     expect(child?.familyName).toBe("A");
+    // Pre-field rows read back with unknown sex instead of crashing.
+    expect(child?.sex).toBeNull();
     const fresh = createChild(db, {
       familyName: "B",
       givenName: "B",
       birthDate: "2025-02-02",
+      sex: "F",
       fatherName: "F",
       address: "Somewhere",
     });
     expect(fresh.fatherName).toBe("F");
     expect(fresh.address).toBe("Somewhere");
+    db.close();
+  });
+
+  it("persists sex and reads it back", () => {
+    const db = openTestDb();
+    const boy = createChild(db, { familyName: "A", givenName: "A", birthDate: "2025-01-01", sex: "M" });
+    expect(boy.sex).toBe("M");
+    expect(getChild(db, boy.id)?.sex).toBe("M");
+    const unknown = createChild(db, { familyName: "B", givenName: "B", birthDate: "2025-01-01" });
+    expect(unknown.sex).toBeNull();
     db.close();
   });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ActionIcon,
@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   Card,
+  Collapse,
   Grid,
   Group,
   List,
@@ -13,7 +14,6 @@ import {
   Paper,
   Select,
   Stack,
-  Table,
   Text,
   TextInput,
   Title,
@@ -22,13 +22,18 @@ import { notifications } from "@mantine/notifications";
 import {
   IconAlertCircle,
   IconCheck,
+  IconChevronDown,
+  IconChevronUp,
   IconPlus,
   IconSearch,
   IconTrash,
 } from "@tabler/icons-react";
 import { api, type Child, type Dose, type GateIssue, type Lot } from "../api";
 import { formatCivilDate, todayCivilDate } from "../format";
+import { formatEngineWarning } from "../engineWarnings";
+import ChildCard from "./ChildCard";
 import DateField from "./DateField";
+import EvalRail from "./EvalRail";
 
 interface Props {
   child: Child;
@@ -49,9 +54,13 @@ export default function VisitPanel({ child, products, programs, expectedProducts
   const [history, setHistory] = useState<Dose[]>([]);
   const [doses, setDoses] = useState<Dose[]>([]);
   const [lotsByProduct, setLotsByProduct] = useState<Record<string, Lot[]>>({});
-  const [nextRdv, setNextRdv] = useState("");
   const [projection, setProjection] = useState<"next" | "full">("next");
   const [result, setResult] = useState<Awaited<ReturnType<typeof api.evaluate>> | null>(null);
+  const [historyAsc, setHistoryAsc] = useState(true);
+  const [railOpen, setRailOpen] = useState(true);
+  const [rdv, setRdv] = useState<{ date: string; products: string[] } | null>(null);
+  const [rdvDate, setRdvDate] = useState("");
+  const [rdvSaving, setRdvSaving] = useState(false);
   const [recording, setRecording] = useState(false);
   const [evaluating, setEvaluating] = useState(false);
   const [gateIssues, setGateIssues] = useState<GateIssue[]>([]);
@@ -59,9 +68,9 @@ export default function VisitPanel({ child, products, programs, expectedProducts
   const [batch, setBatch] = useState<string[]>([]);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  const rdvRef = useRef<HTMLDivElement>(null);
 
   const productLabel = (id: string) => products.find((p) => p.id === id)?.label_fr ?? id;
-  const programLabel = (id: string) => programs.find((p) => p.id === id)?.label_fr ?? id;
   // Lots usability depends on the visit date, so the cache key includes it.
   const lotsFor = (p: string): Lot[] => lotsByProduct[`${p}|${visitDate}`] ?? [];
 
@@ -83,10 +92,6 @@ export default function VisitPanel({ child, products, programs, expectedProducts
         projection,
       });
       setResult(r);
-      if (!nextRdv) {
-        const upcoming = r.visitPlan.visits.find((v) => v.date > visitDate) ?? r.visitPlan.visits[0];
-        if (upcoming) setNextRdv(upcoming.date);
-      }
     } catch (e) {
       if (!silent) setErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -120,8 +125,6 @@ export default function VisitPanel({ child, products, programs, expectedProducts
 
   function onVisitDateChange(v: string): void {
     setVisitDate(v);
-    // A suggested RDV below the new visit date is no longer valid; manual entries survive.
-    setNextRdv((r) => (r && r < v ? "" : r));
   }
 
   useEffect(() => {
@@ -160,6 +163,27 @@ export default function VisitPanel({ child, products, programs, expectedProducts
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [doses.length]);
+
+  // The post-record RDV step must be impossible to miss.
+  useEffect(() => {
+    if (rdv) rdvRef.current?.scrollIntoView({ block: "nearest" });
+  }, [rdv]);
+
+  async function confirmRdv(): Promise<void> {
+    if (!rdv || !rdvDate) return;
+    setErr("");
+    setRdvSaving(true);
+    try {
+      await api.createAppointment({ childId: child.id, dueDate: rdvDate, expectedProducts: rdv.products });
+      setRdv(null);
+      setMsg(t("visit.rdvRecorded"));
+      onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRdvSaving(false);
+    }
+  }
 
   const blockedByScreening = screening !== "VACCINATE" && doses.length > 0;
 
@@ -232,7 +256,6 @@ export default function VisitPanel({ child, products, programs, expectedProducts
         weightKg: weightKg ? Number(weightKg) : undefined,
         heightCm: heightCm ? Number(heightCm) : undefined,
         doses: payload,
-        nextAppointmentDate: nextRdv || undefined,
         ...(withOverride ? { overrideReason } : {}),
       });
       if (r.status === "gated") {
@@ -241,11 +264,24 @@ export default function VisitPanel({ child, products, programs, expectedProducts
         setGateIssues([]);
         setOverrideReason("");
         setDoses([]);
-        setNextRdv("");
         const done = t("visit.recorded");
         setMsg(done);
         notifications.show({ title: done, message: `${child.givenName} ${child.familyName}`, color: "teal", icon: <IconCheck size={16} aria-hidden="true" /> });
         await fetchHistory();
+        // Engine recommends the next appointment only after the doses exist.
+        try {
+          const fresh = await api.evaluate({ childId: child.id, evaluationDate: visitDate, projection: "next" });
+          setResult(fresh);
+          const rec = fresh.visitPlan.visits.find((v) => v.date > visitDate);
+          if (rec) {
+            setRdv({ date: rec.date, products: rec.products });
+            setRdvDate(rec.date);
+          } else {
+            setRdv(null);
+          }
+        } catch {
+          setRdv(null);
+        }
         onDone();
       }
     } catch (e) {
@@ -258,26 +294,67 @@ export default function VisitPanel({ child, products, programs, expectedProducts
 
   const canOverride = gateIssues.some((g) => g.overridable);
   const todayStr = todayCivilDate();
+  const originColor = (o: string): string => (o === "CENTRE" ? "teal" : o === "CAMPAIGN" ? "orange" : "gray");
+
+  // History grouped by day (carnet order: oldest first, toggleable).
+  const historyByDate = [...history]
+    .sort((a, b) => {
+      const cmp = a.administeredOn < b.administeredOn ? -1 : a.administeredOn > b.administeredOn ? 1 : 0;
+      return historyAsc ? cmp : -cmp;
+    })
+    .reduce<{ date: string; doses: Dose[] }[]>((groups, d) => {
+      const last = groups[groups.length - 1];
+      if (last && last.date === d.administeredOn) last.doses.push(d);
+      else groups.push({ date: d.administeredOn, doses: [d] });
+      return groups;
+    }, []);
 
   return (
-    <Card>
-      <Stack gap="sm">
-        <Group justify="space-between" wrap="wrap">
-          <Title order={2} size="h4" className="break-words">
-            {child.givenName} {child.familyName} ·{" "}
-            {t("child.birthDate", { date: formatCivilDate(child.birthDate, lang) })}
-          </Title>
-          <Badge variant="light" color="gray" className="tabular">
-            {(child.localIds ?? []).map((l) => t("child.localId", { value: l.value })).join(" · ") || child.id}
-          </Badge>
-        </Group>
-        <Text size="sm" c="dimmed">
-          {[child.fatherName, child.motherName].filter(Boolean).join(" · ")}
-          {child.address ? ` · ${child.address}` : ""}
-        </Text>
-        <Text size="sm" c="dimmed">
-          {t("visit.howto")}
-        </Text>
+    <Grid>
+      <Grid.Col span={{ base: 12, lg: 8 }}>
+        <Stack gap="sm">
+          <ChildCard child={child} />
+          <Card>
+            <Stack gap="sm">
+              <Text size="sm" c="dimmed">
+                {t("visit.howto")}
+              </Text>
+
+              <Group justify="space-between" wrap="wrap">
+                <Title order={3} size="h5">
+                  {t("visit.recordedDoses")}
+                </Title>
+                {history.length > 0 && (
+                  <Button size="compact-xs" variant="subtle" onClick={() => setHistoryAsc((a) => !a)}>
+                    {historyAsc ? t("history.newest") : t("history.oldest")}
+                  </Button>
+                )}
+              </Group>
+        {history.length === 0 ? (
+          <Text size="sm" c="dimmed">
+            {t("visit.noRecorded")}
+          </Text>
+        ) : (
+          <Stack gap="xs">
+            {historyByDate.map((g) => (
+              <Group key={g.date} gap="sm" wrap="wrap" align="center">
+                <Text size="sm" fw={600} className="tabular" style={{ minWidth: 110 }}>
+                  {formatCivilDate(g.date, lang)}
+                </Text>
+                <Group gap={6} wrap="wrap" style={{ flex: 1 }}>
+                  {g.doses.map((d, i) => (
+                    <Badge key={i} variant="light" color={originColor(d.origin)}>
+                      {productLabel(d.productGroupId)}
+                    </Badge>
+                  ))}
+                </Group>
+                <Text size="xs" c="dimmed">
+                  {[...new Set(g.doses.map((d) => t(`origin.${d.origin}`)))].join(" · ")}
+                </Text>
+              </Group>
+            ))}
+          </Stack>
+        )}
 
         <Grid>
           <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
@@ -327,61 +404,11 @@ export default function VisitPanel({ child, products, programs, expectedProducts
               onChange={(e) => setHeightCm(e.target.value)}
             />
           </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
-            <DateField
-              label={t("visit.nextRdv")}
-              name="nextRdv"
-              value={nextRdv}
-              min={visitDate}
-              onChange={setNextRdv}
-            />
-          </Grid.Col>
         </Grid>
-
-        <Title order={3} size="h5">
-          {t("visit.recordedDoses")}
-        </Title>
-        {history.length === 0 ? (
-          <Text size="sm" c="dimmed">
-            {t("visit.noRecorded")}
-          </Text>
-        ) : (
-          <Table.ScrollContainer minWidth={420}>
-            <Table striped highlightOnHover withTableBorder withColumnBorders={false}>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>{t("visit.date")}</Table.Th>
-                  <Table.Th>{t("visit.product")}</Table.Th>
-                  <Table.Th>{t("visit.origin")}</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody className="tabular">
-                {history.map((d, i) => (
-                  <Table.Tr key={i}>
-                    <Table.Td>{formatCivilDate(d.administeredOn, lang)}</Table.Td>
-                    <Table.Td>{productLabel(d.productGroupId)}</Table.Td>
-                    <Table.Td>{t(`origin.${d.origin}`)}</Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          </Table.ScrollContainer>
-        )}
 
         <Title order={3} size="h5">
           {t("visit.newDoses")}
         </Title>
-        {result && (
-          <Text size="sm" c="dimmed">
-            {t("visit.stillNeeded", {
-              needs:
-                result.antigenNeeds
-                  .filter((n) => n.dosesNeeded > 0)
-                  .map((n) => `${programLabel(n.programId)} (${n.dosesNeeded})`)
-                  .join(", ") || t("visit.noneDue"),
-            })}
-          </Text>
-        )}
         {blockedByScreening && (
           <Alert color="yellow" title={t("visit.screeningBlocks")} />
         )}
@@ -529,14 +556,54 @@ export default function VisitPanel({ child, products, programs, expectedProducts
           />
         </Group>
 
+        {rdv && (
+          <Paper withBorder p="sm" radius="md" ref={rdvRef}>
+            <Stack gap="xs">
+              <Title order={3} size="h5">
+                {t("visit.rdvTitle")}
+              </Title>
+              <Text size="sm" className="tabular">
+                {t("visit.rdvRecommended", {
+                  date: formatCivilDate(rdv.date, lang),
+                  products: rdv.products.map(productLabel).join(", "),
+                })}
+              </Text>
+              <Group align="end" wrap="wrap">
+                <DateField
+                  label={t("visit.nextRdv")}
+                  name="rdvDate"
+                  value={rdvDate}
+                  min={visitDate}
+                  onChange={setRdvDate}
+                />
+                <Button onClick={() => void confirmRdv()} loading={rdvSaving}>
+                  {t("visit.rdvConfirm")}
+                </Button>
+                <Button
+                  variant="default"
+                  onClick={() => {
+                    setRdv(null);
+                    onDone();
+                  }}
+                >
+                  {t("visit.rdvSkip")}
+                </Button>
+              </Group>
+            </Stack>
+          </Paper>
+        )}
+
         <div aria-live="polite">
           {gateIssues.length > 0 && (
             <Alert color="red" icon={<IconAlertCircle size={16} aria-hidden="true" />} title={t("visit.gateTitle")}>
               <List size="sm" mt="xs">
                 {gateIssues.map((g, idx) => (
                   <List.Item key={idx} className="tabular">
-                    {productLabel(g.productGroupId)} · {formatCivilDate(g.administeredOn, lang)} — {g.message} (
-                    <span translate="no">{g.code}</span>)
+                    {productLabel(g.productGroupId)} · {formatCivilDate(g.administeredOn, lang)} —{" "}
+                    {formatEngineWarning(g.message, lang)}{" "}
+                    <Text span size="xs" c="dimmed" translate="no">
+                      {g.code}
+                    </Text>
                   </List.Item>
                 ))}
               </List>
@@ -570,39 +637,37 @@ export default function VisitPanel({ child, products, programs, expectedProducts
             <Alert color="teal" icon={<IconCheck size={16} aria-hidden="true" />} title={msg} mt="sm" />
           )}
         </div>
-
-        {result && (
-          <Stack gap="xs">
-            <Title order={3} size="h5">
-              {t("visit.needs")}
-            </Title>
-            <List size="sm">
-              {result.antigenNeeds.map((n) => (
-                <List.Item key={n.programId}>
-                  {programLabel(n.programId)}: <span translate="no">{n.status}</span> ({n.dosesNeeded})
-                </List.Item>
-              ))}
-            </List>
-            <Title order={3} size="h5">
-              {t("visit.plan")}
-            </Title>
-            {result.visitPlan.visits.length === 0 ? (
-              <Text size="sm" c="dimmed">
-                {t("visit.node")}
-              </Text>
-            ) : (
-              <List size="sm" className="tabular">
-                {result.visitPlan.visits.map((v, i) => (
-                  <List.Item key={i}>
-                    {formatCivilDate(v.date, lang)} — {v.products.map(productLabel).join(", ")} [
-                    <span translate="no">{v.status}</span>]
-                  </List.Item>
-                ))}
-              </List>
-            )}
+            </Stack>
+          </Card>
+        </Stack>
+      </Grid.Col>
+      <Grid.Col span={{ base: 12, lg: 4 }}>
+        <Card>
+          <Stack gap="sm">
+            <Group justify="space-between" wrap="wrap">
+              <Title order={3} size="h5">
+                {t("rail.title")}
+              </Title>
+              <ActionIcon
+                variant="subtle"
+                aria-label={railOpen ? t("rail.hide") : t("rail.show")}
+                onClick={() => setRailOpen((o) => !o)}
+              >
+                {railOpen ? <IconChevronUp size={16} aria-hidden="true" /> : <IconChevronDown size={16} aria-hidden="true" />}
+              </ActionIcon>
+            </Group>
+            <Collapse in={railOpen}>
+              {result ? (
+                <EvalRail result={result} products={products} programs={programs} />
+              ) : (
+                <Text size="sm" c="dimmed">
+                  {t("visit.evaluate")}…
+                </Text>
+              )}
+            </Collapse>
           </Stack>
-        )}
-      </Stack>
-    </Card>
+        </Card>
+      </Grid.Col>
+    </Grid>
   );
 }

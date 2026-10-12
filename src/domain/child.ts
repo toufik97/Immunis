@@ -18,6 +18,8 @@ export const ChildSchema = z.object({
   givenName: z.string().min(1),
   /** Confirmation key before any clinical action (FR-1.2). Immutable. */
   birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  /** Required at registration; NULL only on pre-field rows. Immutable like birthDate. */
+  sex: z.enum(["M", "F"]).nullable().default(null),
   fatherName: z.string().optional(),
   motherName: z.string().optional(),
   /** Free-text domicile; helps locate absentees. Optional. */

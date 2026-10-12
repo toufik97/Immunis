@@ -10,7 +10,7 @@ function count(db: { prepare(s: string): { get(): unknown } }, table: string): n
 describe("registerChild seam", () => {
   it("creates with xx/yy atomically and increments per centre/year", () => {
     const db = openTestDb();
-    const base = { familyName: "El Amrani", birthDate: "2025-03-14", centreId: "CS01", firstVisitYear: "2026" };
+    const base = { familyName: "El Amrani", birthDate: "2025-03-14", sex: "F" as const, centreId: "CS01", firstVisitYear: "2026" };
     const a = registerChild(db, { ...base, givenName: "Yasmine" });
     expect(a.status).toBe("created");
     if (a.status !== "created") return;
@@ -29,7 +29,7 @@ describe("registerChild seam", () => {
 
   it("warns on duplicates without writing", () => {
     const db = openTestDb();
-    const body = { familyName: "A", givenName: "A", birthDate: "2025-01-01", centreId: "CS01", firstVisitYear: "2026" };
+    const body = { familyName: "A", givenName: "A", birthDate: "2025-01-01", sex: "M" as const, centreId: "CS01", firstVisitYear: "2026" };
     expect(registerChild(db, body).status).toBe("created");
     const before = count(db as never, "children");
     const dup = registerChild(db, body);
@@ -45,10 +45,10 @@ describe("registerChild seam", () => {
   it("rejects half pairing without writing", () => {
     const db = openTestDb();
     expect(() =>
-      registerChild(db, { familyName: "A", givenName: "A", birthDate: "2025-01-01", centreId: "CS01" })
+      registerChild(db, { familyName: "A", givenName: "A", birthDate: "2025-01-01", sex: "M", centreId: "CS01" })
     ).toThrow(/required together/);
     expect(count(db as never, "children")).toBe(0);
-    const created = registerChild(db, { familyName: "A", givenName: "A", birthDate: "2025-01-01" });
+    const created = registerChild(db, { familyName: "A", givenName: "A", birthDate: "2025-01-01", sex: "M" });
     expect(created.status).toBe("created");
     if (created.status === "created") expect(getChild(db, created.child.id)?.localIds).toEqual([]);
     db.close();
@@ -56,13 +56,29 @@ describe("registerChild seam", () => {
 
   it("rejects future and impossible birth dates without writing", () => {
     const db = openTestDb();
-    expect(() => registerChild(db, { familyName: "A", givenName: "A", birthDate: "2030-05-01" })).toThrow(
+    expect(() => registerChild(db, { familyName: "A", givenName: "A", birthDate: "2030-05-01", sex: "M" })).toThrow(
       /in the future/
     );
-    expect(() => registerChild(db, { familyName: "A", givenName: "A", birthDate: "2026-02-30" })).toThrow(
+    expect(() => registerChild(db, { familyName: "A", givenName: "A", birthDate: "2026-02-30", sex: "M" })).toThrow(
       /real YYYY-MM-DD/
     );
     expect(count(db as never, "children")).toBe(0);
+    db.close();
+  });
+
+  it("requires sex and exempts boy/girl twins from the duplicate guard", () => {
+    const db = openTestDb();
+    expect(() =>
+      // @ts-expect-error sex is required at registration
+      registerChild(db, { familyName: "A", givenName: "A", birthDate: "2025-01-01" })
+    ).toThrow(/sex is required/);
+    expect(count(db as never, "children")).toBe(0);
+    const boy = { familyName: "T", givenName: "Twin", birthDate: "2025-01-01", sex: "M" as const };
+    expect(registerChild(db, boy).status).toBe("created");
+    // Same names and birth date, other sex: not a duplicate.
+    expect(registerChild(db, { ...boy, sex: "F" as const }).status).toBe("created");
+    // Same sex: duplicate warning as before.
+    expect(registerChild(db, boy).status).toBe("duplicate");
     db.close();
   });
 });

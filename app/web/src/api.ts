@@ -22,6 +22,7 @@ export interface Child {
   familyName: string;
   givenName: string;
   birthDate: string;
+  sex?: "M" | "F" | null;
   fatherName?: string;
   motherName?: string;
   address?: string;
@@ -61,6 +62,38 @@ export interface Appointment {
 
 export interface DuplicateChild extends Child {
   localIds: { centreId: string; value: string }[];
+}
+
+export interface PlannedDose {
+  programId: string;
+  doseNumber: number;
+  amount?: { value: number; unit: string };
+}
+
+export interface PlannedVisit {
+  visitNumber: number;
+  date: string;
+  products: string[];
+  status: string;
+  doses?: PlannedDose[];
+}
+
+export interface AntigenNeed {
+  programId: string;
+  status: string;
+  dosesNeeded: number;
+  validDosesReceived: number;
+  targetProduct?: string | null;
+  matchedRuleId?: string | null;
+  warnings: string[];
+}
+
+export interface EvaluateResult {
+  antigenNeeds: AntigenNeed[];
+  productSelection: { primarySlots: { products: { productGroupId: string }[] }[] };
+  visitPlan: { visits: PlannedVisit[]; warnings: string[] };
+  assumptions?: string[];
+  inputWarnings?: string[];
 }
 
 export interface GateIssue {
@@ -120,12 +153,7 @@ export const api = {
     if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
     return { status: "recorded" };
   },
-  evaluate: (body: unknown) =>
-    req<{
-      antigenNeeds: { programId: string; status: string; dosesNeeded: number }[];
-      productSelection: { primarySlots: { products: { productGroupId: string }[] }[] };
-      visitPlan: { visits: { date: string; products: string[]; status: string }[] };
-    }>("/api/evaluate", { method: "POST", body: JSON.stringify(body) }),
+  evaluate: (body: unknown) => req<EvaluateResult>("/api/evaluate", { method: "POST", body: JSON.stringify(body) }),
   session: (date: string) =>
     req<{ expected: Appointment[]; counters: { children: number; dosesByProduct: Record<string, number> } }>(
       `/api/sessions?date=${date}`
@@ -135,6 +163,8 @@ export const api = {
     return req<{ date: string; children: number; doses: number }[]>(`/api/sessions/agenda${q ? `?${q}` : ""}`);
   },
   noShows: (asOf: string) => req<Appointment[]>(`/api/no-shows?asOf=${asOf}`),
+  createAppointment: (body: { childId: string; dueDate: string; expectedProducts: string[] }) =>
+    req<Appointment>("/api/appointments", { method: "POST", body: JSON.stringify(body) }),
   lots: (product?: string, usableOn?: string) =>
     req<Lot[]>(
       product

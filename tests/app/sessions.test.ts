@@ -10,6 +10,7 @@ function child(db: never, givenName: string) {
     familyName: "F",
     givenName,
     birthDate: "2025-01-01",
+    sex: "F",
     address: `${givenName}-addr`,
     centreId: "CS01",
     firstVisitYear: "2026",

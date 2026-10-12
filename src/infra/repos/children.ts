@@ -6,6 +6,7 @@ export interface NewChild {
   familyName: string;
   givenName: string;
   birthDate: string;
+  sex?: "M" | "F";
   fatherName?: string;
   motherName?: string;
   address?: string;
@@ -16,6 +17,7 @@ interface ChildRow {
   family_name: string;
   given_name: string;
   birth_date: string;
+  sex: string | null;
   father_name: string | null;
   mother_name: string | null;
   address: string | null;
@@ -28,6 +30,7 @@ export function toChild(row: ChildRow, localIds: { centreId: string; value: stri
     familyName: row.family_name,
     givenName: row.given_name,
     birthDate: row.birth_date,
+    sex: row.sex ?? null,
     fatherName: row.father_name ?? undefined,
     motherName: row.mother_name ?? undefined,
     address: row.address ?? undefined,
@@ -70,8 +73,8 @@ export function localIdsForMany(
 export function createChild(db: Database.Database, input: NewChild): Child {
   const id = randomUUID();
   db.prepare(
-    "INSERT INTO children (id, family_name, given_name, birth_date, father_name, mother_name, address) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  ).run(id, input.familyName, input.givenName, input.birthDate, input.fatherName ?? null, input.motherName ?? null, input.address ?? null);
+    "INSERT INTO children (id, family_name, given_name, birth_date, sex, father_name, mother_name, address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  ).run(id, input.familyName, input.givenName, input.birthDate, input.sex ?? null, input.fatherName ?? null, input.motherName ?? null, input.address ?? null);
   const row = db.prepare("SELECT * FROM children WHERE id = ?").get(id) as ChildRow;
   return toChild(row, []);
 }
@@ -105,13 +108,16 @@ export function listChildren(db: Database.Database): Child[] {
 /**
  * Possible duplicates for the registration guard: same names
  * (case-insensitive) and same birthDate. Homonyms exist, so callers
- * warn rather than block — the nurse decides.
+ * warn rather than block — the nurse decides. Same-sex matching only:
+ * boy/girl twins sharing names and birth date are not duplicates.
+ * Pre-field rows with unknown sex still match (conservative).
  */
 export function findPossibleDuplicates(
   db: Database.Database,
   familyName: string,
   givenName: string,
-  birthDate: string
+  birthDate: string,
+  sex?: "M" | "F" | null
 ): Child[] {
   const rows = db
     .prepare(
@@ -119,7 +125,9 @@ export function findPossibleDuplicates(
     )
     .all(familyName, givenName, birthDate) as ChildRow[];
   const ids = new Map(localIdsForMany(db, rows.map((r) => r.id)));
-  return rows.map((row) => toChild(row, ids.get(row.id) ?? []));
+  return rows
+    .filter((r) => !sex || !r.sex || r.sex === sex)
+    .map((row) => toChild(row, ids.get(row.id) ?? []));
 }
 
 /**

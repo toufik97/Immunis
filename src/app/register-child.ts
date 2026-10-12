@@ -9,6 +9,8 @@ export interface RegisterChildInput {
   familyName: string;
   givenName: string;
   birthDate: string;
+  /** Required at registration (boy/girl identification, dose stats). */
+  sex: "M" | "F";
   fatherName?: string;
   motherName?: string;
   address?: string;
@@ -34,8 +36,11 @@ export function registerChild(db: Database.Database, input: RegisterChildInput):
   if (input.birthDate > todayLocal()) {
     throw new Error(`birthDate ${input.birthDate} is in the future`);
   }
+  if (input.sex !== "M" && input.sex !== "F") {
+    throw new Error("sex is required (M or F)");
+  }
   if (!input.force) {
-    const duplicates = findPossibleDuplicates(db, input.familyName, input.givenName, input.birthDate);
+    const duplicates = findPossibleDuplicates(db, input.familyName, input.givenName, input.birthDate, input.sex);
     if (duplicates.length > 0) return { status: "duplicate", duplicates };
   }
   if ((input.centreId && !input.firstVisitYear) || (!input.centreId && input.firstVisitYear)) {
@@ -48,12 +53,13 @@ export function registerChild(db: Database.Database, input: RegisterChildInput):
   const child = db.transaction((): Child => {
     const id = randomUUID();
     db.prepare(
-      "INSERT INTO children (id, family_name, given_name, birth_date, father_name, mother_name, address) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO children (id, family_name, given_name, birth_date, sex, father_name, mother_name, address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     ).run(
       id,
       input.familyName,
       input.givenName,
       input.birthDate,
+      input.sex,
       input.fatherName ?? null,
       input.motherName ?? null,
       input.address ?? null
@@ -74,7 +80,7 @@ export function registerChild(db: Database.Database, input: RegisterChildInput):
     }
 
     const row = db.prepare("SELECT * FROM children WHERE id = ?").get(id) as {
-      id: string; family_name: string; given_name: string; birth_date: string;
+      id: string; family_name: string; given_name: string; birth_date: string; sex: string | null;
       father_name: string | null; mother_name: string | null; address: string | null; national_id: string | null;
     };
     return toChild(row, localIds);

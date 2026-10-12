@@ -187,10 +187,14 @@ function main(): void {
 
     const dates = [...visits.keys()].sort();
     const firstYear = (dates[0] ?? dBirth).slice(0, 4);
+    // CSV sexe column; empty cells get a random value (test data only).
+    const s = (f[2] ?? "").trim().toLowerCase();
+    const sex: "M" | "F" = s === "f" ? "F" : s === "m" ? "M" : Math.random() < 0.5 ? "M" : "F";
     const res = registerChild(db, {
       familyName: `TEST-${n}`,
       givenName: `Enfant-${n}`,
       birthDate: dBirth,
+      sex,
       address: `Adresse fictive ${n} (donnees de test)`,
       centreId: CENTRE_ID,
       firstVisitYear: firstYear,
