@@ -9,6 +9,12 @@ program:
   counter: VITD_DOSES
 
 catchup_rules:
+  - id: VITD-GE60-NONE
+    when:
+      age: { from: { months: 60 } }
+    then:
+      required_primaries: 0
+      booster_count: 0
   - id: VITD-DEFAULT
     when: {}
     then:

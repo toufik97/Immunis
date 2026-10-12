@@ -67,6 +67,18 @@ describe("vitamins: one product, the dose amount comes from the schedule", () =>
   it("the retired ids VITA_100K / VITA_200K never appear in a plan", () => {
     expect(JSON.stringify(r.visitPlan)).not.toMatch(/VITA_(100|200)K/);
   });
+  it("no vitamin A or D at or after 5 years: not needed, never planned", () => {
+    for (const on of ["2031-01-01", "2032-06-15"]) {
+      const r6 = evalAt("2026-01-01", on, [], { projection: "full" });
+      for (const pid of ["VITA_PROGRAM", "VITD_PROGRAM"]) {
+        const need = r6.antigenNeeds.find((n: any) => n.programId === pid);
+        expect(need.status).toBe("NOT_NEEDED");
+        expect(need.dosesNeeded).toBe(0);
+      }
+      expect(r6.visitPlan.visits.flatMap((v: any) => v.products)).not.toContain("VITA");
+      expect(r6.visitPlan.visits.flatMap((v: any) => v.products)).not.toContain("VITD");
+    }
+  });
 });
 
 describe("history: aliases and unknown products", () => {

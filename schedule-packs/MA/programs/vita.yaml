@@ -10,6 +10,12 @@ program:
   counter: VITA_DOSES
 
 catchup_rules:
+  - id: VITA-GE60-NONE
+    when:
+      age: { from: { months: 60 } }
+    then:
+      required_primaries: 0
+      booster_count: 0
   - id: VITA-DEFAULT
     when: {}
     then:
