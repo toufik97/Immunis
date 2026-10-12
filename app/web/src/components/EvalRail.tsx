@@ -142,6 +142,24 @@ export default function EvalRail({ result, products, programs }: Props) {
                         {t("visit.rule", { rule: n.matchedRuleId })}
                       </Text>
                     )}
+                    {(() => {
+                      const flagged = (result.doseValidations[n.counterId]?.doses ?? []).filter(
+                        (d) => !d.valid || d.warnings.length > 0
+                      );
+                      return flagged.length > 0 ? (
+                        <Stack gap={2}>
+                          <Text size="xs" fw={600} c="dimmed">
+                            {t("visit.notCounted")}
+                          </Text>
+                          {flagged.map((d, i) => (
+                            <Text key={i} size="sm" c={d.valid ? undefined : "orange"}>
+                              {formatCivilDate(d.administeredOn, lang)} — {productLabel(d.productGroupId)}:{" "}
+                              {[...d.reasons, ...d.warnings].map((w) => formatEngineWarning(w, lang)).join(" · ")}
+                            </Text>
+                          ))}
+                        </Stack>
+                      ) : null;
+                    })()}
                     {n.warnings.length === 0 ? (
                       <Text size="sm" c="dimmed">
                         —

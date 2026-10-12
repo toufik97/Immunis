@@ -83,8 +83,18 @@ export interface AntigenNeed {
   status: string;
   dosesNeeded: number;
   validDosesReceived: number;
+  counterId: string;
   targetProduct?: string | null;
   matchedRuleId?: string | null;
+  warnings: string[];
+}
+
+export interface ValidatedDose {
+  doseNumber: number;
+  productGroupId: string;
+  administeredOn: string;
+  valid: boolean;
+  reasons: string[];
   warnings: string[];
 }
 
@@ -92,6 +102,7 @@ export interface EvaluateResult {
   antigenNeeds: AntigenNeed[];
   productSelection: { primarySlots: { products: { productGroupId: string }[] }[] };
   visitPlan: { visits: PlannedVisit[]; warnings: string[] };
+  doseValidations: Record<string, { counterId: string; doses: ValidatedDose[]; validDoseCount: number }>;
   assumptions?: string[];
   inputWarnings?: string[];
 }

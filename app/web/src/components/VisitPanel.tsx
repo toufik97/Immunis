@@ -21,6 +21,7 @@ import {
 import { notifications } from "@mantine/notifications";
 import {
   IconAlertCircle,
+  IconAlertTriangle,
   IconCheck,
   IconChevronDown,
   IconChevronUp,
@@ -305,6 +306,16 @@ export default function VisitPanel({ child, products, programs, expectedProducts
       return groups;
     }, []);
 
+  // Recorded doses that did not count (or counted with a warning), keyed for the ledger.
+  const doseFlags = new Map<string, string[]>();
+  for (const v of Object.values(result?.doseValidations ?? {})) {
+    for (const d of v.doses) {
+      if (d.valid && d.warnings.length === 0) continue;
+      const key = `${d.productGroupId}|${d.administeredOn}`;
+      doseFlags.set(key, [...(doseFlags.get(key) ?? []), ...d.reasons, ...d.warnings]);
+    }
+  }
+
   return (
     <Grid>
       <Grid.Col span={{ base: 12, lg: 8 }}>
@@ -347,6 +358,16 @@ export default function VisitPanel({ child, products, programs, expectedProducts
                 <Text size="xs" c="dimmed">
                   {[...new Set(g.doses.map((d) => t(`origin.${d.origin}`)))].join(" · ")}
                 </Text>
+                {g.doses.some((d) => doseFlags.has(`${d.productGroupId}|${d.administeredOn}`)) && (
+                  <IconAlertTriangle
+                    size={14}
+                    color="orange"
+                    title={[...new Set(g.doses.flatMap((d) => doseFlags.get(`${d.productGroupId}|${d.administeredOn}`) ?? []))]
+                      .map((w) => formatEngineWarning(w, lang))
+                      .join("\n")}
+                    aria-label={t("visit.notCounted")}
+                  />
+                )}
               </Group>
             ))}
           </Stack>
