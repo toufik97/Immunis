@@ -9,7 +9,7 @@ describe("Group M — Measles/Rubella + spacing + legacy", () => {
     expectVisitOnDateContains(r, "2026-07-01", ["RR"]);
   });
 
-  it("M2: 18m never vaccinated → RR1 now, RR2 at least 4 weeks later", () => {
+  it("M2: 18m never vaccinated → RR1 now, RR2 at least 1 month later", () => {
     const r = run("2024-10-01", [], "2026-04-01");
     const rrVisits = r.visitPlan.visits.filter(v => v.products.includes("RR"));
     expect(rrVisits.length).toBe(2);
@@ -80,5 +80,14 @@ describe("Group M — Measles/Rubella + spacing + legacy", () => {
     expect(rrVisit).toBeDefined();
     const gap = (new Date(rrVisit!.date).getTime() - new Date("2026-03-20").getTime()) / 86400000;
     expect(gap === 0 || gap >= 28).toBe(true);
+  });
+
+  it("M10: RR1 from 8 months counts (9m recommended), before 8 months does not", () => {
+    const early = run("2025-12-30", [rec("2026-09-16", "RR")], "2026-10-12");
+    expect(count(early, "RR_DOSES")).toBe(1);
+    expect(need(early, "RR_PROGRAM").dosesNeeded).toBe(1);
+    const tooEarly = run("2025-12-30", [rec("2026-07-15", "RR")], "2026-10-12");
+    expect(count(tooEarly, "RR_DOSES")).toBe(0);
+    expect(need(tooEarly, "RR_PROGRAM").dosesNeeded).toBe(2);
   });
 });

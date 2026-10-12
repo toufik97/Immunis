@@ -3,7 +3,8 @@ program:
   label_fr: Rougeole-Rubéole (RR)
   description_fr: >
     Programme rougeole-rubéole.
-    Dose 1 à 9 mois, dose 2 à 18 mois, intervalle minimum 4 semaines.
+    Dose 1 dès 8 mois (recommandée à 9 mois), dose 2 recommandée à 18 mois,
+    intervalle minimum 1 mois après la dose 1.
     Rattrapage: jamais de restart; 2 doses de vaccin RR/RRO à tout âge,
     sans limite d'âge supérieure.
   antigen_targets:
@@ -17,11 +18,13 @@ primary_series:
   dose_validity:
     - dose: 1
       min_age:
+        months: 8
+      target_min_age:
         months: 9
 
     - dose: 2
       min_interval_from_previous:
-        weeks: 4
+        months: 1
       target_min_age:
         months: 18
 
