@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useDebouncedValue } from "@mantine/hooks";
 import { Badge, Button, Group, Stack, Text, TextInput } from "@mantine/core";
 import { api, type Child } from "../api";
 import { formatCivilDate } from "../format";
@@ -10,12 +11,13 @@ export default function ChildSearch({ onPick }: { onPick: (child: Child) => void
   const lang = i18n.language;
   const [children, setChildren] = useState<Child[]>([]);
   const [query, setQuery] = useState("");
+  const [debouncedQuery] = useDebouncedValue(query, 200);
 
   useEffect(() => {
     void api.allChildren().then(setChildren).catch(() => setChildren([]));
   }, []);
 
-  const q = query.trim().toLowerCase();
+  const q = debouncedQuery.trim().toLowerCase();
   const hits = children
     .filter(
       (c) =>

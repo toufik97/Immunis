@@ -16,7 +16,7 @@ import { createAppointment, markAppointment } from "../infra/repos/appointments"
 import { noShowsFor, sessionFor, agendaFor } from "../app/sessions";
 import { insertOverride, listOverridesByChild } from "../infra/repos/audit";
 import { countCentreDosesByProduct } from "../app/analytics";
-import { exportCentre, listPendingOutbox, ackOutbox } from "../infra/sync/sync";
+import { exportCentre, listPendingOutbox, countPendingOutbox, ackOutbox } from "../infra/sync/sync";
 import { DoseRecordSchema, ScreeningResultSchema } from "../domain/encounter";
 
 const ChildInput = z.object({
@@ -362,6 +362,8 @@ export function buildApp(
   app.get("/api/backup", async () => exportCentre(db));
 
   app.get("/api/outbox", async () => listPendingOutbox(db));
+
+  app.get("/api/outbox/count", async () => ({ pending: countPendingOutbox(db) }));
 
   app.post("/api/outbox/:id/ack", async (req, reply) => {
     try {

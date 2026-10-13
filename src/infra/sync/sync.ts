@@ -92,6 +92,11 @@ export function listPendingOutbox(db: Database.Database): { id: string; kind: st
   }[];
 }
 
+/** Cheap pending count for the online badge (no row payload). */
+export function countPendingOutbox(db: Database.Database): number {
+  return (db.prepare("SELECT COUNT(*) AS n FROM outbox WHERE synced_at IS NULL").get() as { n: number }).n;
+}
+
 export function ackOutbox(db: Database.Database, id: string, syncedAt: string): boolean {
   const r = db.prepare("UPDATE outbox SET synced_at = ? WHERE id = ?").run(syncedAt, id);
   return r.changes > 0;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ActionIcon,
@@ -35,10 +35,13 @@ import { applyLocale, type Locale } from "./i18n";
 import { api, type Child } from "./api";
 import { formatCount, todayCivilDate } from "./format";
 import { isTab, resolveInitialTab, type Tab } from "./tabs";
-import VisitPanel from "./components/VisitPanel";
-import ChildSearch from "./components/ChildSearch";
-import RegistryPanel from "./components/RegistryPanel";
-import { SessionPanel, NoShowPanel, StockPanel } from "./components/Panels";
+// One chunk per tab: the first paint stays small on weak tablets.
+const VisitPanel = lazy(() => import("./components/VisitPanel"));
+const ChildSearch = lazy(() => import("./components/ChildSearch"));
+const RegistryPanel = lazy(() => import("./components/RegistryPanel"));
+const SessionPanel = lazy(() => import("./components/Panels").then((m) => ({ default: m.SessionPanel })));
+const NoShowPanel = lazy(() => import("./components/Panels").then((m) => ({ default: m.NoShowPanel })));
+const StockPanel = lazy(() => import("./components/Panels").then((m) => ({ default: m.StockPanel })));
 import "./styles.css";
 
 type PackInfo = Awaited<ReturnType<typeof api.pack>>;
@@ -141,16 +144,19 @@ export default function App() {
   async function refreshNet(): Promise<void> {
     try {
       await api.health();
-      const pending = await api.outbox();
-      setNet({ state: "online", pending: pending.length });
+      const { pending } = await api.outboxCount();
+      setNet({ state: "online", pending });
     } catch {
       setNet({ state: "offline", pending: 0 });
     }
   }
 
+  // Badge only: refresh on mount and after writes (record/register),
+  // never on plain tab switches.
   useEffect(() => {
     void refreshNet();
-  }, [tab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function openChildById(id: string, expectedProducts: string[] = []): Promise<void> {
     setErr("");
@@ -289,6 +295,13 @@ export default function App() {
               </div>
 
               <Tabs value={tab} onChange={(v) => v && isTab(v) && setTab(v)}>
+                <Suspense
+                  fallback={
+                    <Text size="sm" c="dimmed">
+                      {t("common.loading")}
+                    </Text>
+                  }
+                >
                 <Tabs.Panel value="today">
                   {child && pack ? (
                     <VisitPanel
@@ -341,6 +354,7 @@ export default function App() {
                 <Tabs.Panel value="stock">
                   <StockPanel products={products} />
                 </Tabs.Panel>
+                </Suspense>
               </Tabs>
             </Stack>
           </Container>

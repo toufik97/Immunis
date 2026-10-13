@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useDebouncedValue } from "@mantine/hooks";
 import {
   Alert,
   Badge,
@@ -18,6 +19,7 @@ import { IconAlertCircle, IconUserPlus } from "@tabler/icons-react";
 import { api, type Child, type DuplicateChild } from "../api";
 import { formatCivilDate, todayCivilDate } from "../format";
 import DateField from "./DateField";
+import Pager, { PAGE_SIZE } from "./Pager";
 
 type SortKey = "name" | "birthDate";
 
@@ -28,8 +30,10 @@ export default function RegistryPanel({ onSelect }: { onSelect: (child: Child) =
   const [children, setChildren] = useState<Child[]>([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
+  const [debouncedQuery] = useDebouncedValue(query, 200);
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [asc, setAsc] = useState(true);
+  const [page, setPage] = useState(0);
   const [modal, setModal] = useState(false);
   const [reg, setReg] = useState({
     familyName: "",
@@ -68,7 +72,7 @@ export default function RegistryPanel({ onSelect }: { onSelect: (child: Child) =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const q = query.trim().toLowerCase();
+  const q = debouncedQuery.trim().toLowerCase();
   const shown = children
     .filter(
       (c) =>
@@ -83,6 +87,14 @@ export default function RegistryPanel({ onSelect }: { onSelect: (child: Child) =
       const cmp = av.localeCompare(bv);
       return asc ? cmp : -cmp;
     });
+
+  // New filter or sort: back to the first page.
+  useEffect(() => {
+    setPage(0);
+  }, [q, sortKey, asc, children.length]);
+  const pages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+  const safePage = Math.min(page, pages - 1);
+  const paged = shown.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
   function header(key: SortKey, label: string) {
     const active = sortKey === key;
@@ -192,7 +204,7 @@ export default function RegistryPanel({ onSelect }: { onSelect: (child: Child) =
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody className="tabular">
-                {shown.map((c) => (
+                {paged.map((c) => (
                   <Table.Tr key={c.id}>
                     <Table.Td className="break-words">
                       {c.givenName} {c.familyName}
@@ -222,6 +234,7 @@ export default function RegistryPanel({ onSelect }: { onSelect: (child: Child) =
             </Table>
           </Table.ScrollContainer>
         )}
+        <Pager page={safePage} total={shown.length} onPage={setPage} />
       </Card>
 
       <Modal opened={modal} onClose={() => setModal(false)} title={t("register.title")} size="lg">

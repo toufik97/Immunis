@@ -4,7 +4,7 @@ import { createChild, allocateLocalId } from "../../src/infra/repos/children";
 import { addLot } from "../../src/infra/repos/stock";
 import { recordEncounter } from "../../src/infra/repos/encounters";
 import { insertOverride } from "../../src/infra/repos/audit";
-import { exportCentre, importCentre, listPendingOutbox } from "../../src/infra/sync/sync";
+import { exportCentre, importCentre, listPendingOutbox, countPendingOutbox } from "../../src/infra/sync/sync";
 
 describe("sync and hardening", () => {
   it("exports a centre and re-imports it losslessly", () => {
@@ -44,6 +44,7 @@ describe("sync and hardening", () => {
 
     const dump = exportCentre(src);
     expect(listPendingOutbox(src)).toHaveLength(1);
+    expect(countPendingOutbox(src)).toBe(1);
     src.close();
 
     const dst = openTestDb();

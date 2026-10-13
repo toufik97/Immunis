@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useDebouncedValue } from "@mantine/hooks";
 import {
   Alert,
   Badge,
@@ -19,6 +20,7 @@ import { IconAlertCircle, IconCalendarCheck } from "@tabler/icons-react";
 import { api, type Appointment } from "../api";
 import { formatCivilDate, formatCount, todayCivilDate } from "../format";
 import DateField from "./DateField";
+import Pager, { PAGE_SIZE } from "./Pager";
 
 interface Row {
   apptId: string;
@@ -69,12 +71,14 @@ function PersonTable({
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
   const [query, setQuery] = useState("");
+  const [debouncedQuery] = useDebouncedValue(query, 200);
   const [sortKey, setSortKey] = useState<SortKey>("dueDate");
   const [asc, setAsc] = useState(true);
   const [product, setProduct] = useState("all");
+  const [page, setPage] = useState(0);
 
   const allProducts = [...new Set(rows.flatMap((r) => r.products))].sort();
-  const q = query.trim().toLowerCase();
+  const q = debouncedQuery.trim().toLowerCase();
   const filtered = rows
     .filter(
       (r) =>
@@ -95,6 +99,14 @@ function PersonTable({
       const cmp = av.localeCompare(bv);
       return asc ? cmp : -cmp;
     });
+
+  // New filter, sort, or data: back to the first page.
+  useEffect(() => {
+    setPage(0);
+  }, [q, product, sortKey, asc, rows.length]);
+  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, pages - 1);
+  const paged = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
   function header(key: SortKey, label: string) {
     const active = sortKey === key;
@@ -157,7 +169,7 @@ function PersonTable({
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody className="tabular">
-            {filtered.map((r) => (
+            {paged.map((r) => (
               <Table.Tr key={r.apptId}>
                 <Table.Td className="break-words">{r.localId}</Table.Td>
                 <Table.Td className="break-words">{r.name}</Table.Td>
@@ -182,6 +194,7 @@ function PersonTable({
           </Table.Tbody>
         </Table>
       </Table.ScrollContainer>
+      <Pager page={safePage} total={filtered.length} onPage={setPage} />
     </Stack>
   );
 }

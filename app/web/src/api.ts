@@ -134,6 +134,7 @@ export const api = {
   child: (id: string) => req<Child>(`/api/children/${id}`),
   childDoses: (childId: string) => req<Dose[]>(`/api/children/${childId}/doses`),
   outbox: () => req<{ id: string; kind: string }[]>("/api/outbox"),
+  outboxCount: () => req<{ pending: number }>("/api/outbox/count"),
   /** Registration with duplicate surfacing: 409 carries possible matches. */
   registerChildDetailed: async (
     body: Record<string, unknown>
