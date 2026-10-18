@@ -16,7 +16,7 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import { IconAlertCircle, IconCalendarCheck } from "@tabler/icons-react";
+import { IconAlertCircle, IconCalendarCheck, IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 import { api, type Appointment } from "../api";
 import { formatCivilDate, formatCount, todayCivilDate } from "../format";
 import DateField from "./DateField";
@@ -208,12 +208,49 @@ function labelOf(products: { id: string; label_fr?: string }[], id: string): str
   return products.find((p) => p.id === id)?.label_fr ?? id;
 }
 
+/** Civil-date helpers (YYYY-MM-DD calendar arithmetic, UTC). */
+function shiftDays(iso: string, n: number): string {
+  const t = Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10))) + n * 86_400_000;
+  return new Date(t).toISOString().slice(0, 10);
+}
+
+function monthFirstDay(month: string): string {
+  return `${month}-01`;
+}
+
+function monthLastDay(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+}
+
+function addMonths(month: string, delta: number): string {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function weekdayNames(lang: string): string[] {
+  try {
+    const fmt = new Intl.DateTimeFormat(lang === "ar" ? "ar-MA" : lang === "fr" ? "fr-FR" : "en-GB", {
+      weekday: "short",
+      timeZone: "UTC",
+    });
+    // 2026-01-05 is a Monday: Monday-first headers (MA practice).
+    return Array.from({ length: 7 }, (_, i) => fmt.format(new Date(Date.UTC(2026, 0, 5 + i))));
+  } catch {
+    return ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  }
+}
+
 export function SessionPanel({ products, onOpen }: PanelProps) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
   const [date, setDate] = useState(todayCivilDate());
+  const [month, setMonth] = useState(date.slice(0, 7));
   const [data, setData] = useState<Awaited<ReturnType<typeof api.session>> | null>(null);
-  const [agenda, setAgenda] = useState<Awaited<ReturnType<typeof api.agenda>>>([]);
+  const [monthAgenda, setMonthAgenda] = useState<Awaited<ReturnType<typeof api.agenda>>>([]);
+  const [lots, setLots] = useState<Awaited<ReturnType<typeof api.lots>>>([]);
+  const [next, setNext] = useState<{ date: string; children: number } | null>(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
   const productLabel = (id: string) => labelOf(products, id);
@@ -222,12 +259,21 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
     setErr("");
     setLoading(true);
     try {
-      setData(await api.session(forDate));
-      // Agenda is a hint: refresh silently so new RDVs appear without extra clicks.
-      try {
-        setAgenda(await api.agenda());
-      } catch {
-        /* session load already succeeded; stale agenda is harmless */
+      const [session, usable] = await Promise.all([api.session(forDate), api.lots(undefined, forDate)]);
+      setData(session);
+      setLots(usable);
+      const total =
+        session.expected.length + (session.probable ?? []).length + (session.possible ?? []).length;
+      if (total === 0) {
+        // Empty day: look ahead so the empty state can jump to the next session.
+        try {
+          const ahead = await api.agenda(shiftDays(forDate, 1), shiftDays(forDate, 60));
+          setNext(ahead.length > 0 ? { date: ahead[0].date, children: ahead[0].children } : null);
+        } catch {
+          setNext(null);
+        }
+      } else {
+        setNext(null);
       }
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -236,12 +282,60 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
     }
   }
 
+  async function loadMonth(forMonth: string): Promise<void> {
+    try {
+      setMonthAgenda(await api.agenda(monthFirstDay(forMonth), monthLastDay(forMonth)));
+    } catch {
+      /* calendar stays usable without counts; session load reports errors */
+    }
+  }
+
   useEffect(() => {
-    void load(todayCivilDate());
+    const today = todayCivilDate();
+    setMonth(today.slice(0, 7));
+    void load(today);
+    void loadMonth(today.slice(0, 7));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const nextSession = agenda.find((d) => d.date > date) ?? (agenda[0]?.date === date ? undefined : agenda[0]);
+  function pick(d: string): void {
+    setDate(d);
+    if (d.slice(0, 7) !== month) {
+      const m = d.slice(0, 7);
+      setMonth(m);
+      void loadMonth(m);
+    }
+    void load(d);
+  }
+
+  function moveMonth(delta: number): void {
+    const m = addMonths(month, delta);
+    setMonth(m);
+    void loadMonth(m);
+  }
+
+  const due = data?.expected ?? [];
+  const probable = data?.probable ?? [];
+  const possible = data?.possible ?? [];
+  const tiers = data?.tiers;
+  const backlog = data?.backlog;
+
+  // Doses to prepare: firm + both catch-up tiers vs usable stock on that day.
+  const needByProduct: Record<string, number> = {};
+  for (const src of [tiers?.due.dosesByProduct, tiers?.probable.dosesByProduct, tiers?.possible.dosesByProduct]) {
+    for (const [p, n] of Object.entries(src ?? {})) needByProduct[p] = (needByProduct[p] ?? 0) + n;
+  }
+  if (!tiers) {
+    for (const r of due) for (const p of r.expectedProducts ?? []) needByProduct[p] = (needByProduct[p] ?? 0) + 1;
+  }
+  const usableByProduct: Record<string, number> = {};
+  for (const l of lots) usableByProduct[l.productGroupId] = (usableByProduct[l.productGroupId] ?? 0) + l.qtyOnHand;
+
+  const agendaByDate = new Map(monthAgenda.map((d) => [d.date, d]));
+  const [my, mm] = month.split("-").map(Number);
+  const daysInMonth = new Date(Date.UTC(my, mm, 0)).getUTCDate();
+  const leadBlanks = (new Date(Date.UTC(my, mm - 1, 1)).getUTCDay() + 6) % 7;
+  const today = todayCivilDate();
 
   return (
     <Card>
@@ -251,17 +345,8 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
             {t("nav.session")}
           </Title>
           <Group align="end" wrap="wrap">
-            <DateField
-              label={t("session.date")}
-              name="sessionDate"
-              value={date}
-              onChange={setDate}
-            />
-            <Button
-              onClick={() => void load()}
-              loading={loading}
-              leftSection={<IconCalendarCheck size={15} aria-hidden="true" />}
-            >
+            <DateField label={t("session.date")} name="sessionDate" value={date} onChange={pick} />
+            <Button onClick={() => void load()} loading={loading} leftSection={<IconCalendarCheck size={15} aria-hidden="true" />}>
               {t("session.load")}
             </Button>
           </Group>
@@ -269,74 +354,158 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
         <div aria-live="polite">
           {err && <Alert color="red" icon={<IconAlertCircle size={16} aria-hidden="true" />} title={err} />}
         </div>
-        {agenda.length > 0 && (
-          <Stack gap="xs">
-            <Text size="sm" fw={600}>
-              {t("session.upcoming")}
-            </Text>
-            <Group gap="xs" wrap="wrap">
-              {agenda.map((d) => (
+
+        {/* Month calendar: representative planning view, replaces the chip list. */}
+        <Stack gap="xs">
+          <Group justify="space-between" wrap="wrap">
+            <Group gap="xs">
+              <Button size="compact-sm" variant="light" aria-label={t("session.monthPrev")} onClick={() => moveMonth(-1)}>
+                <IconChevronLeft size={15} aria-hidden="true" />
+              </Button>
+              <Text size="sm" fw={600} className="tabular">
+                {formatCivilDate(monthFirstDay(month), lang).replace(/^\d+\s*/, "").trim() || month}
+              </Text>
+              <Button size="compact-sm" variant="light" aria-label={t("session.monthNext")} onClick={() => moveMonth(1)}>
+                <IconChevronRight size={15} aria-hidden="true" />
+              </Button>
+            </Group>
+            <Button
+              size="compact-sm"
+              variant="subtle"
+              onClick={() => {
+                const m = today.slice(0, 7);
+                setMonth(m);
+                void loadMonth(m);
+                pick(today);
+              }}
+            >
+              {t("session.monthToday")}
+            </Button>
+          </Group>
+          <div
+            role="grid"
+            aria-label={t("session.upcoming")}
+            style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}
+          >
+            {weekdayNames(lang).map((w) => (
+              <Text key={w} size="xs" c="dimmed" ta="center">
+                {w}
+              </Text>
+            ))}
+            {Array.from({ length: leadBlanks }, (_, i) => (
+              <span key={`blank-${i}`} />
+            ))}
+            {Array.from({ length: daysInMonth }, (_, i) => {
+              const day = `${month}-${String(i + 1).padStart(2, "0")}`;
+              const info = agendaByDate.get(day);
+              const selected = day === date;
+              const isToday = day === today;
+              return (
                 <Button
-                  key={d.date}
+                  key={day}
+                  role="gridcell"
                   size="compact-sm"
-                  variant={d.date === date ? "filled" : "light"}
-                  onClick={() => {
-                    setDate(d.date);
-                    void load(d.date);
-                  }}
+                  variant={selected ? "filled" : info ? "light" : "subtle"}
+                  color={selected ? undefined : info ? "teal" : undefined}
+                  aria-label={`${formatCivilDate(day, lang)}${info ? ` — ${formatCount(info.children, lang)}` : ""}`}
+                  aria-pressed={selected}
+                  onClick={() => pick(day)}
+                  style={isToday && !selected ? { outline: "2px solid var(--mantine-color-teal-5)", outlineOffset: -2 } : undefined}
                 >
-                  <span className="tabular">
-                    {formatCivilDate(d.date, lang)} · ×{formatCount(d.children, lang)}
+                  <span className="tabular" style={{ display: "inline-flex", alignItems: "baseline", gap: 4 }}>
+                    <span style={{ fontWeight: 600 }}>{i + 1}</span>
+                    {info ? (
+                      <span style={{ fontSize: "0.72em", fontWeight: 400, opacity: selected ? 0.85 : 0.65 }}>
+                        ×{formatCount(info.children, lang)}
+                      </span>
+                    ) : null}
                   </span>
                 </Button>
-              ))}
+              );
+            })}
+          </div>
+        </Stack>
+
+        {data && (
+          <Stack gap="sm">
+            <Group gap="xs" wrap="wrap" aria-live="polite">
+              <Badge color="teal" variant="filled" className="tabular">
+                {t("session.due", { n: formatCount(due.length, lang) })}
+              </Badge>
+              <Badge color="yellow" variant="light" className="tabular">
+                {t("session.probable", { n: formatCount(probable.length, lang) })}
+              </Badge>
+              <Badge color="gray" variant="light" className="tabular">
+                {t("session.possible", { n: formatCount(possible.length, lang) })}
+              </Badge>
             </Group>
+            {Object.keys(needByProduct).length > 0 && (
+              <Stack gap="xs">
+                <Text size="sm" fw={600}>
+                  {t("session.prep")}
+                </Text>
+                <Group gap="xs" wrap="wrap">
+                  {Object.entries(needByProduct).map(([p, need]) => {
+                    const usable = usableByProduct[p] ?? 0;
+                    const short = usable - need;
+                    return (
+                      <Badge key={p} variant="light" color={short < 0 ? "red" : "teal"} className="tabular">
+                        {productLabel(p)} ×{formatCount(need, lang)}
+                        {short < 0 ? ` · ${t("session.short", { n: formatCount(-short, lang) })}` : ""}
+                      </Badge>
+                    );
+                  })}
+                </Group>
+              </Stack>
+            )}
+            {backlog && backlog.children > 0 && (
+              <Text size="sm" c="dimmed" className="tabular">
+                {t("session.backlog", { n: formatCount(backlog.children, lang) })}
+              </Text>
+            )}
+            {due.length + probable.length + possible.length === 0 ? (
+              <Stack gap="xs">
+                <Text size="sm" c="dimmed">
+                  {t("session.empty")}
+                </Text>
+                {next && (
+                  <div>
+                    <Button size="compact-sm" variant="subtle" onClick={() => pick(next.date)}>
+                      {t("session.next", { date: formatCivilDate(next.date, lang), n: formatCount(next.children, lang) })}
+                    </Button>
+                  </div>
+                )}
+              </Stack>
+            ) : (
+              <Stack gap="md">
+                {due.length > 0 && (
+                  <Stack gap="xs">
+                    <Text size="sm" fw={600} className="tabular">
+                      {t("session.due", { n: formatCount(due.length, lang) })}
+                    </Text>
+                    <PersonTable rows={due.map(toRow)} showDue={false} productLabel={productLabel} actions={{ onOpen }} />
+                  </Stack>
+                )}
+                {probable.length > 0 && (
+                  <Stack gap="xs">
+                    <Text size="sm" fw={600} className="tabular">
+                      {t("session.probable", { n: formatCount(probable.length, lang) })}
+                    </Text>
+                    <PersonTable rows={probable.map(toRow)} showDue showNoShow productLabel={productLabel} actions={{ onOpen }} />
+                  </Stack>
+                )}
+                {possible.length > 0 && (
+                  <Stack gap="xs">
+                    <Text size="sm" fw={600} className="tabular">
+                      {t("session.possible", { n: formatCount(possible.length, lang) })}
+                    </Text>
+                    <PersonTable rows={possible.map(toRow)} showDue showNoShow productLabel={productLabel} actions={{ onOpen }} />
+                  </Stack>
+                )}
+              </Stack>
+            )}
           </Stack>
         )}
-        {data &&
-          (data.expected.length === 0 ? (
-            <Stack gap="xs">
-              <Text size="sm" c="dimmed">
-                {t("session.empty")}
-              </Text>
-              {nextSession && (
-                <div>
-                  <Button
-                    size="compact-sm"
-                    variant="subtle"
-                    onClick={() => {
-                      setDate(nextSession.date);
-                      void load(nextSession.date);
-                    }}
-                  >
-                    {t("session.next", {
-                      date: formatCivilDate(nextSession.date, lang),
-                      n: formatCount(nextSession.children, lang),
-                    })}
-                  </Button>
-                </div>
-              )}
-            </Stack>
-          ) : (
-            <Stack gap="sm">
-              <Text size="sm" fw={600} className="tabular">
-                {t("session.expected", { n: formatCount(data.counters.children, lang) })}
-              </Text>
-              <Group gap="xs">
-                {Object.entries(data.counters.dosesByProduct).map(([p, n]) => (
-                  <Badge key={p} variant="light" color="teal" className="tabular">
-                    {productLabel(p)} ×{formatCount(n, lang)}
-                  </Badge>
-                ))}
-              </Group>
-              <PersonTable
-                rows={data.expected.map(toRow)}
-                showDue={false}
-                productLabel={productLabel}
-                actions={{ onOpen }}
-              />
-            </Stack>
-          ))}
       </Stack>
     </Card>
   );

@@ -70,6 +70,25 @@ export function listPendingInRange(db: Database.Database, from: string, to: stri
   return rows.map(toAppointment);
 }
 
+/** Counts for catch-up backlog strictly before a cutoff (planning hint, no row data). */
+export function countPendingBefore(db: Database.Database, cutoff: string): { appointments: number; children: number; doses: number } {
+  const rows = db
+    .prepare("SELECT child_id, expected_products FROM appointments WHERE due_date < ? AND kept IS NULL")
+    .all(cutoff) as { child_id: string; expected_products: string }[];
+  const children = new Set<string>();
+  let doses = 0;
+  for (const r of rows) {
+    children.add(r.child_id);
+    try {
+      const v: unknown = JSON.parse(r.expected_products);
+      if (Array.isArray(v)) doses += v.filter((x) => typeof x === "string").length;
+    } catch {
+      /* unparseable row counts as zero doses */
+    }
+  }
+  return { appointments: rows.length, children: children.size, doses };
+}
+
 /** Latest recorded visit date per child (no-show context; null when never seen). */
 export function lastVisitByChild(db: Database.Database, childIds: string[]): Map<string, string | null> {
   const out = new Map<string, string | null>();

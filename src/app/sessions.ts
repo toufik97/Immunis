@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import { listDue, listNoShows, listPendingInRange, lastVisitByChild } from "../infra/repos/appointments";
+import { listDue, listNoShows, listPendingInRange, countPendingBefore, lastVisitByChild } from "../infra/repos/appointments";
 import type { Appointment } from "../domain/appointment";
 import { localIdsForMany } from "../infra/repos/children";
 
@@ -37,18 +37,72 @@ export function enrichAppointments(db: Database.Database, appointments: Appointm
 
 export interface SessionSummary {
   date: string;
-  expected: SessionRow[];
+  /** Due exactly on date (legacy shape, kept for compat). */
+  expected: PlannedSessionRow[];
+  /** 1–6 days overdue: probable catch-ups. */
+  probable: PlannedSessionRow[];
+  /** 7–30 days overdue: possible catch-ups. */
+  possible: PlannedSessionRow[];
+  /** Legacy counters = due tier only. */
   counters: { children: number; dosesByProduct: Record<string, number> };
+  tiers: {
+    due: { children: number; dosesByProduct: Record<string, number> };
+    probable: { children: number; dosesByProduct: Record<string, number> };
+    possible: { children: number; dosesByProduct: Record<string, number> };
+  };
+  /** Pending strictly older than 30 days (links to No-shows, not auto-included). */
+  backlog: { children: number; doses: number };
 }
 
-/** Children expected on a session day + dose counters (FR-6.2), pending only. */
-export function sessionFor(db: Database.Database, date: string): SessionSummary {
-  const expected = enrichAppointments(db, listDue(db, date));
-  const dosesByProduct: Record<string, number> = {};
-  for (const a of expected) {
-    for (const p of a.expectedProducts) dosesByProduct[p] = (dosesByProduct[p] ?? 0) + 1;
+export type Likelihood = "due" | "probable" | "possible";
+
+export interface PlannedSessionRow extends SessionRow {
+  likelihood: Likelihood;
+  daysOverdue: number;
+}
+
+function doseCounts(rows: PlannedSessionRow[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const a of rows) {
+    for (const p of a.expectedProducts) out[p] = (out[p] ?? 0) + 1;
   }
-  return { date, expected, counters: { children: expected.length, dosesByProduct } };
+  return out;
+}
+
+/** Civil-date minus N days (UTC calendar arithmetic). */
+function shiftDays(date: string, n: number): string {
+  const t = Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10))) + n * 86_400_000;
+  return new Date(t).toISOString().slice(0, 10);
+}
+
+/** Session plan: due today + probable (<7d) + possible (7–30d) catch-ups, pending only. */
+export function sessionFor(db: Database.Database, date: string): SessionSummary {
+  const due = enrichAppointments(db, listDue(db, date)).map((r) => ({
+    ...r,
+    likelihood: "due" as const,
+    daysOverdue: 0,
+  }));
+  // One range query for both catch-up tiers, then bucket by days overdue.
+  const from = shiftDays(date, -30);
+  const to = shiftDays(date, -1);
+  const catchUps = from <= to ? enrichAppointments(db, listPendingInRange(db, from, to)) : [];
+  const probable: PlannedSessionRow[] = [];
+  const possible: PlannedSessionRow[] = [];
+  for (const r of catchUps) {
+    const overdue = daysBetween(r.dueDate, date);
+    if (overdue >= 1 && overdue <= 6) probable.push({ ...r, likelihood: "probable", daysOverdue: overdue });
+    else if (overdue >= 7 && overdue <= 30) possible.push({ ...r, likelihood: "possible", daysOverdue: overdue });
+  }
+  // Due first, then least-late catch-ups first.
+  probable.sort((a, b) => a.daysOverdue - b.daysOverdue || a.childName.localeCompare(b.childName));
+  possible.sort((a, b) => a.daysOverdue - b.daysOverdue || a.childName.localeCompare(b.childName));
+  const tiers = {
+    due: { children: due.length, dosesByProduct: doseCounts(due) },
+    probable: { children: probable.length, dosesByProduct: doseCounts(probable) },
+    possible: { children: possible.length, dosesByProduct: doseCounts(possible) },
+  };
+  const backlog = countPendingBefore(db, from);
+  return { date, expected: due, probable, possible, counters: tiers.due, tiers, backlog };
 }
 
 /** Past-due appointments never honoured (FR-7.1). */

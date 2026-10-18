@@ -94,4 +94,44 @@ describe("sessions seam", () => {
     expect(noShowsFor(db, "2026-10-02")).toHaveLength(600);
     db.close();
   });
+
+  it("buckets catch-ups into probable (<7d) and possible (7–30d), oldest backlog excluded", () => {
+    const db = openTestDb();
+    const due = child(db as never, "Due");
+    const prob = child(db as never, "Prob");
+    const poss = child(db as never, "Poss");
+    const old = child(db as never, "Old");
+    const future = child(db as never, "Fut");
+    createAppointment(db, { childId: due.id, dueDate: "2026-10-18", expectedProducts: ["BCG"] });
+    createAppointment(db, { childId: prob.id, dueDate: "2026-10-16", expectedProducts: ["BCG"] });
+    createAppointment(db, { childId: poss.id, dueDate: "2026-10-11", expectedProducts: ["BCG"] });
+    createAppointment(db, { childId: old.id, dueDate: "2026-09-01", expectedProducts: ["BCG"] });
+    createAppointment(db, { childId: future.id, dueDate: "2026-10-19", expectedProducts: ["BCG"] });
+
+    const s = sessionFor(db, "2026-10-18");
+    expect(s.expected.map((e) => e.childId)).toEqual([due.id]);
+    expect(s.probable.map((e) => e.childId)).toEqual([prob.id]);
+    expect(s.probable[0].daysOverdue).toBe(2);
+    expect(s.probable[0].likelihood).toBe("probable");
+    expect(s.possible.map((e) => e.childId)).toEqual([poss.id]);
+    expect(s.possible[0].daysOverdue).toBe(7);
+    // Legacy shape still means the due tier only.
+    expect(s.counters.children).toBe(1);
+    expect(s.tiers.probable.children).toBe(1);
+    expect(s.tiers.possible.children).toBe(1);
+    expect(s.backlog.children).toBe(1);
+    db.close();
+  });
+
+  it("excludes kept appointments from catch-up tiers", () => {
+    const db = openTestDb();
+    const a = child(db as never, "A");
+    const appt = createAppointment(db, { childId: a.id, dueDate: "2026-10-16", expectedProducts: ["BCG"] });
+    markAppointment(db, appt.id, true);
+    const s = sessionFor(db, "2026-10-18");
+    expect(s.probable).toEqual([]);
+    expect(s.possible).toEqual([]);
+    expect(s.backlog.children).toBe(0);
+    db.close();
+  });
 });

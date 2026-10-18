@@ -167,9 +167,19 @@ export const api = {
   },
   evaluate: (body: unknown) => req<EvaluateResult>("/api/evaluate", { method: "POST", body: JSON.stringify(body) }),
   session: (date: string) =>
-    req<{ expected: Appointment[]; counters: { children: number; dosesByProduct: Record<string, number> } }>(
-      `/api/sessions?date=${date}`
-    ),
+    req<{
+      date: string;
+      expected: Appointment[];
+      probable?: (Appointment & { likelihood?: string; daysOverdue?: number })[];
+      possible?: (Appointment & { likelihood?: string; daysOverdue?: number })[];
+      counters: { children: number; dosesByProduct: Record<string, number> };
+      tiers?: {
+        due: { children: number; dosesByProduct: Record<string, number> };
+        probable: { children: number; dosesByProduct: Record<string, number> };
+        possible: { children: number; dosesByProduct: Record<string, number> };
+      };
+      backlog?: { children: number; doses: number };
+    }>(`/api/sessions?date=${date}`),
   agenda: (from?: string, to?: string) => {
     const q = [from ? `from=${from}` : "", to ? `to=${to}` : ""].filter(Boolean).join("&");
     return req<{ date: string; children: number; doses: number }[]>(`/api/sessions/agenda${q ? `?${q}` : ""}`);
