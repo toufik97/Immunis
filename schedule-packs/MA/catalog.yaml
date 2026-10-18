@@ -69,11 +69,15 @@ product_groups:
       - POLIO_ORAL
     clinical:
       live: true
-      
+    # Co-administration: VPO follows PENTA's visit (forward only, never early).
+    anchor_to: PENTA
+
   - id: VPI
     label_fr: VPI
     satisfies_antigens:
       - POLIO_INACTIVATED
+    # Co-administration: VPI follows PENTA's visit (forward only, never early).
+    anchor_to: PENTA
 
   - id: PENTA
     label_fr: Pentavalent
@@ -106,6 +110,8 @@ product_groups:
     label_fr: Prevenar 13
     satisfies_antigens:
       - PCV
+    # Co-administration: Prevenar (no PENTA offset rule) follows PENTA's visit.
+    anchor_to: PENTA
 
   - id: ROTAVIRUS
     label_fr: Rotavirus
@@ -113,6 +119,8 @@ product_groups:
       - ROTAVIRUS
     clinical:
       live: true
+    # Co-administration: ROTA doses follow Penta1/2/3 visits (forward only).
+    anchor_to: PENTA
       
   - id: RR
     label_fr: RR

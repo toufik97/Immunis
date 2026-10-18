@@ -49,6 +49,55 @@ interface RawVisit {
   /** dose number this visit represents, per program (for amounts and display) */
   doseNumbers: Record<string, number>;
   projected: boolean;
+  /** last day age limits still allow this dose (anchor moves respect it) */
+  latest?: Date | null;
+}
+
+/**
+ * Move anchored followers forward to their anchor's nearest visit on/after
+ * their own date. Forward-only (never earlier than the spacing-safe date),
+ * birth visits never move, age-limit crossings are refused with a warning.
+ * Mutates the (cloned) visits; returns audit warnings, empty when aligned nothing.
+ */
+/** Exported for unit tests (anchor unit behavior without a full evaluation). */
+export function alignAnchors<T extends Pick<RawVisit, "date" | "productGroupId" | "kind" | "latest">>(
+  visits: T[],
+  anchorOf: Map<string, string>
+): string[] {
+  const out: string[] = [];
+  if (anchorOf.size === 0) return out;
+  const datesByProduct = new Map<string, number[]>();
+  for (const v of visits) {
+    const arr = datesByProduct.get(v.productGroupId) ?? [];
+    arr.push(v.date.getTime());
+    datesByProduct.set(v.productGroupId, arr);
+  }
+  for (const arr of datesByProduct.values()) arr.sort((a, b) => a - b);
+  const movedByAnchor = new Map<string, string[]>();
+  for (const v of visits) {
+    if (v.kind === "birth") continue;
+    const anchor = anchorOf.get(v.productGroupId);
+    if (!anchor) continue;
+    const mine = v.date.getTime();
+    const target = (datesByProduct.get(anchor) ?? []).find((d) => d >= mine);
+    if (target === undefined || target === mine) continue;
+    if (v.latest != null && target > v.latest.getTime()) {
+      out.push(
+        `ANCHOR_SKIPPED_AGE_LIMIT: ${v.productGroupId} stays on ${formatDate(v.date)}; ${anchor} on ${formatDate(new Date(target))} is past its age limit.`
+      );
+      continue;
+    }
+    v.date = new Date(target);
+    const key = `${anchor}|${target}`;
+    const moved = movedByAnchor.get(key) ?? [];
+    moved.push(v.productGroupId);
+    movedByAnchor.set(key, moved);
+  }
+  for (const [key, products] of movedByAnchor) {
+    const [anchor, target] = key.split("|");
+    out.push(`ANCHORED: ${products.join("+")} aligned to ${anchor} on ${formatDate(new Date(Number(target)))}.`);
+  }
+  return out;
 }
 
 // Merge the generic dose rule (base) with the product-qualified rule (overlay).
@@ -105,6 +154,14 @@ export function planVisits(
   const spacingConstraints = getSpacingConstraints(pack);
   const spacingIsLive = liveFlags(pack);
 
+  // Co-administration anchors (catalog anchor_to): follower product → anchor
+  // product whose visit it follows forward. Birth doses never move.
+  const anchorOf = new Map<string, string>();
+  for (const g of productGroups) {
+    const anchor = (g as { anchor_to?: unknown }).anchor_to;
+    if (typeof anchor === "string" && anchor !== "") anchorOf.set(g.id, anchor);
+  }
+
   const rawVisits: RawVisit[] = [];
   const plannedPrimaryByProgram: Record<string, number> = {};
   const birthOffsetByProgram: Record<string, number> = {};
@@ -122,7 +179,8 @@ export function planVisits(
       role: "birth_dose",
       programIds: [plan.programId],
       doseNumbers: { [plan.programId]: plan.offset },
-      projected: false
+      projected: false,
+      latest: null
     });
     scheduledLastByProgram[plan.programId] = planDate;
     plannedPrimaryByProgram[plan.programId] =
@@ -324,7 +382,8 @@ export function planVisits(
           role: "primary",
           programIds: pd.coveredProgramIds,
           doseNumbers: pd.doseNumbers,
-          projected: false
+          projected: false,
+          latest: pd.latest
         });
         for (const programId of pd.coveredProgramIds) {
           scheduledLastByProgram[programId] = clusterDate;
@@ -393,7 +452,8 @@ export function planVisits(
       role: booster.role,
       programIds: [booster.programId],
       doseNumbers: { [booster.programId]: (need?.validDosesReceived ?? 0) + 1 },
-      projected: false
+      projected: false,
+      latest: null
     });
     scheduledLastByProgram[booster.programId] = visitDate;
   }
@@ -467,9 +527,21 @@ export function planVisits(
     return bound;
   };
 
-  const spaced = scheduleWithSpacing(rawVisits, history, pack, chainLowerBound);
+  const spaced0 = scheduleWithSpacing(rawVisits, history, pack, chainLowerBound);
+  // Anchor alignment: followers move forward to their anchor's nearest visit
+  // on/after their own date (never earlier — that could break minimum gaps).
+  // Past-age-limit moves are refused, never silently late. Re-run spacing to
+  // fixpoint (every move goes later, so this terminates).
+  let spaced = spaced0;
   for (const w of spaced.warnings) {
     warnings.push(w);
+  }
+  for (let round = 0; round < 10; round++) {
+    const aligned = alignAnchors(spaced.visits, anchorOf);
+    if (aligned.length === 0) break;
+    for (const w of aligned) warnings.push(w);
+    spaced = scheduleWithSpacing(spaced.visits, history, pack, chainLowerBound);
+    for (const w of spaced.warnings) warnings.push(w);
   }
   rawVisits.length = 0;
   rawVisits.push(...spaced.visits);

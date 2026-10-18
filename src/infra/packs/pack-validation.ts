@@ -177,5 +177,35 @@ export function validatePack(pack: SchedulePack): PackValidation {
     needProduct(r.move, `spacing rule ${r.id} move`);
   }
 
+  // --- co-administration anchors: single level, known target, and never
+  // against a same-day-forbidden spacing pair (anchor pulls forward, spacing
+  // would push back out — declare PrimoVax-style offsets unanchored).
+  const anchorOf = new Map<string, string>();
+  for (const g of catalog.product_groups ?? []) {
+    const anchor = (g as { anchor_to?: unknown }).anchor_to;
+    if (anchor === undefined) continue;
+    if (typeof anchor !== "string" || anchor === "") {
+      errors.push(`catalog product ${g.id}: anchor_to must be a product group id`);
+      continue;
+    }
+    needProduct(anchor, `catalog product ${g.id} anchor_to`);
+    if (anchor === g.id) errors.push(`catalog product ${g.id}: anchor_to must not be itself`);
+    anchorOf.set(g.id, anchor);
+  }
+  for (const [id, anchor] of anchorOf) {
+    if (anchorOf.has(anchor)) {
+      errors.push(`catalog product ${id}: anchor chains are not allowed (${anchor} is itself anchored)`);
+    }
+    for (const r of pack.spacing?.spacing_rules ?? []) {
+      if (r.same_day_allowed === false) {
+        for (const p of r.applies_when?.pairs ?? []) {
+          if ((p.product_a === id && p.product_b === anchor) || (p.product_a === anchor && p.product_b === id)) {
+            errors.push(`catalog product ${id}: anchor_to ${anchor} conflicts with spacing rule ${r.id} (same-day forbidden)`);
+          }
+        }
+      }
+    }
+  }
+
   return { errors, warnings };
 }
