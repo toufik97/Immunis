@@ -319,6 +319,7 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
   const possible = data?.possible ?? [];
   const tiers = data?.tiers;
   const backlog = data?.backlog;
+  const isPast = date < todayCivilDate();
 
   // Doses to prepare: firm + both catch-up tiers vs usable stock on that day.
   const needByProduct: Record<string, number> = {};
@@ -426,7 +427,59 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
           </div>
         </Stack>
 
-        {data && (
+        {data &&
+          (isPast && data.results ? (
+            <Stack gap="sm" aria-live="polite">
+              <Text size="sm" fw={600}>
+                {t("session.results")}
+              </Text>
+              <Group gap="xs" wrap="wrap">
+                <Badge color="teal" variant="filled" className="tabular">
+                  {t("session.seen", { n: formatCount(data.results.childrenSeen, lang) })}
+                </Badge>
+                <Badge color="gray" variant="light" className="tabular">
+                  {t("session.planned", { n: formatCount(data.results.plannedChildren, lang) })}
+                </Badge>
+                <Badge color="teal" variant="light" className="tabular">
+                  {t("session.kept", { n: formatCount(data.results.kept, lang) })}
+                </Badge>
+              </Group>
+              {(() => {
+                const plannedDoses = data.results.plannedDoses ?? {};
+                const givenDoses = data.results.dosesByProduct ?? {};
+                const products = [...new Set([...Object.keys(plannedDoses), ...Object.keys(givenDoses)])].sort();
+                if (products.length === 0) return null;
+                return (
+                  <Stack gap="xs">
+                    <Text size="sm" fw={600}>
+                      {t("session.given")}
+                    </Text>
+                    <Group gap="xs" wrap="wrap">
+                      {products.map((p) => {
+                        const planned = plannedDoses[p] ?? 0;
+                        const given = givenDoses[p] ?? 0;
+                        return (
+                          <Badge
+                            key={p}
+                            variant="light"
+                            color={given >= planned ? "teal" : "yellow"}
+                            className="tabular"
+                          >
+                            {productLabel(p)} {formatCount(given, lang)}/{formatCount(planned, lang)}
+                          </Badge>
+                        );
+                      })}
+                    </Group>
+                  </Stack>
+                );
+              })()}
+              {data.results.planned === 0 && data.results.childrenSeen === 0 && (
+                <Text size="sm" c="dimmed">
+                  {t("session.empty")}
+                </Text>
+              )}
+            </Stack>
+          ) : (
           <Stack gap="sm">
             <Group gap="xs" wrap="wrap" aria-live="polite">
               <Badge color="teal" variant="filled" className="tabular">
@@ -505,7 +558,7 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
               </Stack>
             )}
           </Stack>
-        )}
+          ))}
       </Stack>
     </Card>
   );

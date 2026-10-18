@@ -45,6 +45,21 @@ export function listDosesByChild(db: Database.Database, childId: string): DoseRe
   return toEngineDoses(rows);
 }
 
+/** What a session day actually delivered: visits seen + CENTRE doses given (stock rule §5.10). */
+export function administeredFor(db: Database.Database, date: string): { childrenSeen: number; dosesByProduct: Record<string, number> } {
+  const seen = db
+    .prepare("SELECT COUNT(DISTINCT child_id) AS n FROM encounters WHERE date = ?")
+    .get(date) as { n: number };
+  const rows = db
+    .prepare(
+      "SELECT d.product_group_id AS productGroupId, COUNT(*) AS n FROM doses d JOIN encounters e ON e.id = d.encounter_id WHERE e.date = ? AND d.origin = 'CENTRE' GROUP BY d.product_group_id"
+    )
+    .all(date) as { productGroupId: string; n: number }[];
+  const dosesByProduct: Record<string, number> = {};
+  for (const r of rows) dosesByProduct[r.productGroupId] = r.n;
+  return { childrenSeen: seen.n, dosesByProduct };
+}
+
 export interface PersistOptions {
   /** Override centre wall-clock date (tests). Defaults to todayLocal(). */
   today?: string;

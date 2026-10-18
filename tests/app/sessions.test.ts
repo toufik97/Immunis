@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { openTestDb } from "./db-helper";
 import { registerChild } from "../../src/app/register-child";
 import { createAppointment, markAppointment } from "../../src/infra/repos/appointments";
+import { addLot } from "../../src/infra/repos/stock";
 import { recordEncounter } from "../../src/infra/repos/encounters";
 import { noShowsFor, sessionFor } from "../../src/app/sessions";
 
@@ -132,6 +133,35 @@ describe("sessions seam", () => {
     expect(s.probable).toEqual([]);
     expect(s.possible).toEqual([]);
     expect(s.backlog.children).toBe(0);
+    db.close();
+  });
+
+  it("reports past-session results: planned vs seen vs CENTRE doses given", () => {
+    const db = openTestDb();
+    const a = child(db as never, "A");
+    const b = child(db as never, "B");
+    createAppointment(db, { childId: a.id, dueDate: "2026-10-10", expectedProducts: ["BCG"] });
+    createAppointment(db, { childId: b.id, dueDate: "2026-10-10", expectedProducts: ["BCG", "VPO"] });
+    const lot = addLot(db, { productGroupId: "BCG", lotNumber: "L1", expiryDate: "2027-01-01", coldChainOk: true, qtyOnHand: 10 });
+    recordEncounter(
+      db,
+      {
+        childId: a.id,
+        date: "2026-10-10",
+        screening: "VACCINATE",
+        doses: [{ productGroupId: "BCG", administeredOn: "2026-10-10", origin: "CENTRE", lotId: lot.id, recordedBy: "nurse" }],
+      },
+      { today: "2026-10-10" }
+    );
+    recordEncounter(db, { childId: b.id, date: "2026-10-10", screening: "VACCINATE", doses: [] }, { today: "2026-10-10" });
+
+    const s = sessionFor(db, "2026-10-10");
+    expect(s.results.planned).toBe(2);
+    expect(s.results.plannedChildren).toBe(2);
+    expect(s.results.kept).toBe(2);
+    expect(s.results.childrenSeen).toBe(2);
+    expect(s.results.dosesByProduct).toEqual({ BCG: 1 });
+    expect(s.results.plannedDoses).toEqual({ BCG: 2, VPO: 1 });
     db.close();
   });
 });

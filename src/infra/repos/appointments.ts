@@ -89,6 +89,28 @@ export function countPendingBefore(db: Database.Database, cutoff: string): { app
   return { appointments: rows.length, children: children.size, doses };
 }
 
+/** Retrospective plan for a past session day: due appointments incl. resolved ones. */
+export function dueStatsFor(db: Database.Database, date: string): { planned: number; children: number; kept: number; dosesByProduct: Record<string, number> } {
+  const rows = db
+    .prepare("SELECT child_id, expected_products, kept FROM appointments WHERE due_date = ?")
+    .all(date) as { child_id: string; expected_products: string; kept: number | null }[];
+  const dosesByProduct: Record<string, number> = {};
+  for (const r of rows) {
+    try {
+      const v: unknown = JSON.parse(r.expected_products);
+      if (Array.isArray(v)) for (const p of v) if (typeof p === "string") dosesByProduct[p] = (dosesByProduct[p] ?? 0) + 1;
+    } catch {
+      /* unparseable row counts as zero doses */
+    }
+  }
+  return {
+    planned: rows.length,
+    children: new Set(rows.map((r) => r.child_id)).size,
+    kept: rows.filter((r) => r.kept === 1).length,
+    dosesByProduct,
+  };
+}
+
 /** Latest recorded visit date per child (no-show context; null when never seen). */
 export function lastVisitByChild(db: Database.Database, childIds: string[]): Map<string, string | null> {
   const out = new Map<string, string | null>();

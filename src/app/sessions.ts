@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
-import { listDue, listNoShows, listPendingInRange, countPendingBefore, lastVisitByChild } from "../infra/repos/appointments";
+import { listDue, listNoShows, listPendingInRange, countPendingBefore, dueStatsFor, lastVisitByChild } from "../infra/repos/appointments";
+import { administeredFor } from "../infra/repos/encounters";
 import type { Appointment } from "../domain/appointment";
 import { localIdsForMany } from "../infra/repos/children";
 
@@ -52,6 +53,15 @@ export interface SessionSummary {
   };
   /** Pending strictly older than 30 days (links to No-shows, not auto-included). */
   backlog: { children: number; doses: number };
+  /** What the day actually delivered (planned incl. resolved + visits seen + CENTRE doses). */
+  results: {
+    planned: number;
+    plannedChildren: number;
+    plannedDoses: Record<string, number>;
+    kept: number;
+    childrenSeen: number;
+    dosesByProduct: Record<string, number>;
+  };
 }
 
 export type Likelihood = "due" | "probable" | "possible";
@@ -102,7 +112,25 @@ export function sessionFor(db: Database.Database, date: string): SessionSummary 
     possible: { children: possible.length, dosesByProduct: doseCounts(possible) },
   };
   const backlog = countPendingBefore(db, from);
-  return { date, expected: due, probable, possible, counters: tiers.due, tiers, backlog };
+  const dueStats = dueStatsFor(db, date);
+  const given = administeredFor(db, date);
+  return {
+    date,
+    expected: due,
+    probable,
+    possible,
+    counters: tiers.due,
+    tiers,
+    backlog,
+    results: {
+      planned: dueStats.planned,
+      plannedChildren: dueStats.children,
+      plannedDoses: dueStats.dosesByProduct,
+      kept: dueStats.kept,
+      childrenSeen: given.childrenSeen,
+      dosesByProduct: given.dosesByProduct,
+    },
+  };
 }
 
 /** Past-due appointments never honoured (FR-7.1). */

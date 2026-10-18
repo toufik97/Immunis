@@ -179,6 +179,14 @@ export const api = {
         possible: { children: number; dosesByProduct: Record<string, number> };
       };
       backlog?: { children: number; doses: number };
+      results?: {
+        planned: number;
+        plannedChildren: number;
+        plannedDoses?: Record<string, number>;
+        kept: number;
+        childrenSeen: number;
+        dosesByProduct: Record<string, number>;
+      };
     }>(`/api/sessions?date=${date}`),
   agenda: (from?: string, to?: string) => {
     const q = [from ? `from=${from}` : "", to ? `to=${to}` : ""].filter(Boolean).join("&");
