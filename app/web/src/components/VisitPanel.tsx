@@ -70,6 +70,7 @@ export default function VisitPanel({ child, products, programs, expectedProducts
   const [batch, setBatch] = useState<string[]>([]);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  const [dateAck, setDateAck] = useState<string | null>(null);
   const rdvRef = useRef<HTMLDivElement>(null);
 
   const productLabel = (id: string) => products.find((p) => p.id === id)?.label_fr ?? id;
@@ -239,6 +240,23 @@ export default function VisitPanel({ child, products, programs, expectedProducts
   async function record(withOverride: boolean): Promise<void> {
     setErr("");
     setMsg("");
+    // Visit date vs dose dates: back-dating doses but leaving the visit at
+    // today misfiles the whole visit (wrong session day, appointment missed).
+    const doseDates = [...new Set(doses.map((d) => d.administeredOn))].sort();
+    const sig = `${visitDate}|${doseDates.join(",")}`;
+    if (doseDates.length > 0 && doseDates.some((d) => d !== visitDate)) {
+      if (dateAck !== sig) {
+        setDateAck(sig);
+        setErr(
+          t("visit.dateMismatch", {
+            visit: formatCivilDate(visitDate, lang),
+            doses: doseDates.map((d) => formatCivilDate(d, lang)).join(", "),
+          })
+        );
+        return;
+      }
+    }
+    setDateAck(null);
     const missingLot = doses.some((d) => d.origin === "CENTRE" && !d.lotId);
     if (missingLot) {
       setErr(t("visit.lotRequired"));

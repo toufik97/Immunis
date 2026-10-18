@@ -444,6 +444,9 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
                   {t("session.kept", { n: formatCount(data.results.kept, lang) })}
                 </Badge>
               </Group>
+              <Text size="xs" c="dimmed">
+                {t("session.plannedHint")}
+              </Text>
               {(() => {
                 const plannedDoses = data.results.plannedDoses ?? {};
                 const givenDoses = data.results.dosesByProduct ?? {};
