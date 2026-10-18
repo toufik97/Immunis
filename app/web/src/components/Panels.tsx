@@ -478,6 +478,42 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
                   {t("session.empty")}
                 </Text>
               )}
+              {(data.results.seen ?? []).length > 0 && (
+                <Stack gap="xs">
+                  <Text size="sm" fw={600} className="tabular">
+                    {t("session.seenList", { n: formatCount(data.results.seen?.length ?? 0, lang) })}
+                  </Text>
+                  <PersonTable
+                    rows={(data.results.seen ?? []).map((s) => ({
+                      apptId: `seen-${s.childId}`,
+                      childId: s.childId,
+                      localId: (s.localIds ?? []).map((l) => l.value).join(" ") || "—",
+                      name: s.childName,
+                      address: s.address ?? "—",
+                      dueDate: date,
+                      products: s.dosesGiven,
+                      lastVisitDate: null,
+                      daysOverdue: null,
+                    }))}
+                    showDue={false}
+                    productLabel={productLabel}
+                    actions={{ onOpen: (id) => onOpen(id, []) }}
+                  />
+                </Stack>
+              )}
+              {(data.results.missed ?? []).length > 0 && (
+                <Stack gap="xs">
+                  <Text size="sm" fw={600} className="tabular">
+                    {t("session.missedList", { n: formatCount(data.results.missed?.length ?? 0, lang) })}
+                  </Text>
+                  <PersonTable
+                    rows={(data.results.missed ?? []).map(toRow)}
+                    showDue={false}
+                    productLabel={productLabel}
+                    actions={{ onOpen }}
+                  />
+                </Stack>
+              )}
             </Stack>
           ) : (
           <Stack gap="sm">

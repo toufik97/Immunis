@@ -46,7 +46,10 @@ export function listDosesByChild(db: Database.Database, childId: string): DoseRe
 }
 
 /** What a session day actually delivered: visits seen + CENTRE doses given (stock rule §5.10). */
-export function administeredFor(db: Database.Database, date: string): { childrenSeen: number; dosesByProduct: Record<string, number> } {
+export function administeredFor(
+  db: Database.Database,
+  date: string
+): { childrenSeen: number; dosesByProduct: Record<string, number>; perChild: { childId: string; products: string[] }[] } {
   const seen = db
     .prepare("SELECT COUNT(DISTINCT child_id) AS n FROM encounters WHERE date = ?")
     .get(date) as { n: number };
@@ -57,7 +60,21 @@ export function administeredFor(db: Database.Database, date: string): { children
     .all(date) as { productGroupId: string; n: number }[];
   const dosesByProduct: Record<string, number> = {};
   for (const r of rows) dosesByProduct[r.productGroupId] = r.n;
-  return { childrenSeen: seen.n, dosesByProduct };
+  const childRows = db
+    .prepare(
+      "SELECT e.child_id AS childId, d.product_group_id AS productGroupId FROM encounters e LEFT JOIN doses d ON d.encounter_id = e.id AND d.origin = 'CENTRE' WHERE e.date = ? ORDER BY e.child_id"
+    )
+    .all(date) as { childId: string; productGroupId: string | null }[];
+  const perChildMap = new Map<string, string[]>();
+  for (const r of childRows) {
+    if (!perChildMap.has(r.childId)) perChildMap.set(r.childId, []);
+    if (r.productGroupId) perChildMap.get(r.childId)?.push(r.productGroupId);
+  }
+  return {
+    childrenSeen: seen.n,
+    dosesByProduct,
+    perChild: [...perChildMap.entries()].map(([childId, products]) => ({ childId, products })),
+  };
 }
 
 export interface PersistOptions {

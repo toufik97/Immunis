@@ -49,6 +49,14 @@ export function listDue(db: Database.Database, date: string): Appointment[] {
   return rows.map(toAppointment);
 }
 
+/** All appointments due on a day, kept or not (retrospective session results). */
+export function listDueAll(db: Database.Database, date: string): Appointment[] {
+  const rows = db
+    .prepare("SELECT * FROM appointments WHERE due_date = ? ORDER BY child_id")
+    .all(date) as AppointmentRow[];
+  return rows.map(toAppointment);
+}
+
 export function markAppointment(db: Database.Database, id: string, kept: boolean): boolean {
   const r = db.prepare("UPDATE appointments SET kept = ? WHERE id = ?").run(kept ? 1 : 0, id);
   return r.changes > 0;

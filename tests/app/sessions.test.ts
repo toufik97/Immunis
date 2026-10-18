@@ -162,6 +162,26 @@ describe("sessions seam", () => {
     expect(s.results.childrenSeen).toBe(2);
     expect(s.results.dosesByProduct).toEqual({ BCG: 1 });
     expect(s.results.plannedDoses).toEqual({ BCG: 2, VPO: 1 });
+    expect(s.results.seen.map((r) => r.childId).sort()).toEqual([a.id, b.id].sort());
+    expect(s.results.seen.find((r) => r.childId === a.id)?.dosesGiven).toEqual(["BCG"]);
+    expect(s.results.seen.find((r) => r.childId === b.id)?.dosesGiven).toEqual([]);
+    expect(s.results.missed).toEqual([]);
+    db.close();
+  });
+
+  it("lists missed due appointments in past-session results", () => {
+    const db = openTestDb();
+    const a = child(db as never, "A");
+    const b = child(db as never, "B");
+    createAppointment(db, { childId: a.id, dueDate: "2026-10-10", expectedProducts: ["BCG"] });
+    createAppointment(db, { childId: b.id, dueDate: "2026-10-10", expectedProducts: ["BCG"] });
+    recordEncounter(db, { childId: a.id, date: "2026-10-10", screening: "VACCINATE", doses: [] }, { today: "2026-10-10" });
+
+    const s = sessionFor(db, "2026-10-10");
+    expect(s.results.kept).toBe(1);
+    expect(s.results.childrenSeen).toBe(1);
+    expect(s.results.missed.map((r) => r.childId)).toEqual([b.id]);
+    expect(s.results.seen.map((r) => r.childId)).toEqual([a.id]);
     db.close();
   });
 });

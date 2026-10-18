@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import { listDue, listNoShows, listPendingInRange, countPendingBefore, dueStatsFor, lastVisitByChild } from "../infra/repos/appointments";
+import { listDue, listDueAll, listNoShows, listPendingInRange, countPendingBefore, dueStatsFor, lastVisitByChild } from "../infra/repos/appointments";
 import { administeredFor } from "../infra/repos/encounters";
 import type { Appointment } from "../domain/appointment";
 import { localIdsForMany } from "../infra/repos/children";
@@ -61,7 +61,19 @@ export interface SessionSummary {
     kept: number;
     childrenSeen: number;
     dosesByProduct: Record<string, number>;
+    /** Children seen that day with the CENTRE doses each received. */
+    seen: SeenRow[];
+    /** Due appointments never honoured (kept 0 or still NULL). */
+    missed: SessionRow[];
   };
+}
+
+export interface SeenRow {
+  childId: string;
+  childName: string;
+  localIds: { centreId: string; value: string }[];
+  address: string | null;
+  dosesGiven: string[];
 }
 
 export type Likelihood = "due" | "probable" | "possible";
@@ -114,6 +126,8 @@ export function sessionFor(db: Database.Database, date: string): SessionSummary 
   const backlog = countPendingBefore(db, from);
   const dueStats = dueStatsFor(db, date);
   const given = administeredFor(db, date);
+  const seen = enrichSeen(db, given.perChild);
+  const missed = enrichAppointments(db, listDueAll(db, date).filter((a) => a.kept !== true));
   return {
     date,
     expected: due,
@@ -129,8 +143,36 @@ export function sessionFor(db: Database.Database, date: string): SessionSummary 
       kept: dueStats.kept,
       childrenSeen: given.childrenSeen,
       dosesByProduct: given.dosesByProduct,
+      seen,
+      missed,
     },
   };
+}
+
+/** Enrich seen-children ids with registry name + local id + address (no N+1). */
+function enrichSeen(db: Database.Database, entries: { childId: string; products: string[] }[]): SeenRow[] {
+  if (entries.length === 0) return [];
+  const childIds = [...new Set(entries.map((e) => e.childId))];
+  const byId = new Map<string, { given_name: string; family_name: string; address: string | null }>();
+  for (let i = 0; i < childIds.length; i += 500) {
+    const slice = childIds.slice(i, i + 500);
+    const placeholders = slice.map(() => "?").join(", ");
+    const rows = db
+      .prepare(`SELECT id, given_name, family_name, address FROM children WHERE id IN (${placeholders})`)
+      .all(...slice) as { id: string; given_name: string; family_name: string; address: string | null }[];
+    for (const r of rows) byId.set(r.id, r);
+  }
+  const ids = localIdsForMany(db, childIds);
+  return entries.map((e) => {
+    const c = byId.get(e.childId);
+    return {
+      childId: e.childId,
+      childName: c ? `${c.given_name} ${c.family_name}` : e.childId,
+      localIds: ids.get(e.childId) ?? [],
+      address: c?.address ?? null,
+      dosesGiven: e.products,
+    };
+  });
 }
 
 /** Past-due appointments never honoured (FR-7.1). */
