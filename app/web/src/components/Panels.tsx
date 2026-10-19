@@ -275,6 +275,10 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
       } else {
         setNext(null);
       }
+      // Calendar counts go stale otherwise: bookings, recordings and external
+      // changes all land after the month agenda was fetched. Silent refresh —
+      // the day view must never wait on it (offline-friendly).
+      void loadMonth(forDate.slice(0, 7));
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
