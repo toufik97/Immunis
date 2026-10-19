@@ -394,7 +394,7 @@ export function buildApp(
         return;
       }
       const projection = body["projection"] === "full" ? "full" : "next";
-      const availability = body["availability"] as
+      let availability = body["availability"] as
         | { policy?: "TRANSITION" | "CONTINUITY_FIRST" | "STOCK_DRIVEN"; products?: string[] }
         | undefined;
 
@@ -408,6 +408,18 @@ export function buildApp(
         }
         birthDate = child.birthDate;
         history = toEngineHistory(listDosesByChild(db, child.id), pack);
+        // Stock-connected plans: the centre's usable lots inform the
+        // recommendation instead of a blind policy assumption. Empty stock
+        // stays unconnected (the warning is true: nothing usable informs it).
+        if (!availability?.products) {
+          const usable = usableLotsFor(db, undefined, evaluationDate);
+          if (usable.length > 0) {
+            availability = {
+              policy: availability?.policy ?? "TRANSITION",
+              products: [...new Set(usable.map((l) => l.productGroupId))],
+            };
+          }
+        }
       } else {
         if (typeof body["birthDate"] !== "string") {
           reply.code(400).send({ error: "birthDate or childId is required" });
