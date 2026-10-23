@@ -13,3 +13,7 @@ Clinical and registry language. Implementation-free: for tables and code, see `A
 - **No-show**: a child with a past-due appointment that was never honoured.
 - **Override**: a justified deviation from the planner (who, what, why, when). Append-only: never edited or deleted.
 - **Outbox**: local changes queued for the future central sync. Backup is a file copy of the centre database.
+- **User**: a login account (nurse, admin, reader). One person, one account; tablets may be shared, logins never are.
+- **Role**: what a user may do. Nurse records care, reader only reads, admin also manages users, stock settings, and passes.
+- **Session**: a login ticket on the server, 12 hours. Logout or disable deletes it.
+- **Transition pass**: a time-boxed admin grant letting a nurse record old paper doses as CENTRE with no lot. No stock moves, no centre counts, every row audited.

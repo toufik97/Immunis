@@ -1,9 +1,25 @@
 function authHeaders(): Record<string, string> {
   try {
-    const t = localStorage.getItem("immunis-token");
+    const t = localStorage.getItem("immunis-session");
     return t ? { "x-api-token": t } : {};
   } catch {
     return {};
+  }
+}
+
+function saveSession(token: string): void {
+  try {
+    localStorage.setItem("immunis-session", token);
+  } catch {
+    /* private mode: session lasts this tab */
+  }
+}
+
+function clearSession(): void {
+  try {
+    localStorage.removeItem("immunis-session");
+  } catch {
+    /* nothing stored */
   }
 }
 
@@ -116,8 +132,52 @@ export interface GateIssue {
   overridable: boolean;
 }
 
+export interface AuthUser {
+  id: string;
+  username: string;
+  fullName: string;
+  role: "nurse" | "admin" | "reader";
+  active: boolean;
+  mustChangePassword: boolean;
+  createdAt: string;
+  lastLoginAt?: string;
+}
+
 export const api = {
   health: () => req<{ ok: boolean }>("/api/health"),
+  authStatus: () => req<{ needsBootstrap: boolean; userCount: number }>("/api/auth/status"),
+  login: async (username: string, password: string) => {
+    const r = await req<{ user: AuthUser; sessionId: string }>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    });
+    saveSession(r.sessionId);
+    return r;
+  },
+  logout: async () => {
+    try {
+      await req<{ ok: boolean }>("/api/auth/logout", { method: "POST", body: "{}" });
+    } finally {
+      clearSession();
+    }
+  },
+  me: () => req<{ user: AuthUser }>("/api/auth/me"),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    req<{ ok: boolean }>("/api/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+  bootstrap: (body: { username: string; fullName: string; password: string }) =>
+    req<{ user: AuthUser }>("/api/auth/bootstrap", { method: "POST", body: JSON.stringify(body) }),
+  users: () => req<AuthUser[]>("/api/users"),
+  createUser: (body: { username: string; fullName: string; role: string; password: string }) =>
+    req<{ user: AuthUser }>("/api/users", { method: "POST", body: JSON.stringify(body) }),
+  updateUser: (id: string, body: { active?: boolean; role?: string; password?: string }) =>
+    req<{ ok: boolean }>(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  transitionGrants: () => req<{ id: string; userId: string; expiresAt: string }[]>("/api/transition-grants"),
+  grantTransition: (body: { userId: string; reason: string; expiresAt: string }) =>
+    req<{ id: string }>("/api/transition-grants", { method: "POST", body: JSON.stringify(body) }),
+  revokeGrant: (id: string) => req<{ ok: boolean }>(`/api/transition-grants/${id}/revoke`, { method: "POST", body: "{}" }),
   pack: () =>
     req<{
       country: string;

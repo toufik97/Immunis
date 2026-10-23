@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { openTestDb } from "./db-helper";
+import { openTestDb, adminHeaders } from "./db-helper";
 import { loadSchedulePack } from "../../src/infra/packs/loader";
 import { buildApp } from "../../src/api/app";
 import { registerChild } from "../../src/app/register-child";
@@ -27,9 +27,11 @@ describe("evaluate connects centre stock for child evaluations", () => {
     const c = child(db as never);
     addLot(db, { productGroupId: "BCG", lotNumber: "L1", expiryDate: "2027-01-01", coldChainOk: true, qtyOnHand: 10 });
     const app = buildApp(db, pack);
+    const h = await adminHeaders(db, app);
     const res = await app.inject({
       method: "POST",
       url: "/api/evaluate",
+      headers: h,
       payload: { childId: c.id, evaluationDate: todayLocal(), projection: "next" },
     });
     expect(res.statusCode).toBe(200);
@@ -42,9 +44,11 @@ describe("evaluate connects centre stock for child evaluations", () => {
     const db = openTestDb();
     const c = child(db as never);
     const app = buildApp(db, pack);
+    const h = await adminHeaders(db, app);
     const res = await app.inject({
       method: "POST",
       url: "/api/evaluate",
+      headers: h,
       payload: { childId: c.id, evaluationDate: todayLocal(), projection: "next" },
     });
     expect(res.statusCode).toBe(200);
@@ -57,9 +61,11 @@ describe("evaluate connects centre stock for child evaluations", () => {
     const db = openTestDb();
     addLot(db, { productGroupId: "BCG", lotNumber: "L1", expiryDate: "2027-01-01", coldChainOk: true, qtyOnHand: 10 });
     const app = buildApp(db, pack);
+    const h = await adminHeaders(db, app);
     const res = await app.inject({
       method: "POST",
       url: "/api/evaluate",
+      headers: h,
       payload: { birthDate: "2025-01-01", history: [], evaluationDate: todayLocal(), projection: "next" },
     });
     expect(res.statusCode).toBe(200);

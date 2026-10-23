@@ -49,7 +49,9 @@ CREATE TABLE IF NOT EXISTS doses (
   origin TEXT NOT NULL CHECK (origin IN ('CENTRE', 'EXTERNAL', 'CAMPAIGN')),
   lot_id TEXT REFERENCES lots(id),
   overridden INTEGER NOT NULL DEFAULT 0 CHECK (overridden IN (0, 1)),
-  recorded_by TEXT NOT NULL
+  recorded_by TEXT NOT NULL,
+  transition INTEGER NOT NULL DEFAULT 0 CHECK (transition IN (0, 1)), -- 1 = paper-move CENTRE without lot, no stock move
+  source TEXT -- e.g. 'paper-transition', NULL = normal
 );
 
 CREATE TABLE IF NOT EXISTS appointments (
@@ -101,3 +103,39 @@ CREATE TABLE IF NOT EXISTS id_counters (
   last_xx INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (centre_id, year)
 );
+
+-- Auth: 1 admin + nurses + future reader. Roles are nurse/admin/reader.
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  username TEXT NOT NULL UNIQUE,
+  full_name TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('nurse', 'admin', 'reader')),
+  password_hash TEXT NOT NULL,
+  password_salt TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+  must_change_password INTEGER NOT NULL DEFAULT 0 CHECK (must_change_password IN (0, 1)),
+  failed_attempts INTEGER NOT NULL DEFAULT 0,
+  locked_until TEXT,
+  created_at TEXT NOT NULL,
+  last_login_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id TEXT PRIMARY KEY, -- random ticket, sent as HttpOnly cookie + Bearer fallback
+  user_id TEXT NOT NULL REFERENCES users(id),
+  expires_at TEXT NOT NULL, -- UTC ISO
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+
+-- Transition pass: admin grants nurse the right to record old paper as CENTRE with no lot.
+CREATE TABLE IF NOT EXISTS transition_grants (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  granted_by TEXT NOT NULL REFERENCES users(id),
+  reason TEXT NOT NULL,
+  expires_at TEXT NOT NULL, -- YYYY-MM-DD, inclusive
+  revoked_at TEXT, -- UTC ISO or NULL = active
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_transition_grants_user ON transition_grants(user_id);

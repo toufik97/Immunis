@@ -5,6 +5,7 @@ import {
   Alert,
   AppShell,
   Badge,
+  Button,
   Card,
   Container,
   Group,
@@ -13,7 +14,6 @@ import {
   Stack,
   Tabs,
   Text,
-  TextInput,
   Title,
   useMantineColorScheme,
 } from "@mantine/core";
@@ -32,7 +32,7 @@ import {
 } from "@tabler/icons-react";
 import "./i18n";
 import { applyLocale, type Locale } from "./i18n";
-import { api, type Child } from "./api";
+import { api, type AuthUser, type Child } from "./api";
 import { formatCount, todayCivilDate } from "./format";
 import { isTab, resolveInitialTab, type Tab } from "./tabs";
 // One chunk per tab: the first paint stays small on weak tablets.
@@ -42,6 +42,8 @@ const RegistryPanel = lazy(() => import("./components/RegistryPanel"));
 const SessionPanel = lazy(() => import("./components/Panels").then((m) => ({ default: m.SessionPanel })));
 const NoShowPanel = lazy(() => import("./components/Panels").then((m) => ({ default: m.NoShowPanel })));
 const StockPanel = lazy(() => import("./components/Panels").then((m) => ({ default: m.StockPanel })));
+const AuthScreen = lazy(() => import("./components/AuthScreen"));
+const UsersPanel = lazy(() => import("./components/UsersPanel"));
 import "./styles.css";
 
 type PackInfo = Awaited<ReturnType<typeof api.pack>>;
@@ -106,19 +108,23 @@ export default function App() {
     state: "checking",
     pending: 0,
   });
-  // Centre token for LAN/tailnet use (IMMUNIS_TOKEN server-side); kept in this browser only.
-  const [token, setToken] = useState(() => {
-    try {
-      return localStorage.getItem("immunis-token") ?? "";
-    } catch {
-      return "";
-    }
-  });
+  // Logged-in user; null = show the login gate. Session ticket lives in localStorage + cookie.
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
+    void api
+      .me()
+      .then((r) => setUser(r.user))
+      .catch(() => setUser(null))
+      .finally(() => setAuthChecked(true));
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
     applyLocale(i18n.language as Locale);
     api.pack().then(setPack).catch((e) => setErr(e instanceof Error ? e.message : String(e)));
-  }, [i18n.language]);
+  }, [i18n.language, user]);
 
   // Keep tab in the URL so sessions are deep-linkable; listen to back/forward.
   useEffect(() => {
@@ -154,9 +160,29 @@ export default function App() {
   // Badge only: refresh on mount and after writes (record/register),
   // never on plain tab switches.
   useEffect(() => {
+    if (!user) return;
     void refreshNet();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user]);
+
+  if (!authChecked || !user) {
+    return (
+      <Suspense
+        fallback={
+          <Text size="sm" c="dimmed">
+            {t("common.loading")}
+          </Text>
+        }
+      >
+        <AuthScreen
+          onDone={(u) => {
+            setUser(u);
+            setErr("");
+          }}
+        />
+      </Suspense>
+    );
+  }
 
   async function openChildById(id: string, expectedProducts: string[] = []): Promise<void> {
     setErr("");
@@ -166,6 +192,10 @@ export default function App() {
       setPendingExpected(expectedProducts);
       setTab("today");
     } catch (e) {
+      if (e instanceof Error && /401|log in/i.test(e.message)) {
+        setUser(null);
+        return;
+      }
       setErr(e instanceof Error ? e.message : String(e));
     }
   }
@@ -225,23 +255,22 @@ export default function App() {
                 )}
               </Group>
               <Group gap="xs" wrap="nowrap">
-                <TextInput
-                  aria-label={t("common.token")}
-                  name="apiToken"
-                  type="password"
-                  autoComplete="off"
-                  placeholder={t("common.token")}
-                  value={token}
-                  onChange={(e) => {
-                    setToken(e.target.value);
-                    try {
-                      localStorage.setItem("immunis-token", e.target.value);
-                    } catch {
-                      /* private mode: token lasts this session */
-                    }
-                  }}
-                  style={{ maxWidth: 130 }}
-                />
+                {user && (
+                  <Badge variant="light" color={user.role === "admin" ? "red" : user.role === "reader" ? "gray" : "teal"}>
+                    {user.username} · {user.role}
+                  </Badge>
+                )}
+                <Button
+                  size="compact-sm"
+                  variant="default"
+                  aria-label={t("auth.logout")}
+                  onClick={() => void api.logout().finally(() => {
+                    setUser(null);
+                    setPack(null);
+                  })}
+                >
+                  {t("auth.logout")}
+                </Button>
                 <ColorSchemeToggle />
                 <SegmentedControl
                   size="xs"
@@ -277,6 +306,11 @@ export default function App() {
                   <Tabs.Tab value="stock" leftSection={<IconPackages size={14} aria-hidden="true" />}>
                     {t("nav.stock")}
                   </Tabs.Tab>
+                  {user.role === "admin" && (
+                    <Tabs.Tab value="users" leftSection={<IconUserPlus size={14} aria-hidden="true" />}>
+                      {t("users.title")}
+                    </Tabs.Tab>
+                  )}
                 </Tabs.List>
               </ScrollArea>
             </Tabs>
@@ -354,6 +388,11 @@ export default function App() {
                 <Tabs.Panel value="stock">
                   <StockPanel products={products} />
                 </Tabs.Panel>
+                {user.role === "admin" && (
+                  <Tabs.Panel value="users">
+                    <UsersPanel />
+                  </Tabs.Panel>
+                )}
                 </Suspense>
               </Tabs>
             </Stack>

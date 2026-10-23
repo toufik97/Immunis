@@ -40,6 +40,8 @@ export class RecordGateError extends Error {
 export interface RecordVisitInput extends NewEncounter {
   /** Required when any new dose waives an overridable warning. Audited. */
   overrideReason?: string;
+  /** Paper-transition: CENTRE doses with no lot. Server sets this from the grant, never the client. */
+  transition?: { allowed: boolean; source: string; reason: string };
 }
 
 /** One row per (dose, code): PENTA trips DTP/HB/Hib counters with the same code. */
@@ -74,6 +76,7 @@ export function recordVisit(
 ): { encounter: Encounter; waived: GateIssue[] } {
   const today = opts?.today ?? todayLocal();
   const nowIso = opts?.nowIso ?? nowIsoStamp();
+  // Client-supplied transition flags are ignored: only a server-checked grant may set them.
   const parsed = EncounterSchema.parse({
     childId: input.childId,
     date: input.date,
@@ -81,7 +84,7 @@ export function recordVisit(
     screeningNote: input.screeningNote,
     weightKg: input.weightKg,
     heightCm: input.heightCm,
-    doses: input.doses ?? [],
+    doses: (input.doses ?? []).map((d) => ({ ...d, transition: false, source: undefined })),
     nextAppointmentDate: input.nextAppointmentDate,
     id: randomUUID(),
   });
@@ -150,6 +153,26 @@ export function recordVisit(
           overridable: false,
         },
       ]);
+    }
+  }
+
+  // Paper transition: CENTRE with no lot, only with an active grant + reason.
+  // After unknown-product and duplicate checks so those keep their errors.
+  const transitionLots = parsed.doses.filter((d) => d.origin === "CENTRE" && !d.lotId);
+  if (transitionLots.length > 0) {
+    if (!input.transition?.allowed || !input.transition.reason.trim()) {
+      throw new RecordGateError(400, transitionLots.map((d) => ({
+        doseIndex: parsed.doses.indexOf(d),
+        productGroupId: d.productGroupId,
+        administeredOn: d.administeredOn,
+        code: "LOT_REQUIRED",
+        message: "CENTRE dose requires a lot (FR-4.3) — or an active paper-transition grant with reason",
+        overridable: false,
+      })));
+    }
+    for (const d of transitionLots) {
+      d.transition = true;
+      d.source = input.transition.source;
     }
   }
 
@@ -233,6 +256,20 @@ export function recordVisit(
         what: `override ${ws.map((w) => w.code).join("+")} for ${d.productGroupId} on ${d.administeredOn}`,
         reason: input.overrideReason!.trim(),
         createdAt: nowIso,
+      });
+    }
+    // Paper transition is audited per dose (who moved paper into CENTRE without lot).
+    if (input.transition?.allowed) {
+      parsed.doses.forEach((d) => {
+        if (!d.transition) return;
+        insertOverride(db, {
+          childId: parsed.childId,
+          encounterId: stored.id,
+          author: d.recordedBy,
+          what: `transition ${d.productGroupId} on ${d.administeredOn} as CENTRE without lot`,
+          reason: input.transition!.reason.trim(),
+          createdAt: nowIso,
+        });
       });
     }
     return stored;

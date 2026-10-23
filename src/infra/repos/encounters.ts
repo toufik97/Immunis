@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import { EncounterSchema, type Encounter, type DoseRecord } from "../../domain/encounter";
-import { isCentreCounted } from "../../domain/dose-origin";
+import { isStockCounted } from "../../domain/dose-origin";
 import { consumeLot } from "./stock";
 import { todayLocal, nowIso } from "../time";
 
@@ -25,6 +25,8 @@ interface DoseRow {
   lot_id: string | null;
   overridden: number;
   recorded_by: string;
+  transition: number;
+  source: string | null;
 }
 
 export function toEngineDoses(rows: DoseRow[]): DoseRecord[] {  return rows.map((r) => ({
@@ -34,6 +36,8 @@ export function toEngineDoses(rows: DoseRow[]): DoseRecord[] {  return rows.map(
     lotId: r.lot_id ?? undefined,
     overridden: r.overridden === 1,
     recordedBy: r.recorded_by,
+    transition: (r.transition ?? 0) === 1,
+    source: r.source ?? undefined,
   }));
 }
 
@@ -127,12 +131,12 @@ export function storeEncounter(
   );
 
   for (const dose of parsed.doses) {
-    if (isCentreCounted(dose.origin)) {
+    if (isStockCounted(dose.origin, dose.transition)) {
       if (!dose.lotId) throw new Error("CENTRE dose requires a lot (FR-4.3)");
       consumeLot(db, dose.lotId, 1, parsed.date);
     }
     db.prepare(
-      "INSERT INTO doses (id, encounter_id, child_id, product_group_id, administered_on, origin, lot_id, overridden, recorded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO doses (id, encounter_id, child_id, product_group_id, administered_on, origin, lot_id, overridden, recorded_by, transition, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).run(
       randomUUID(),
       encounterId,
@@ -142,7 +146,9 @@ export function storeEncounter(
       dose.origin,
       dose.lotId ?? null,
       dose.overridden ? 1 : 0,
-      dose.recordedBy
+      dose.recordedBy,
+      dose.transition ? 1 : 0,
+      dose.source ?? null
     );
   }
 

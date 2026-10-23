@@ -67,6 +67,7 @@ export default function VisitPanel({ child, products, programs, expectedProducts
   const [recording, setRecording] = useState(false);
   const [gateIssues, setGateIssues] = useState<GateIssue[]>([]);
   const [overrideReason, setOverrideReason] = useState("");
+  const [transitionReason, setTransitionReason] = useState("");
   const [batch, setBatch] = useState<string[]>([]);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
@@ -258,7 +259,7 @@ export default function VisitPanel({ child, products, programs, expectedProducts
     }
     setDateAck(null);
     const missingLot = doses.some((d) => d.origin === "CENTRE" && !d.lotId);
-    if (missingLot) {
+    if (missingLot && !transitionReason.trim()) {
       setErr(t("visit.lotRequired"));
       return;
     }
@@ -281,12 +282,14 @@ export default function VisitPanel({ child, products, programs, expectedProducts
         heightCm: heightCm ? Number(heightCm) : undefined,
         doses: payload,
         ...(withOverride ? { overrideReason } : {}),
+        ...(transitionReason.trim() ? { transitionReason: transitionReason.trim() } : {}),
       });
       if (r.status === "gated") {
         setGateIssues(r.issues);
       } else {
         setGateIssues([]);
         setOverrideReason("");
+        setTransitionReason("");
         setDoses([]);
         const done = t("visit.recorded");
         setMsg(done);
@@ -589,6 +592,16 @@ export default function VisitPanel({ child, products, programs, expectedProducts
             {t("visit.record")}
           </Button>
         </Group>
+        {doses.some((d) => d.origin === "CENTRE" && !d.lotId) && (
+          <TextInput
+            label={t("visit.transitionReason")}
+            name="transitionReason"
+            autoComplete="off"
+            placeholder={t("visit.transitionReason")}
+            value={transitionReason}
+            onChange={(e) => setTransitionReason(e.target.value)}
+          />
+        )}
 
         {rdv && (
           <Paper withBorder p="sm" radius="md" ref={rdvRef}>

@@ -5,10 +5,13 @@ export const DoseRecordSchema = z.object({
   productGroupId: z.string().min(1),
   administeredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   origin: DoseOriginSchema,
-  /** Required when origin is CENTRE (lot traceability, FR-4.3). */
+  /** Required when origin is CENTRE (lot traceability, FR-4.3) — except paper transition with a grant. */
   lotId: z.string().optional(),
   overridden: z.boolean().default(false),
   recordedBy: z.string().min(1),
+  /** Paper-transition CENTRE without lot: no stock move, excluded from analytics. Server-set only. */
+  transition: z.boolean().default(false),
+  source: z.string().optional(),
 });
 
 export type DoseRecord = z.infer<typeof DoseRecordSchema>;

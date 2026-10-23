@@ -6,7 +6,7 @@ import { buildApp } from "./api/app";
 
 const COUNTRY = process.env.COUNTRY_PACK ?? "MA";
 const PORT = Number(process.env.PORT ?? 5173);
-// Localhost only by default; set HOST=0.0.0.0 to expose on tailnet/LAN (with IMMUNIS_TOKEN).
+// Localhost only by default; set HOST=0.0.0.0 to expose on tailnet/LAN (login required).
 const HOST = process.env.HOST ?? "127.0.0.1";
 const DB_PATH = process.env.DB_PATH ?? path.resolve(process.cwd(), "data", "immunis.db");
 
@@ -63,8 +63,8 @@ app.listen({ port: PORT, host: HOST }, (err) => {
   console.log(
     HOST === "127.0.0.1"
       ? "LAN: off (localhost only; set HOST=0.0.0.0 for tailnet/LAN)"
-      : "LAN: on — set IMMUNIS_TOKEN or anyone on the network can read/write"
+      : "LAN: on — login required for every centre action"
   );
-  console.log(`API auth: ${process.env.IMMUNIS_TOKEN ? "on" : "off (set IMMUNIS_TOKEN to require the centre token)"}`);
+  console.log(`API auth: sessions on (login required; bootstrap the first admin via POST /api/auth/bootstrap)`);
   console.log("Press Ctrl+C to stop.");
 });

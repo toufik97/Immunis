@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { openTestDb } from "./db-helper";
+import { openTestDb, adminHeaders } from "./db-helper";
 import { loadSchedulePack } from "../../src/infra/packs/loader";
 import { buildApp } from "../../src/api/app";
 
@@ -9,10 +9,12 @@ describe("api", () => {
   it("creates a child, confirms identity by birthDate, and records a visit", async () => {
     const db = openTestDb();
     const app = buildApp(db, pack);
+    const h = await adminHeaders(db, app);
 
     const created = await app.inject({
       method: "POST",
       url: "/api/children",
+      headers: h,
       payload: {
         familyName: "El Amrani",
         givenName: "Yasmine",
@@ -27,7 +29,7 @@ describe("api", () => {
     const child = created.json() as { id: string; localIds: { value: string }[] };
     expect(child.localIds[0].value).toBe("1/2026");
 
-    const found = await app.inject({ method: "GET", url: "/api/children?q=amrani" });
+    const found = await app.inject({ method: "GET", url: "/api/children?q=amrani", headers: h });
     expect(found.statusCode).toBe(200);
     expect((found.json() as unknown[])).toHaveLength(1);
 
@@ -35,6 +37,7 @@ describe("api", () => {
     const denied = await app.inject({
       method: "POST",
       url: "/api/encounters",
+      headers: h,
       payload: {
         childId: child.id,
         birthDate: "2000-01-01",
@@ -48,6 +51,7 @@ describe("api", () => {
     const visit = await app.inject({
       method: "POST",
       url: "/api/encounters",
+      headers: h,
       payload: {
         childId: child.id,
         birthDate: "2025-03-14",
@@ -67,23 +71,24 @@ describe("api", () => {
     });
     expect(visit.statusCode).toBe(201);
 
-    const session = await app.inject({ method: "GET", url: "/api/sessions?date=2026-11-09" });
+    const session = await app.inject({ method: "GET", url: "/api/sessions?date=2026-11-09", headers: h });
     expect(session.statusCode).toBe(200);
     const body = session.json() as { expected: { childName: string; address: string; expectedProducts: string[] }[] };
     expect(body.expected).toHaveLength(1);
     expect(body.expected[0].childName).toMatch(/Yasmine/);
     expect(body.expected[0].address).toBe("Rue 12");
 
-    const noShows = await app.inject({ method: "GET", url: "/api/no-shows?asOf=2026-12-01" });
+    const noShows = await app.inject({ method: "GET", url: "/api/no-shows?asOf=2026-12-01", headers: h });
     expect((noShows.json() as unknown[])).toHaveLength(1);
 
-    const doses = await app.inject({ method: "GET", url: `/api/children/${child.id}/doses` });
+    const doses = await app.inject({ method: "GET", url: `/api/children/${child.id}/doses`, headers: h });
     expect(doses.statusCode).toBe(200);
     expect((doses.json() as { productGroupId: string }[]).map((d) => d.productGroupId)).toEqual(["BCG"]);
 
     const evaluation = await app.inject({
       method: "POST",
       url: "/api/evaluate",
+      headers: h,
       payload: { childId: child.id, evaluationDate: "2026-10-09", projection: "next" },
     });
     expect(evaluation.statusCode).toBe(200);
@@ -94,6 +99,7 @@ describe("api", () => {
   it("warns on duplicate registration but allows forced homonyms", async () => {
     const db = openTestDb();
     const app = buildApp(db, pack);
+    const h = await adminHeaders(db, app);
     const body = {
       familyName: "El Amrani",
       givenName: "Yasmine",
@@ -102,13 +108,14 @@ describe("api", () => {
       centreId: "CS01",
       firstVisitYear: "2026",
     };
-    expect((await app.inject({ method: "POST", url: "/api/children", payload: body })).statusCode).toBe(201);
-    const dup = await app.inject({ method: "POST", url: "/api/children", payload: body });
+    expect((await app.inject({ method: "POST", url: "/api/children", headers: h, payload: body })).statusCode).toBe(201);
+    const dup = await app.inject({ method: "POST", url: "/api/children", headers: h, payload: body });
     expect(dup.statusCode).toBe(409);
     expect((dup.json() as { duplicates: unknown[] }).duplicates).toHaveLength(1);
     const forced = await app.inject({
       method: "POST",
       url: "/api/children",
+      headers: h,
       payload: { ...body, force: true },
     });
     expect(forced.statusCode).toBe(201);
@@ -119,18 +126,21 @@ describe("api", () => {
   it("serves pack metadata and centre-only analytics", async () => {
     const db = openTestDb();
     const app = buildApp(db, pack);
-    const meta = await app.inject({ method: "GET", url: "/api/pack" });
+    const h = await adminHeaders(db, app);
+    const meta = await app.inject({ method: "GET", url: "/api/pack", headers: h });
     expect(meta.statusCode).toBe(200);
     expect((meta.json() as { country: string }).country).toBe("MA");
     const futureEval = await app.inject({
       method: "POST",
       url: "/api/evaluate",
+      headers: h,
       payload: { birthDate: "2025-01-01", evaluationDate: "2999-01-01", history: [] },
     });
     expect(futureEval.statusCode).toBe(400);
     const badHistory = await app.inject({
       method: "POST",
       url: "/api/evaluate",
+      headers: h,
       payload: {
         birthDate: "2025-01-01",
         evaluationDate: "2026-01-01",
@@ -138,7 +148,7 @@ describe("api", () => {
       },
     });
     expect(badHistory.statusCode).toBe(400);
-    const analytics = await app.inject({ method: "GET", url: "/api/analytics/doses" });
+    const analytics = await app.inject({ method: "GET", url: "/api/analytics/doses", headers: h });
     expect(analytics.statusCode).toBe(200);
     expect(analytics.json()).toEqual({});
     db.close();
@@ -147,21 +157,24 @@ describe("api", () => {
   it("filters lots by usability date", async () => {
     const db = openTestDb();
     const app = buildApp(db, pack);
+    const h = await adminHeaders(db, app);
     const good = await app.inject({
       method: "POST",
       url: "/api/lots",
+      headers: h,
       payload: { productGroupId: "PENTA", lotNumber: "GOOD", expiryDate: "2027-01-01", coldChainOk: true, qtyOnHand: 5 },
     });
     expect(good.statusCode).toBe(201);
     await app.inject({
       method: "POST",
       url: "/api/lots",
+      headers: h,
       payload: { productGroupId: "PENTA", lotNumber: "OLD", expiryDate: "2020-01-01", coldChainOk: true, qtyOnHand: 5 },
     });
-    const usable = await app.inject({ method: "GET", url: "/api/lots?product=PENTA&usableOn=2026-10-09" });
+    const usable = await app.inject({ method: "GET", url: "/api/lots?product=PENTA&usableOn=2026-10-09", headers: h });
     expect(usable.statusCode).toBe(200);
     expect((usable.json() as { lotNumber: string }[]).map((l) => l.lotNumber)).toEqual(["GOOD"]);
-    const badDate = await app.inject({ method: "GET", url: "/api/lots?usableOn=not-a-date" });
+    const badDate = await app.inject({ method: "GET", url: "/api/lots?usableOn=not-a-date", headers: h });
     expect(badDate.statusCode).toBe(400);
     db.close();
   });
@@ -169,10 +182,12 @@ describe("api", () => {
   it("rejects ghost references and malformed dates with 4xx, not 500s", async () => {
     const db = openTestDb();
     const app = buildApp(db, pack);
+    const h = await adminHeaders(db, app);
 
     const appt = await app.inject({
       method: "POST",
       url: "/api/appointments",
+      headers: h,
       payload: { childId: "nope", dueDate: "2026-01-01" },
     });
     expect(appt.statusCode).toBe(404);
@@ -180,6 +195,7 @@ describe("api", () => {
     const patch = await app.inject({
       method: "PATCH",
       url: "/api/appointments/does-not-exist",
+      headers: h,
       payload: { kept: true },
     });
     expect(patch.statusCode).toBe(404);
@@ -187,18 +203,21 @@ describe("api", () => {
     const child = await app.inject({
       method: "POST",
       url: "/api/children",
+      headers: h,
       payload: { familyName: "A", givenName: "A", birthDate: "2025-01-01", sex: "M" },
     });
     const childId = (child.json() as { id: string }).id;
     const badChild = await app.inject({
       method: "POST",
       url: "/api/children/nope/overrides",
+      headers: h,
       payload: { author: "n", what: "w", reason: "r" },
     });
     expect(badChild.statusCode).toBe(404);
     const badEnc = await app.inject({
       method: "POST",
       url: `/api/children/${childId}/overrides`,
+      headers: h,
       payload: { author: "n", what: "w", reason: "r", encounterId: "ghost" },
     });
     expect(badEnc.statusCode).toBe(400);
@@ -206,22 +225,25 @@ describe("api", () => {
     const ackMissing = await app.inject({
       method: "POST",
       url: "/api/outbox/nope/ack",
+      headers: h,
       payload: { syncedAt: "2026-10-09T10:00:00.000Z" },
     });
     expect(ackMissing.statusCode).toBe(404);
     const ackBad = await app.inject({
       method: "POST",
       url: "/api/outbox/nope/ack",
+      headers: h,
       payload: { syncedAt: "garbage" },
     });
     expect(ackBad.statusCode).toBe(400);
 
-    const badOn = await app.inject({ method: "GET", url: "/api/lots/some-id/usable?on=garbage" });
+    const badOn = await app.inject({ method: "GET", url: "/api/lots/some-id/usable?on=garbage", headers: h });
     expect(badOn.statusCode).toBe(400);
 
     const badHist = await app.inject({
       method: "POST",
       url: "/api/evaluate",
+      headers: h,
       payload: {
         birthDate: "2025-01-01",
         evaluationDate: "2026-01-01",
@@ -232,12 +254,14 @@ describe("api", () => {
     const badBirth = await app.inject({
       method: "POST",
       url: "/api/evaluate",
+      headers: h,
       payload: { birthDate: "2026-02-30", evaluationDate: "2026-01-01", history: [] },
     });
     expect(badBirth.statusCode).toBe(400);
     const futureBirth = await app.inject({
       method: "POST",
       url: "/api/children",
+      headers: h,
       payload: { familyName: "A", givenName: "A", birthDate: "2030-05-01", sex: "M" },
     });
     expect(futureBirth.statusCode).toBe(400);

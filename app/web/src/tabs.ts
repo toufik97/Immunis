@@ -1,8 +1,8 @@
 /** Tab memory: reopen where the nurse left off, but each new day starts on Today. */
 
-export type Tab = "today" | "registry" | "session" | "noshows" | "stock";
+export type Tab = "today" | "registry" | "session" | "noshows" | "stock" | "users";
 
-const TABS: Tab[] = ["today", "registry", "session", "noshows", "stock"];
+const TABS: Tab[] = ["today", "registry", "session", "noshows", "stock", "users"];
 
 export function isTab(v: string | null): v is Tab {
   return !!v && (TABS as string[]).includes(v);

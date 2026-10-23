@@ -17,3 +17,8 @@ export function isClinicallyCredited(origin: DoseOrigin): boolean {
 export function isCentreCounted(origin: DoseOrigin): boolean {
   return origin === "CENTRE";
 }
+
+/** Stock + analytics rule: CENTRE counts, except paper-transition rows (no lot, no stock move). */
+export function isStockCounted(origin: DoseOrigin, transition?: boolean): boolean {
+  return origin === "CENTRE" && !transition;
+}
