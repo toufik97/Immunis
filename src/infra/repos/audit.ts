@@ -51,3 +51,23 @@ export function listOverridesByChild(db: Database.Database, childId: string): Ov
     .all(childId) as OverrideRow[];
   return rows.map(toEntry);
 }
+
+export interface RecentOverride extends OverrideEntry {
+  childName: string;
+  encounterDate: string | null;
+}
+
+/** Newest-first audit view for admins (bounded, never full-table). */
+export function listRecentOverrides(db: Database.Database, limit = 200): RecentOverride[] {
+  const n = Math.min(Math.max(limit, 1), 500);
+  const rows = db
+    .prepare(
+      `SELECT o.*, c.given_name || ' ' || c.family_name AS child_name, e.date AS encounter_date
+       FROM overrides o
+       JOIN children c ON c.id = o.child_id
+       LEFT JOIN encounters e ON e.id = o.encounter_id
+       ORDER BY o.created_at DESC LIMIT ?`
+    )
+    .all(n) as (OverrideRow & { child_name: string; encounter_date: string | null })[];
+  return rows.map((r) => ({ ...toEntry(r), childName: r.child_name, encounterDate: r.encounter_date }));
+}

@@ -175,9 +175,11 @@ export const api = {
   updateUser: (id: string, body: { active?: boolean; role?: string; password?: string }) =>
     req<{ ok: boolean }>(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   transitionGrants: () => req<{ id: string; userId: string; expiresAt: string }[]>("/api/transition-grants"),
+  grantHistory: () => req<{ id: string; userId: string; username: string; grantedByName: string; reason: string; expiresAt: string; revokedAt: string | null; createdAt: string }[]>("/api/transition-grants?history=1"),
   grantTransition: (body: { userId: string; reason: string; expiresAt: string }) =>
     req<{ id: string }>("/api/transition-grants", { method: "POST", body: JSON.stringify(body) }),
   revokeGrant: (id: string) => req<{ ok: boolean }>(`/api/transition-grants/${id}/revoke`, { method: "POST", body: "{}" }),
+  overrides: (limit = 200) => req<{ id: string; childId: string; childName: string; encounterId?: string; encounterDate: string | null; author: string; what: string; reason: string; createdAt: string }[]>(`/api/overrides?limit=${limit}`),
   pack: () =>
     req<{
       country: string;

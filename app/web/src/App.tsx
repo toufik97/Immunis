@@ -44,6 +44,7 @@ const NoShowPanel = lazy(() => import("./components/Panels").then((m) => ({ defa
 const StockPanel = lazy(() => import("./components/Panels").then((m) => ({ default: m.StockPanel })));
 const AuthScreen = lazy(() => import("./components/AuthScreen"));
 const UsersPanel = lazy(() => import("./components/UsersPanel"));
+const AuditPanel = lazy(() => import("./components/AuditPanel"));
 import "./styles.css";
 
 type PackInfo = Awaited<ReturnType<typeof api.pack>>;
@@ -311,6 +312,11 @@ export default function App() {
                       {t("users.title")}
                     </Tabs.Tab>
                   )}
+                  {(user.role === "admin" || user.role === "reader") && (
+                    <Tabs.Tab value="audit" leftSection={<IconShieldCheck size={14} aria-hidden="true" />}>
+                      {t("nav.audit")}
+                    </Tabs.Tab>
+                  )}
                 </Tabs.List>
               </ScrollArea>
             </Tabs>
@@ -391,6 +397,11 @@ export default function App() {
                 {user.role === "admin" && (
                   <Tabs.Panel value="users">
                     <UsersPanel />
+                  </Tabs.Panel>
+                )}
+                {(user.role === "admin" || user.role === "reader") && (
+                  <Tabs.Panel value="audit">
+                    <AuditPanel />
                   </Tabs.Panel>
                 )}
                 </Suspense>

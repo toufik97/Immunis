@@ -170,3 +170,43 @@ export function listActiveGrants(db: Database.Database, today: string): { id: st
     .all(today) as { id: string; user_id: string; expires_at: string }[];
   return rows.map((r) => ({ id: r.id, userId: r.user_id, expiresAt: r.expires_at }));
 }
+
+export interface GrantHistoryEntry {
+  id: string;
+  userId: string;
+  username: string;
+  grantedBy: string;
+  grantedByName: string;
+  reason: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+/** Full pass history (active + expired + revoked) so the lifecycle is visible. */
+export function listGrantHistory(db: Database.Database, limit = 200): GrantHistoryEntry[] {
+  const n = Math.min(Math.max(limit, 1), 500);
+  const rows = db
+    .prepare(
+      `SELECT g.*, u.username AS username, b.username AS granted_by_name
+       FROM transition_grants g
+       JOIN users u ON u.id = g.user_id
+       JOIN users b ON b.id = g.granted_by
+       ORDER BY g.created_at DESC LIMIT ?`
+    )
+    .all(n) as {
+    id: string; user_id: string; username: string; granted_by: string; granted_by_name: string;
+    reason: string; expires_at: string; revoked_at: string | null; created_at: string;
+  }[];
+  return rows.map((r) => ({
+    id: r.id,
+    userId: r.user_id,
+    username: r.username,
+    grantedBy: r.granted_by,
+    grantedByName: r.granted_by_name,
+    reason: r.reason,
+    expiresAt: r.expires_at,
+    revokedAt: r.revoked_at,
+    createdAt: r.created_at,
+  }));
+}

@@ -36,6 +36,21 @@ export function formatCount(n: number, lang: string): string {
   }
 }
 
+/** Display a UTC ISO timestamp (audit rows) in the UI locale. Falls back to raw on bad input. */
+export function formatDateTime(iso: string, lang: string): string {
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return iso;
+  try {
+    return new Intl.DateTimeFormat(localeTag(lang), {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "UTC",
+    }).format(dt);
+  } catch {
+    return iso;
+  }
+}
+
 /** Centre wall-clock calendar date (YYYY-MM-DD) for civil-date defaults/bounds. */
 export function todayCivilDate(now = new Date()): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;

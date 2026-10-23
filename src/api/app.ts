@@ -13,7 +13,7 @@ import { recordVisit, RecordGateError } from "../app/record-visit";
 import { addLot, listLots, checkLotUsable, usableLotsFor } from "../infra/repos/stock";
 import { createAppointment, markAppointment } from "../infra/repos/appointments";
 import { noShowsFor, sessionFor, agendaFor } from "../app/sessions";
-import { insertOverride, listOverridesByChild } from "../infra/repos/audit";
+import { insertOverride, listOverridesByChild, listRecentOverrides } from "../infra/repos/audit";
 import { countCentreDosesByProduct } from "../app/analytics";
 import { exportCentre, listPendingOutbox, countPendingOutbox, ackOutbox } from "../infra/sync/sync";
 import { DoseRecordSchema, ScreeningResultSchema } from "../domain/encounter";
@@ -27,6 +27,7 @@ import {
   grantTransition,
   hasActiveGrant,
   listActiveGrants,
+  listGrantHistory,
   listUsers,
   revokeGrant,
   setUserActive,
@@ -315,12 +316,13 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
     }
   });
 
-  // ---- transition grants (admin grants, nurse uses) ----
+  // ---- transition grants (admin grants, admin+reader view history) ----
   app.get("/api/transition-grants", async (req, reply) => {
     const me = currentUser(req as never);
-    if (!need(reply as never, me, "transition.grant")) return;
+    if (!need(reply as never, me, "audit.view")) return;
     const q = req.query as Record<string, string>;
-    return listActiveGrants(db, q.asOf ?? todayLocal());
+    if (q.history === "1") return listGrantHistory(db);
+    return listActiveGrants(db, todayLocal());
   });
 
   app.post("/api/transition-grants", async (req, reply) => {
@@ -618,6 +620,15 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
     const me = currentUser(req as never);
     if (!need(reply as never, me, "child.read")) return;
     return listOverridesByChild(db, (req.params as Record<string, string>).id);
+  });
+
+  // ---- audit trail (admin + reader) ----
+  app.get("/api/overrides", async (req, reply) => {
+    const me = currentUser(req as never);
+    if (!need(reply as never, me, "audit.view")) return;
+    const q = req.query as Record<string, string>;
+    const limit = q.limit ? Number(q.limit) : 200;
+    return listRecentOverrides(db, Number.isFinite(limit) ? limit : 200);
   });
 
   // ---- analytics (CENTRE only, transition rows excluded) ----
