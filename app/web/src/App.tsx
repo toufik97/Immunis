@@ -257,7 +257,7 @@ export default function App() {
               <Group gap="xs" wrap="nowrap">
                 {user && (
                   <Badge variant="light" color={user.role === "admin" ? "red" : user.role === "reader" ? "gray" : "teal"}>
-                    {user.username} · {user.role}
+                    {user.username} · {t(`role.${user.role}`)}
                   </Badge>
                 )}
                 <Button

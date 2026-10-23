@@ -38,6 +38,17 @@ describe("engine warning localization", () => {
     ).toContain("المكورات الرئوية");
   });
 
+  it("translates save-time lot and same-day blocks", () => {
+    const lot = "CENTRE dose requires a lot (FR-4.3) — or an active paper-transition grant with reason";
+    expect(formatEngineWarning(lot, "en")).toContain("paper-transition pass");
+    expect(formatEngineWarning(lot, "fr")).toContain("pass de transition papier");
+    expect(formatEngineWarning(lot, "ar")).toContain("تصريح انتقال");
+    const sameDay = "CENTRE doses must be recorded the same day — paper transition with a grant for older doses";
+    expect(formatEngineWarning(sameDay, "en")).toContain("same day only");
+    expect(formatEngineWarning(sameDay, "fr")).toContain("jour même");
+    expect(formatEngineWarning(sameDay, "ar")).toContain("نفس اليوم");
+  });
+
   it("translates spacing violations", () => {
     const raw = "SPACING_VIOLATION: PCV_PRIMOVAX too close to PENTA (0 days apart, minimum 15 days).";
     expect(formatEngineWarning(raw, "en")).toBe(

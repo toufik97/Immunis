@@ -176,6 +176,24 @@ export function recordVisit(
     }
   }
 
+  // Same-day care: a CENTRE dose with no lot is paper transition (checked
+  // above); a CENTRE dose with a lot must be given today, not back-dated.
+  // Only the transition pass may record older CENTRE doses.
+  for (const [i, d] of parsed.doses.entries()) {
+    if (d.origin === "CENTRE" && !d.transition && d.administeredOn !== parsed.date) {
+      throw new RecordGateError(400, [
+        {
+          doseIndex: i,
+          productGroupId: d.productGroupId,
+          administeredOn: d.administeredOn,
+          code: "CENTRE_SAME_DAY_ONLY",
+          message: "CENTRE doses must be recorded the same day — paper-transition with a grant for older doses",
+          overridable: false,
+        },
+      ]);
+    }
+  }
+
   // Spacing rules (e.g. PrimoVax 15d off DTP) live in the same rule book
   // the planner uses, so plan-conformant recordings pass by construction.
   // Only new doses are blamed; history already happened.

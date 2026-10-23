@@ -82,7 +82,7 @@ export default function UsersPanel() {
                     <Table.Td className="break-words">{u.username}</Table.Td>
                     <Table.Td className="break-words">{u.fullName}</Table.Td>
                     <Table.Td>
-                      <Badge color={roleColor(u.role)} variant="light">{u.role}</Badge>
+                      <Badge color={roleColor(u.role)} variant="light">{t(`role.${u.role}`)}</Badge>
                     </Table.Td>
                     <Table.Td>{u.active ? t("users.active") : t("users.inactive")}</Table.Td>
                     <Table.Td>
@@ -139,7 +139,7 @@ export default function UsersPanel() {
             name="nu-role"
             value={form.role}
             onChange={(v) => v && setForm({ ...form, role: v })}
-            data={["nurse", "admin", "reader"].map((r) => ({ value: r, label: r }))}
+            data={["nurse", "admin", "reader"].map((r) => ({ value: r, label: t(`role.${r}`) }))}
           />
           <PasswordInput label={t("auth.password")} name="nu-password" autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
           <Button onClick={() => void create()}>{t("users.create")}</Button>

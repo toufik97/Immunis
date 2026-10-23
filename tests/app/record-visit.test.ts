@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { openTestDb } from "./db-helper";
 import { loadSchedulePack } from "../../src/infra/packs/loader";
 import { createChild } from "../../src/infra/repos/children";
-import { addLot } from "../../src/infra/repos/stock";
+import { addLot, getLot } from "../../src/infra/repos/stock";
 import { listDosesByChild } from "../../src/infra/repos/encounters";
 import { listOverridesByChild } from "../../src/infra/repos/audit";
 import { recordVisit, RecordGateError } from "../../src/app/record-visit";
@@ -184,6 +184,30 @@ describe("record gate (engine cross-check)", () => {
         doses: [dose("NOPE", "2026-03-01")],
       })
     ).toThrow(/UNKNOWN_PRODUCT/);
+    db.close();
+  });
+
+  it("blocks back-dated CENTRE doses, allows them only as paper transition", () => {
+    const { db, child, lot } = setup();
+    const penta = lot("PENTA");
+    // Yesterday's dose as plain CENTRE: blocked, same-day only.
+    expect(() =>
+      recordVisit(db, pack, child.birthDate, [], {
+        childId: child.id,
+        date: "2026-03-02",
+        screening: "VACCINATE",
+        doses: [{ ...dose("PENTA", "2026-03-01"), lotId: penta.id }],
+      })
+    ).toThrow(/CENTRE_SAME_DAY_ONLY/);
+    // Same payload with a grant: recorded as transition, stock untouched.
+    recordVisit(db, pack, child.birthDate, [], {
+      childId: child.id,
+      date: "2026-03-02",
+      screening: "VACCINATE",
+      doses: [{ ...dose("PENTA", "2026-03-01") }],
+      transition: { allowed: true, source: "paper-transition", reason: "paper move week" },
+    });
+    expect(getLot(db, penta.id)?.qtyOnHand).toBe(5);
     db.close();
   });
 });

@@ -255,6 +255,26 @@ const TEMPLATES: Template[] = [
       ar: fill("{product} قريب جداً من {other} (الفارق {gap} أيام، الأدنى {min} أيام).", p),
     }),
   },
+  {
+    code: "ENGINE_NOTICE",
+    match: /requires a lot \(FR-4\.3\)/,
+    names: [],
+    text: () => ({
+      en: "Centre dose needs a lot, or a paper-transition pass with a reason.",
+      fr: "Dose centre : lot requis, ou pass de transition papier avec motif.",
+      ar: "جرعة المركز تحتاج دفعة، أو تصريح انتقال ورقي مع سبب.",
+    }),
+  },
+  {
+    code: "ENGINE_NOTICE",
+    match: /must be recorded the same day/,
+    names: [],
+    text: () => ({
+      en: "Centre doses are recorded the same day only — paper transition with a pass for older doses.",
+      fr: "Doses centre le jour même uniquement — transition papier avec pass pour les doses anciennes.",
+      ar: "جرعات المركز تُسجَّل في نفس اليوم فقط — انتقال ورقي بتصريح للجرعات القديمة.",
+    }),
+  },
   // ---- clinician-facing sentences without a machine code
   {
     code: "ENGINE_NOTICE",
