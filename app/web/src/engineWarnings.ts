@@ -267,6 +267,16 @@ const TEMPLATES: Template[] = [
   },
   {
     code: "ENGINE_NOTICE",
+    match: /must be recorded for today/,
+    names: [],
+    text: () => ({
+      en: "Centre visits are recorded for today only — paper transition with a pass for past dates.",
+      fr: "Visites centre le jour même uniquement — transition papier avec pass pour les dates passées.",
+      ar: "زيارات المركز تُسجَّل بتاريخ اليوم فقط — انتقال ورقي بتصريح للتواريخ الماضية.",
+    }),
+  },
+  {
+    code: "ENGINE_NOTICE",
     match: /must be recorded the same day/,
     names: [],
     text: () => ({

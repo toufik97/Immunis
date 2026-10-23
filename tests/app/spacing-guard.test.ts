@@ -60,7 +60,7 @@ describe("spacing guard (saving-time rule-book check)", () => {
       date: "2026-03-01",
       screening: "VACCINATE",
       doses: [{ ...dose("PENTA", "2026-03-01"), lotId: penta.id }],
-    });
+    }, { today: "2026-03-01" });
     let gate: RecordGateError | null = null;
     try {
       recordVisit(db, pack, child.birthDate, listDosesByChild(db, child.id), {
@@ -68,7 +68,7 @@ describe("spacing guard (saving-time rule-book check)", () => {
         date: "2026-03-01",
         screening: "VACCINATE",
         doses: [{ ...dose("PCV_PRIMOVAX", "2026-03-01"), lotId: pcv.id }],
-      });
+      }, { today: "2026-03-01" });
     } catch (e) {
       gate = e as RecordGateError;
     }
@@ -82,7 +82,7 @@ describe("spacing guard (saving-time rule-book check)", () => {
       screening: "VACCINATE",
       doses: [{ ...dose("PCV_PRIMOVAX", "2026-03-01"), overridden: true, lotId: pcv.id }],
       overrideReason: "clinician decision, single trip family",
-    });
+    }, { today: "2026-03-01" });
     db.close();
   });
 });

@@ -89,6 +89,22 @@ export function recordVisit(
     id: randomUUID(),
   });
   validateEncounterDates(parsed, today);
+  // Real care happens today: a visit with CENTRE doses must be dated today.
+  // Only a paper-transition grant (old paper moved as CENTRE) may use past
+  // dates. EXTERNAL-only transcription keeps its own past dates.
+  const hasCentre = parsed.doses.some((d) => d.origin === "CENTRE");
+  if (hasCentre && parsed.date !== today && !input.transition?.allowed) {
+    throw new RecordGateError(400, [
+      {
+        doseIndex: -1,
+        productGroupId: "",
+        administeredOn: parsed.date,
+        code: "CENTRE_VISIT_MUST_BE_TODAY",
+        message: "CENTRE visits must be recorded for today — paper-transition with a grant for past dates",
+        overridable: false,
+      },
+    ]);
+  }
   if (parsed.screening !== "VACCINATE" && parsed.doses.length > 0) {
     throw new RecordGateError(400, [
       {

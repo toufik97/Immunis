@@ -40,7 +40,7 @@ describe("record gate (engine cross-check)", () => {
       screening: "VACCINATE",
       doses: [{ ...dose("PENTA", "2026-03-01"), lotId: penta.id }],
       nextAppointmentDate: "2026-04-01",
-    });
+    }, { today: "2026-03-01" });
     expect(encounter.id).toBeTruthy();
     expect(listDosesByChild(db, child.id)).toHaveLength(1);
     // The appointment carries the planner's next-visit products (session prep).
@@ -64,21 +64,21 @@ describe("record gate (engine cross-check)", () => {
         date: "2026-03-01",
         screening: "VACCINATE",
         doses: [d, { ...d }],
-      })
+      }, { today: "2026-03-01" })
     ).toThrow(/duplicate/i);
     recordVisit(db, pack, child.birthDate, [], {
       childId: child.id,
       date: "2026-03-01",
       screening: "VACCINATE",
       doses: [d],
-    });
+    }, { today: "2026-03-01" });
     expect(() =>
       recordVisit(db, pack, child.birthDate, listDosesByChild(db, child.id), {
         childId: child.id,
         date: "2026-03-01",
         screening: "VACCINATE",
         doses: [{ ...dose("PENTA", "2026-03-01"), lotId: penta.id }],
-      })
+      }, { today: "2026-03-01" })
     ).toThrow(/duplicate/i);
     db.close();
   });
@@ -94,7 +94,7 @@ describe("record gate (engine cross-check)", () => {
     };
     let gate: RecordGateError | null = null;
     try {
-      recordVisit(db, pack, child.birthDate, [], input);
+      recordVisit(db, pack, child.birthDate, [], input, { today: "2026-09-20" });
     } catch (e) {
       gate = e as RecordGateError;
     }
@@ -108,7 +108,7 @@ describe("record gate (engine cross-check)", () => {
       recordVisit(db, pack, child.birthDate, [], {
         ...input,
         doses: [{ ...input.doses[0], overridden: true }],
-      })
+      }, { today: "2026-09-20" })
     ).toThrow(RecordGateError);
 
     // Override with a reason records and audits.
@@ -116,7 +116,7 @@ describe("record gate (engine cross-check)", () => {
       ...input,
       doses: [{ ...input.doses[0], overridden: true }],
       overrideReason: "session day fell 2 days before 6 weeks, clinician approved",
-    });
+    }, { today: "2026-09-20" });
     expect(listDosesByChild(db, child.id)).toHaveLength(1);
     const audit = listOverridesByChild(db, child.id);
     expect(audit).toHaveLength(1);
@@ -134,7 +134,7 @@ describe("record gate (engine cross-check)", () => {
         screening: "VACCINATE",
         doses: [{ ...dose("ROTAVIRUS", "2026-10-09", { overridden: true, lotId: rota.id }) }],
         overrideReason: "nurse insists",
-      })
+      }, { today: "2026-10-09" })
     ).toThrow(/TOO_LATE/);
     expect(listDosesByChild(db, child.id)).toHaveLength(0);
     db.close();
@@ -148,7 +148,7 @@ describe("record gate (engine cross-check)", () => {
       date: "2026-03-01",
       screening: "VACCINATE",
       doses: [{ ...dose("PENTA", "2026-03-01"), lotId: penta.id }],
-    });
+    }, { today: "2026-03-01" });
     expect(listDue(db, "2026-04-01")).toHaveLength(0);
     expect(db.prepare("SELECT COUNT(*) AS n FROM appointments").get()).toEqual({ n: 0 });
     db.close();
@@ -182,7 +182,7 @@ describe("record gate (engine cross-check)", () => {
         date: "2026-03-01",
         screening: "VACCINATE",
         doses: [dose("NOPE", "2026-03-01")],
-      })
+      }, { today: "2026-03-01" })
     ).toThrow(/UNKNOWN_PRODUCT/);
     db.close();
   });
@@ -197,7 +197,7 @@ describe("record gate (engine cross-check)", () => {
         date: "2026-03-02",
         screening: "VACCINATE",
         doses: [{ ...dose("PENTA", "2026-03-01"), lotId: penta.id }],
-      })
+      }, { today: "2026-03-02" })
     ).toThrow(/CENTRE_SAME_DAY_ONLY/);
     // Same payload with a grant: recorded as transition, stock untouched.
     recordVisit(db, pack, child.birthDate, [], {
@@ -207,6 +207,34 @@ describe("record gate (engine cross-check)", () => {
       doses: [{ ...dose("PENTA", "2026-03-01") }],
       transition: { allowed: true, source: "paper-transition", reason: "paper move week" },
     });
+    expect(getLot(db, penta.id)?.qtyOnHand).toBe(5);
+    db.close();
+  });
+
+  it("blocks back-dated CENTRE visits without a grant, allows them with one", () => {
+    const { db, child, lot } = setup();
+    const penta = lot("PENTA");
+    // Visit dated in the past, recorded "today": blocked even with a lot.
+    expect(() =>
+      recordVisit(db, pack, child.birthDate, [], {
+        childId: child.id,
+        date: "2026-03-01",
+        screening: "VACCINATE",
+        doses: [{ ...dose("PENTA", "2026-03-01"), lotId: penta.id }],
+      }, { today: "2026-03-02" })
+    ).toThrow(/CENTRE_VISIT_MUST_BE_TODAY/);
+    expect(listDosesByChild(db, child.id)).toHaveLength(0);
+    // Same payload with an active paper-transition grant: recorded, stock untouched.
+    recordVisit(db, pack, child.birthDate, [], {
+      childId: child.id,
+      date: "2026-03-01",
+      screening: "VACCINATE",
+      doses: [{ ...dose("PENTA", "2026-03-01") }],
+      transition: { allowed: true, source: "paper-transition", reason: "paper move week" },
+    }, { today: "2026-03-02" });
+    const doses = listDosesByChild(db, child.id);
+    expect(doses).toHaveLength(1);
+    expect(doses[0].transition).toBe(true);
     expect(getLot(db, penta.id)?.qtyOnHand).toBe(5);
     db.close();
   });

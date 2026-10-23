@@ -67,7 +67,7 @@ describe("history seam (single DoseRecord → engine mapping)", () => {
         date: "2026-03-01",
         screening: "VACCINATE",
         doses: [{ ...dose("VITA_100K", "2026-03-01") }],
-      })
+      }, { today: "2026-03-01" })
     ).toThrow(/duplicate/i);
     db.close();
   });
@@ -97,7 +97,7 @@ describe("recordVisit atomic commit (gate + store + audit)", () => {
           doses: [{ ...dose("PENTA", "2026-03-01"), lotId: bad.id }],
           nextAppointmentDate: "2026-04-01",
         },
-        { today: "2026-10-09", nowIso: "2026-10-09T00:00:00.000Z" }
+        { today: "2026-03-01", nowIso: "2026-10-09T00:00:00.000Z" }
       )
     ).toThrow(/not usable/);
     expect(listDosesByChild(db, child.id)).toHaveLength(0);
@@ -134,7 +134,7 @@ describe("recordVisit atomic commit (gate + store + audit)", () => {
           screening: "VACCINATE",
           doses: [{ ...dose("PENTA", "2026-09-20"), lotId: penta.id }],
         },
-        { today: "2026-10-09", nowIso }
+        { today: "2026-09-20", nowIso }
       );
     } catch (e) {
       gate = e as RecordGateError;
@@ -154,7 +154,7 @@ describe("recordVisit atomic commit (gate + store + audit)", () => {
         doses: [{ ...dose("PENTA", "2026-09-20"), lotId: penta.id, overridden: true }],
         overrideReason: "clinician approved",
       },
-      { today: "2026-10-09", nowIso }
+      { today: "2026-09-20", nowIso }
     );
     expect(encounter.id).toBeTruthy();
     expect(waived.length).toBeGreaterThan(0);
@@ -182,7 +182,7 @@ describe("recordVisit atomic commit (gate + store + audit)", () => {
           screening: "DEFER",
           doses: [{ ...dose("PENTA", "2026-03-01") }],
         },
-        { today: "2026-10-09" }
+        { today: "2026-03-01" }
       )
     ).toThrow(RecordGateError);
     expect(listDosesByChild(db, child.id)).toHaveLength(0);

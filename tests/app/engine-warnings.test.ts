@@ -47,6 +47,10 @@ describe("engine warning localization", () => {
     expect(formatEngineWarning(sameDay, "en")).toContain("same day only");
     expect(formatEngineWarning(sameDay, "fr")).toContain("jour même");
     expect(formatEngineWarning(sameDay, "ar")).toContain("نفس اليوم");
+    const visitToday = "CENTRE visits must be recorded for today — paper-transition with a grant for past dates";
+    expect(formatEngineWarning(visitToday, "en")).toContain("for today only");
+    expect(formatEngineWarning(visitToday, "fr")).toContain("jour même");
+    expect(formatEngineWarning(visitToday, "ar")).toContain("اليوم فقط");
   });
 
   it("translates spacing violations", () => {
