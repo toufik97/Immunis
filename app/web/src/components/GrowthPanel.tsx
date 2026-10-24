@@ -1,34 +1,32 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Badge, Group, SegmentedControl, Stack, Table, Text, Title } from "@mantine/core";
+import { ActionIcon, Badge, Group, SegmentedControl, Stack, Table, Text, Title } from "@mantine/core";
+import { IconChevronDown, IconChevronUp } from "@tabler/icons-react";
 import { api } from "../api";
 import { formatCivilDate, formatCount } from "../format";
+import { bandColor, bandOf, interpKey, type Indicator } from "../growthLive";
 
-type Indicator = "wfa" | "lhfa" | "bfa";
 type Point = Awaited<ReturnType<typeof api.childGrowth>>["points"][number];
 type Refs = Awaited<ReturnType<typeof api.childGrowth>>["refs"];
 
-function bandOf(z: number | null): "low3" | "low2" | "ok" | "high2" | "high3" | null {
-  if (z === null || !Number.isFinite(z)) return null;
-  if (z < -3) return "low3";
-  if (z < -2) return "low2";
-  if (z <= 2) return "ok";
-  if (z <= 3) return "high2";
-  return "high3";
-}
-
-function interpKey(ind: Indicator, band: ReturnType<typeof bandOf>): string | null {
-  if (!band) return null;
-  if (band === "low3" || band === "low2" || band === "ok") return `growth.${ind}.${band}`;
-  if (ind === "bfa") return `growth.bfa.${band}`;
-  return `growth.${ind}.high`;
-}
-
-function bandColor(band: ReturnType<typeof bandOf>): string {
-  if (band === "low3" || band === "high3") return "red";
-  if (band === "low2") return "orange";
-  if (band === "ok") return "teal";
-  return "yellow";
+/** Shared reference fetch: the visit form uses it for live words while typing. */
+export function useGrowthRefs(childId: string): Refs | null {
+  const [refs, setRefs] = useState<Refs | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .childGrowth(childId)
+      .then((r) => {
+        if (!cancelled) setRefs(r.refs);
+      })
+      .catch(() => {
+        if (!cancelled) setRefs(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [childId]);
+  return refs;
 }
 
 const VALUE_OF: Record<Indicator, (p: Point) => number | null> = {
@@ -133,24 +131,19 @@ export default function GrowthPanel({
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
   const [points, setPoints] = useState<Point[]>([]);
-  const [refs, setRefs] = useState<Refs | null>(null);
+  const refs = useGrowthRefs(childId);
   const [tab, setTab] = useState<Indicator>("wfa");
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     void api
       .childGrowth(childId)
       .then((r) => {
-        if (!cancelled) {
-          setPoints(r.points);
-          setRefs(r.refs);
-        }
+        if (!cancelled) setPoints(r.points);
       })
       .catch(() => {
-        if (!cancelled) {
-          setPoints([]);
-          setRefs(null);
-        }
+        if (!cancelled) setPoints([]);
       });
     return () => {
       cancelled = true;
@@ -171,9 +164,20 @@ export default function GrowthPanel({
 
   return (
     <Stack gap="sm" mt="md">
-      <Title order={3} size="h5">
-        {t("growth.title")}
-      </Title>
+      <Group justify="space-between" wrap="nowrap">
+        <Title order={3} size="h5">
+          {t("growth.title")}
+        </Title>
+        {points.length > 0 && (
+          <ActionIcon
+            variant="subtle"
+            aria-label={open ? t("growth.hide") : t("growth.show")}
+            onClick={() => setOpen((o) => !o)}
+          >
+            {open ? <IconChevronUp size={16} aria-hidden="true" /> : <IconChevronDown size={16} aria-hidden="true" />}
+          </ActionIcon>
+        )}
+      </Group>
       {points.length === 0 ? (
         <Text size="sm" c="dimmed">
           {t("growth.nodata")}
@@ -209,6 +213,8 @@ export default function GrowthPanel({
               {t("growth.outOfRange")}
             </Text>
           )}
+          {open && (
+            <>
           <SegmentedControl
             size="xs"
             value={tab}
@@ -251,6 +257,8 @@ export default function GrowthPanel({
               </Table.Tbody>
             </Table>
           </Table.ScrollContainer>
+            </>
+          )}
         </>
       )}
     </Stack>

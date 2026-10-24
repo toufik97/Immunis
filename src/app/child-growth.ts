@@ -1,11 +1,13 @@
 import type Database from "better-sqlite3";
 import { listGrowthMeasures } from "../infra/repos/encounters";
 import { scorePoint, valueAtZ, type GrowthPoint } from "../growth/zscore";
+import tables from "../growth/tables.json";
 
 export interface GrowthRefs {
   neg2: number[];
   med: number[];
   pos2: number[];
+  lms: [number, number, number][];
 }
 
 /**
@@ -30,7 +32,8 @@ export function growthFor(
       med.push(valueAtZ(ind, input.sex, days, 0) ?? NaN);
       pos2.push(valueAtZ(ind, input.sex, days, 2) ?? NaN);
     }
-    refs[ind] = { neg2, med, pos2 };
+    const lms = (tables as unknown as Record<string, Record<string, [number, number, number][]>>)[ind][input.sex];
+    refs[ind] = { neg2, med, pos2, lms };
   });
   return { points: points.map((m) => scorePoint(input.birthDate, input.sex, m.date, m.weightKg, m.heightCm)), refs };
 }

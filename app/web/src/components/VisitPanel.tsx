@@ -34,7 +34,8 @@ import { formatEngineWarning } from "../engineWarnings";
 import ChildCard from "./ChildCard";
 import DateField from "./DateField";
 import EvalRail from "./EvalRail";
-import GrowthPanel from "./GrowthPanel";
+import GrowthPanel, { useGrowthRefs } from "./GrowthPanel";
+import { bandColor, interpKey, scoreLive, type Indicator } from "../growthLive";
 
 interface Props {
   child: Child;
@@ -347,6 +348,13 @@ export default function VisitPanel({ child, products, programs, expectedProducts
     }
   }
 
+  // Live growth words while typing (same math as the saved result).
+  const growthRefs = useGrowthRefs(child.id);
+  const liveWeight = weightKg.trim() === "" ? null : Number(weightKg);
+  const liveHeight = heightCm.trim() === "" ? null : Number(heightCm);
+  const live = scoreLive(growthRefs, child.sex, child.birthDate, visitDate, liveWeight, liveHeight);
+  const liveReady = live !== null && (liveWeight !== null || liveHeight !== null);
+
   return (
     <Grid>
       <Grid.Col span={{ base: 12, lg: 8 }}>
@@ -455,6 +463,23 @@ export default function VisitPanel({ child, products, programs, expectedProducts
             />
           </Grid.Col>
         </Grid>
+        {liveReady && live && (
+          <Group gap="xs" wrap="wrap" aria-live="polite">
+            <Text size="xs" c="dimmed">
+              {t("growth.today", { date: formatCivilDate(visitDate, lang) })}:
+            </Text>
+            {(["wfa", "lhfa", "bfa"] as Indicator[]).map((ind) => {
+              const band = live[ind].band;
+              const key = interpKey(ind, band);
+              if (!key) return null;
+              return (
+                <Badge key={ind} size="sm" color={bandColor(band)} variant="light">
+                  {t(key)}
+                </Badge>
+              );
+            })}
+          </Group>
+        )}
 
         <Title order={3} size="h5">
           {t("visit.newDoses")}

@@ -215,7 +215,7 @@ export const api = {
         bmi: number | null;
         z: { wfa: number | null; lhfa: number | null; bfa: number | null };
       }[];
-      refs: Record<"wfa" | "lhfa" | "bfa", { neg2: number[]; med: number[]; pos2: number[] }>;
+      refs: Record<"wfa" | "lhfa" | "bfa", { neg2: number[]; med: number[]; pos2: number[]; lms: [number, number, number][] }>;
     }>(`/api/children/${childId}/growth`),
 
   outbox: () => req<{ id: string; kind: string }[]>("/api/outbox"),

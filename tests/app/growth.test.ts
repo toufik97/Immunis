@@ -5,6 +5,8 @@ import { buildApp } from "../../src/api/app";
 import { ageDaysBetween, bandOf, lmsAt, scorePoint, zScore } from "../../src/growth/zscore";
 import { growthFor } from "../../src/app/child-growth";
 import { recordEncounter } from "../../src/infra/repos/encounters";
+import tables from "../../src/growth/tables.json";
+import { scoreLive } from "../../app/web/src/growthLive";
 
 const pack = loadSchedulePack("MA");
 
@@ -81,5 +83,34 @@ describe("WHO growth scores", () => {
     expect(body.points).toEqual([]);
     expect(body.refs.wfa.med).toHaveLength(61);
     db.close();
+  });
+
+  it("live preview matches the saved server score", () => {
+    const t = tables as unknown as Record<string, Record<string, [number, number, number][]>>;
+    const refs = {
+      wfa: { neg2: [], med: [], pos2: [], lms: t.wfa.M },
+      lhfa: { neg2: [], med: [], pos2: [], lms: t.lhfa.M },
+      bfa: { neg2: [], med: [], pos2: [], lms: t.bfa.M },
+    };
+    const cases: [string, string, number | null, number | null][] = [
+      ["2026-01-01", "2026-01-01", 3.3464, 49.9],
+      ["2026-01-01", "2026-07-01", 7.8, 66],
+      ["2026-01-01", "2027-06-15", 11.2, 80.5],
+      ["2026-01-01", "2026-04-01", 5, null],
+    ];
+    for (const [birth, date, w, h] of cases) {
+      const saved = scorePoint(birth, "M", date, w, h);
+      const live = scoreLive(refs, "M", birth, date, w, h)!;
+      for (const ind of ["wfa", "lhfa", "bfa"] as const) {
+        const a = saved.z[ind];
+        const b = live[ind].z;
+        if (a === null || b === null) {
+          expect(b).toBe(a);
+        } else {
+          expect(Math.abs(a - b)).toBeLessThan(1e-9);
+        }
+      }
+      expect(live.wfa.band).toBe(bandOf(saved.z.wfa));
+    }
   });
 });
