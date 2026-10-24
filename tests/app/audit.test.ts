@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { openTestDb, adminHeaders } from "./db-helper";
 import { createChild } from "../../src/infra/repos/children";
-import { insertOverride, listOverridesByChild, listRecentOverrides } from "../../src/infra/repos/audit";
+import { insertOverride, listOverridesByChild, listRecentOverrides, listAuditLog } from "../../src/infra/repos/audit";
 import { createUser } from "../../src/infra/repos/auth";
 import { loadSchedulePack } from "../../src/infra/packs/loader";
 import { buildApp } from "../../src/api/app";
@@ -56,6 +56,36 @@ describe("override audit trail", () => {
     createUser(db, { username: "n1", fullName: "N One", role: "nurse", password: "password-123", createdAt: "2026-10-13T10:00:00.000Z" });
     const login = JSON.parse((await app.inject({ method: "POST", url: "/api/auth/login", payload: { username: "n1", password: "password-123" } })).body) as { sessionId: string };
     expect((await app.inject({ method: "GET", url: "/api/overrides", headers: { "x-api-token": login.sessionId } })).statusCode).toBe(403);
+    db.close();
+  });
+
+  it("records every human write in the action log, newest first", async () => {
+    const db = openTestDb();
+    const app = buildApp(db, pack);
+    const admin = await adminHeaders(db, app);
+    // Register a child + add a lot + record a visit.
+    const child = JSON.parse((await app.inject({ method: "POST", url: "/api/children", headers: admin, payload: { familyName: "A", givenName: "A", birthDate: "2025-01-01", sex: "M" } })).body) as { id: string };
+    await app.inject({ method: "POST", url: "/api/lots", headers: admin, payload: { productGroupId: "BCG", lotNumber: "L1", expiryDate: "2027-01-01", coldChainOk: true, qtyOnHand: 5 } });
+    const lots = JSON.parse((await app.inject({ method: "GET", url: "/api/lots?product=BCG", headers: admin })).body) as { id: string }[];
+    const { todayLocal } = await import("../../src/infra/time");
+    const today = todayLocal();
+    await app.inject({
+      method: "POST",
+      url: "/api/encounters",
+      headers: admin,
+      payload: { childId: child.id, birthDate: "2025-01-01", date: today, screening: "VACCINATE", doses: [{ productGroupId: "BCG", administeredOn: today, origin: "CENTRE", overridden: false, recordedBy: "x", lotId: lots[0].id }] },
+    });
+    const rows = listAuditLog(db, 50);
+    const actions = rows.map((r) => r.action);
+    for (const a of ["encounter.record", "stock.lot_add", "child.register", "auth.login"]) {
+      expect(actions).toContain(a);
+    }
+    expect(rows[0].createdAt >= rows[rows.length - 1].createdAt).toBe(true);
+    // Served to audit viewers, blocked for nurses, bounded.
+    expect((await app.inject({ method: "GET", url: "/api/audit" })).statusCode).toBe(401);
+    expect((await app.inject({ method: "GET", url: "/api/audit", headers: admin })).statusCode).toBe(200);
+    const one = JSON.parse((await app.inject({ method: "GET", url: "/api/audit?limit=1", headers: admin })).body) as unknown[];
+    expect(one).toHaveLength(1);
     db.close();
   });
 });

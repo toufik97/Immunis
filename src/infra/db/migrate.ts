@@ -41,6 +41,16 @@ const NEW_TABLES: string[] = [
   revoked_at TEXT,
   created_at TEXT NOT NULL
 )`,
+  `CREATE TABLE IF NOT EXISTS audit_log (
+  id TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL,
+  user_id TEXT REFERENCES users(id),
+  username TEXT NOT NULL,
+  action TEXT NOT NULL,
+  details TEXT,
+  child_id TEXT REFERENCES children(id)
+)`,
+  `CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_transition_grants_user ON transition_grants(user_id)`,
 ];
 

@@ -96,6 +96,18 @@ BEGIN
   SELECT RAISE(ABORT, 'overrides is append-only');
 END;
 
+-- Who-did-what trail: every write (login, users, lots, visits, passes...), never reads.
+CREATE TABLE IF NOT EXISTS audit_log (
+  id TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL, -- UTC ISO
+  user_id TEXT REFERENCES users(id),
+  username TEXT NOT NULL,   -- kept as text so failed logins are traceable
+  action TEXT NOT NULL,      -- e.g. auth.login, child.register, encounter.record
+  details TEXT,              -- short human text, no secrets
+  child_id TEXT REFERENCES children(id)
+);
+CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
+
 -- Annual per-centre registry counter for "xx/yy" local ids (FR-1.4).
 CREATE TABLE IF NOT EXISTS id_counters (
   centre_id TEXT NOT NULL,

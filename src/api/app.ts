@@ -13,7 +13,7 @@ import { recordVisit, RecordGateError } from "../app/record-visit";
 import { addLot, listLots, checkLotUsable, usableLotsFor } from "../infra/repos/stock";
 import { createAppointment, markAppointment } from "../infra/repos/appointments";
 import { noShowsFor, sessionFor, agendaFor } from "../app/sessions";
-import { insertOverride, listOverridesByChild, listRecentOverrides } from "../infra/repos/audit";
+import { insertOverride, listOverridesByChild, listRecentOverrides, insertAuditLog, listAuditLog } from "../infra/repos/audit";
 import { countCentreDosesByProduct } from "../app/analytics";
 import { exportCentre, listPendingOutbox, countPendingOutbox, ackOutbox } from "../infra/sync/sync";
 import { DoseRecordSchema, ScreeningResultSchema } from "../domain/encounter";
@@ -155,6 +155,28 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
     return true;
   }
 
+  /** One audit row per human write. Never throws: logging must not break care. */
+  function log(
+    me: { id: string; username: string } | null,
+    username: string,
+    action: string,
+    details?: string,
+    childId?: string
+  ): void {
+    try {
+      insertAuditLog(db, {
+        userId: me?.id ?? null,
+        username,
+        action,
+        details,
+        childId,
+        createdAt: nowIso(),
+      });
+    } catch {
+      /* audit insert failure must not break the write itself */
+    }
+  }
+
   const PUBLIC = new Set(["POST /api/auth/login", "POST /api/auth/bootstrap", "GET /api/health", "GET /api/auth/status"]);
   app.addHook("onRequest", async (req, reply) => {
     const key = `${req.method} ${(req.url as string).split("?")[0]}`;
@@ -191,6 +213,7 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
         })
         .parse(req.body);
       const user = bootstrapFirstAdmin(db, input);
+      log(null, input.username, "auth.bootstrap", `first admin ${input.username}`);
       reply.code(201).send({ user });
     } catch (e) {
       const status = (e as { status?: number }).status;
@@ -207,18 +230,37 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
         "Set-Cookie",
         `${SESSION_COOKIE}=${encodeURIComponent(sessionId)}; HttpOnly; Path=/; SameSite=Lax; Max-Age=43200`
       );
+      log(user, user.username, "auth.login");
       return { user, sessionId };
     } catch (e) {
       const status = (e as { status?: number }).status;
-      if (status === 401) return reply.code(401).send({ error: (e as Error).message });
-      if (status === 423) return reply.code(423).send({ error: (e as Error).message });
+      if (status === 401) {
+        try {
+          const body = (req.body ?? {}) as Record<string, unknown>;
+          if (typeof body["username"] === "string") log(null, body["username"], "auth.login_failed");
+        } catch {
+          /* ignore */
+        }
+        return reply.code(401).send({ error: (e as Error).message });
+      }
+      if (status === 423) {
+        try {
+          const body = (req.body ?? {}) as Record<string, unknown>;
+          if (typeof body["username"] === "string") log(null, body["username"], "auth.locked");
+        } catch {
+          /* ignore */
+        }
+        return reply.code(423).send({ error: (e as Error).message });
+      }
       sendError(reply, e);
     }
   });
 
   app.post("/api/auth/logout", async (req, reply) => {
+    const me = currentUser(req as never);
     const sid = sessionIdFrom(req as never);
     if (sid) logout(db, sid);
+    if (me) log(me, me.username, "auth.logout");
     (reply as unknown as { header(n: string, v: string): void }).header(
       "Set-Cookie",
       `${SESSION_COOKIE}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0`
@@ -243,6 +285,7 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
         return reply.code(401).send({ error: "current password is wrong" });
       }
       setUserPassword(db, me.id, input.newPassword, false);
+      log(me, me.username, "auth.password_change");
       return { ok: true };
     } catch (e) {
       sendError(reply, e);
@@ -270,6 +313,7 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
         })
         .parse(req.body);
       const user = createUser(db, { ...input, createdAt: nowIso() });
+      log(me!, me!.username, "user.create", `${input.username} (${input.role})`);
       reply.code(201).send({ user });
     } catch (e) {
       sendError(reply, e);
@@ -304,11 +348,18 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
           return;
         }
       }
-      if (input.active !== undefined) setUserActive(db, id, input.active);
+      if (input.active !== undefined) {
+        setUserActive(db, id, input.active);
+        log(me!, me!.username, input.active ? "user.enable" : "user.disable", target.username);
+      }
       if (input.role !== undefined) {
         db.prepare("UPDATE users SET role = ? WHERE id = ?").run(input.role, id);
+        log(me!, me!.username, "user.role_change", `${target.username} → ${input.role}`);
       }
-      if (input.password !== undefined) setUserPassword(db, id, input.password, true);
+      if (input.password !== undefined) {
+        setUserPassword(db, id, input.password, true);
+        log(me!, me!.username, "user.password_reset", target.username);
+      }
       if (input.active === false) deleteUserSessions(db, id);
       return { ok: true };
     } catch (e) {
@@ -337,6 +388,8 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
         return;
       }
       const id = grantTransition(db, { ...input, grantedBy: me!.id, createdAt: nowIso() });
+      const target = getUserById(db, input.userId);
+      log(me!, me!.username, "transition.grant", `${target?.username ?? input.userId}: ${input.reason} until ${input.expiresAt}`);
       reply.code(201).send({ id });
     } catch (e) {
       sendError(reply, e);
@@ -350,6 +403,7 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
       reply.code(404).send({ error: "Grant not found" });
       return;
     }
+    log(me!, me!.username, "transition.revoke", (req.params as Record<string, string>).id);
     return { ok: true };
   });
 
@@ -394,6 +448,7 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
         return;
       }
       reply.code(201).send(result.child);
+      log(me!, me!.username, "child.register", `${result.child.givenName} ${result.child.familyName}`, result.child.id);
     } catch (e) {
       sendError(reply, e);
     }
@@ -454,6 +509,8 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
           doses,
           transition: { allowed: transitionAllowed, source: "paper-transition", reason: input.transitionReason ?? "" },
         });
+        const given = doses.filter((d) => d.origin === "CENTRE").map((d) => d.productGroupId);
+        log(me, me.username, "encounter.record", `${child.givenName} ${child.familyName} visit ${input.date}${given.length ? ` (${given.join(", ")})` : ""}${doses.some((d) => d.origin === "CENTRE" && !d.lotId) ? " [transition]" : ""}`, child.id);
         reply.code(201).send(encounter);
       } catch (e) {
         if (e instanceof RecordGateError) {
@@ -472,7 +529,9 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
     try {
       const me = currentUser(req as never);
       if (!need(reply as never, me, "stock.add")) return;
-      reply.code(201).send(addLot(db, LotInput.parse(req.body)));
+      const lot = addLot(db, LotInput.parse(req.body));
+      log(me!, me!.username, "stock.lot_add", `${lot.productGroupId} ${lot.lotNumber} exp ${lot.expiryDate} x${lot.qtyOnHand}`);
+      reply.code(201).send(lot);
     } catch (e) {
       sendError(reply, e);
     }
@@ -551,7 +610,9 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
         reply.code(404).send({ error: "Child not found" });
         return;
       }
-      reply.code(201).send(createAppointment(db, input));
+      const appt = createAppointment(db, input);
+      log(me!, me!.username, "appointment.create", `${input.childId} due ${input.dueDate}`, input.childId);
+      reply.code(201).send(appt);
     } catch (e) {
       sendError(reply, e);
     }
@@ -562,10 +623,17 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
       const me = currentUser(req as never);
       if (!need(reply as never, me, "appointment.manage")) return;
       const { kept } = z.object({ kept: z.boolean() }).parse(req.body);
-      if (!markAppointment(db, (req.params as Record<string, string>).id, kept)) {
+      const id = (req.params as Record<string, string>).id;
+      const row = db.prepare("SELECT child_id FROM appointments WHERE id = ?").get(id) as { child_id: string } | undefined;
+      if (!row) {
         reply.code(404).send({ error: "Appointment not found" });
         return;
       }
+      if (!markAppointment(db, id, kept)) {
+        reply.code(404).send({ error: "Appointment not found" });
+        return;
+      }
+      log(me!, me!.username, kept ? "appointment.kept" : "appointment.missed", undefined, row.child_id);
       return { ok: true };
     } catch (e) {
       sendError(reply, e);
@@ -631,6 +699,14 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
     return listRecentOverrides(db, Number.isFinite(limit) ? limit : 200);
   });
 
+  app.get("/api/audit", async (req, reply) => {
+    const me = currentUser(req as never);
+    if (!need(reply as never, me, "audit.view")) return;
+    const q = req.query as Record<string, string>;
+    const limit = q.limit ? Number(q.limit) : 200;
+    return listAuditLog(db, Number.isFinite(limit) ? limit : 200);
+  });
+
   // ---- analytics (CENTRE only, transition rows excluded) ----
   app.get("/api/analytics/doses", async (req, reply) => {
     const me = currentUser(req as never);
@@ -642,6 +718,7 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
   app.get("/api/backup", async (req, reply) => {
     const me = currentUser(req as never);
     if (!need(reply as never, me, "backup.export")) return;
+    log(me!, me!.username, "backup.export");
     return exportCentre(db);
   });
 

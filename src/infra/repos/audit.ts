@@ -71,3 +71,56 @@ export function listRecentOverrides(db: Database.Database, limit = 200): RecentO
     .all(n) as (OverrideRow & { child_name: string; encounter_date: string | null })[];
   return rows.map((r) => ({ ...toEntry(r), childName: r.child_name, encounterDate: r.encounter_date }));
 }
+
+export interface AuditLogEntry {
+  id: string;
+  createdAt: string;
+  userId: string | null;
+  username: string;
+  action: string;
+  details: string | null;
+  childId: string | null;
+  childName: string | null;
+}
+
+/** One row per human write. No update/delete exported: append-only like overrides. */
+export function insertAuditLog(
+  db: Database.Database,
+  input: { userId?: string | null; username: string; action: string; details?: string; childId?: string; createdAt: string }
+): void {
+  db.prepare("INSERT INTO audit_log (id, created_at, user_id, username, action, details, child_id) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
+    randomUUID(),
+    input.createdAt,
+    input.userId ?? null,
+    input.username,
+    input.action,
+    input.details ?? null,
+    input.childId ?? null
+  );
+}
+
+/** Newest-first who-did-what list (bounded, never full-table). */
+export function listAuditLog(db: Database.Database, limit = 200): AuditLogEntry[] {
+  const n = Math.min(Math.max(limit, 1), 500);
+  const rows = db
+    .prepare(
+      `SELECT a.*, c.given_name || ' ' || c.family_name AS child_name
+       FROM audit_log a
+       LEFT JOIN children c ON c.id = a.child_id
+       ORDER BY a.created_at DESC, a.rowid DESC LIMIT ?`
+    )
+    .all(n) as {
+    id: string; created_at: string; user_id: string | null; username: string;
+    action: string; details: string | null; child_id: string | null; child_name: string | null;
+  }[];
+  return rows.map((r) => ({
+    id: r.id,
+    createdAt: r.created_at,
+    userId: r.user_id,
+    username: r.username,
+    action: r.action,
+    details: r.details,
+    childId: r.child_id,
+    childName: r.child_name,
+  }));
+}

@@ -180,6 +180,7 @@ export const api = {
     req<{ id: string }>("/api/transition-grants", { method: "POST", body: JSON.stringify(body) }),
   revokeGrant: (id: string) => req<{ ok: boolean }>(`/api/transition-grants/${id}/revoke`, { method: "POST", body: "{}" }),
   overrides: (limit = 200) => req<{ id: string; childId: string; childName: string; encounterId?: string; encounterDate: string | null; author: string; what: string; reason: string; createdAt: string }[]>(`/api/overrides?limit=${limit}`),
+  auditLog: (limit = 200) => req<{ id: string; createdAt: string; userId: string | null; username: string; action: string; details: string | null; childId: string | null; childName: string | null }[]>(`/api/audit?limit=${limit}`),
   pack: () =>
     req<{
       country: string;
