@@ -13,7 +13,7 @@ import { recordVisit, RecordGateError } from "../app/record-visit";
 import { addLot, listLots, checkLotUsable, usableLotsFor } from "../infra/repos/stock";
 import { createAppointment, markAppointment } from "../infra/repos/appointments";
 import { noShowsFor, sessionFor, agendaFor } from "../app/sessions";
-import { insertOverride, listOverridesByChild, listRecentOverrides, insertAuditLog, listAuditLog } from "../infra/repos/audit";
+import { insertOverride, listOverridesByChild, listRecentOverrides, insertAuditLog, queryAuditLog, listAuditActions } from "../infra/repos/audit";
 import { countCentreDosesByProduct } from "../app/analytics";
 import { exportCentre, listPendingOutbox, countPendingOutbox, ackOutbox } from "../infra/sync/sync";
 import { DoseRecordSchema, ScreeningResultSchema } from "../domain/encounter";
@@ -703,8 +703,26 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
     const me = currentUser(req as never);
     if (!need(reply as never, me, "audit.view")) return;
     const q = req.query as Record<string, string>;
-    const limit = q.limit ? Number(q.limit) : 200;
-    return listAuditLog(db, Number.isFinite(limit) ? limit : 200);
+    const limit = q.limit ? Number(q.limit) : 50;
+    const safeLimit = Number.isFinite(limit) ? limit : 50;
+    const page = Math.max(Number(q.page ?? 0) || 0, 0);
+    return queryAuditLog(db, {
+      q: q.q,
+      action: q.action,
+      username: q.username,
+      from: q.from,
+      to: q.to,
+      sort: q.sort === "username" || q.sort === "action" ? q.sort : "created_at",
+      order: q.order === "asc" ? "asc" : "desc",
+      limit: safeLimit,
+      offset: page * safeLimit,
+    });
+  });
+
+  app.get("/api/audit/actions", async (req, reply) => {
+    const me = currentUser(req as never);
+    if (!need(reply as never, me, "audit.view")) return;
+    return listAuditActions(db);
   });
 
   // ---- analytics (CENTRE only, transition rows excluded) ----

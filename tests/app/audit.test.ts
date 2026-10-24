@@ -84,8 +84,31 @@ describe("override audit trail", () => {
     // Served to audit viewers, blocked for nurses, bounded.
     expect((await app.inject({ method: "GET", url: "/api/audit" })).statusCode).toBe(401);
     expect((await app.inject({ method: "GET", url: "/api/audit", headers: admin })).statusCode).toBe(200);
-    const one = JSON.parse((await app.inject({ method: "GET", url: "/api/audit?limit=1", headers: admin })).body) as unknown[];
-    expect(one).toHaveLength(1);
+    const one = JSON.parse((await app.inject({ method: "GET", url: "/api/audit?limit=1", headers: admin })).body) as { rows: unknown[]; total: number };
+    expect(one.rows).toHaveLength(1);
+    expect(one.total).toBeGreaterThanOrEqual(1);
+    db.close();
+  });
+
+  it("filters, sorts, and pages the action log server-side", async () => {
+    const db = openTestDb();
+    const app = buildApp(db, pack);
+    const admin = await adminHeaders(db, app);
+    const child = JSON.parse((await app.inject({ method: "POST", url: "/api/children", headers: admin, payload: { familyName: "Zed", givenName: "Zed", birthDate: "2025-01-01", sex: "F" } })).body) as { id: string };
+    // q matches child name in details-free rows via child join.
+    const q = JSON.parse((await app.inject({ method: "GET", url: "/api/audit?q=Zed", headers: admin })).body) as { rows: unknown[]; total: number };
+    expect(q.total).toBeGreaterThanOrEqual(1);
+    expect(q.rows.length).toBeLessThanOrEqual(q.total);
+    const act = JSON.parse((await app.inject({ method: "GET", url: "/api/audit?action=child.register", headers: admin })).body) as { rows: { action: string }[]; total: number };
+    expect(act.total).toBeGreaterThanOrEqual(1);
+    expect(act.rows.every((r) => r.action === "child.register")).toBe(true);
+    const p0 = JSON.parse((await app.inject({ method: "GET", url: "/api/audit?limit=2&page=0", headers: admin })).body) as { rows: unknown[]; total: number };
+    const p1 = JSON.parse((await app.inject({ method: "GET", url: "/api/audit?limit=2&page=1", headers: admin })).body) as { rows: unknown[]; total: number };
+    expect(p0.total).toBe(p1.total);
+    expect(p0.rows).not.toEqual(p1.rows);
+    const names = JSON.parse((await app.inject({ method: "GET", url: "/api/audit/actions", headers: admin })).body) as string[];
+    expect(names).toContain("child.register");
+    expect(child.id).toBeTruthy();
     db.close();
   });
 });

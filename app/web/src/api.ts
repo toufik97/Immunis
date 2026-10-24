@@ -180,7 +180,15 @@ export const api = {
     req<{ id: string }>("/api/transition-grants", { method: "POST", body: JSON.stringify(body) }),
   revokeGrant: (id: string) => req<{ ok: boolean }>(`/api/transition-grants/${id}/revoke`, { method: "POST", body: "{}" }),
   overrides: (limit = 200) => req<{ id: string; childId: string; childName: string; encounterId?: string; encounterDate: string | null; author: string; what: string; reason: string; createdAt: string }[]>(`/api/overrides?limit=${limit}`),
-  auditLog: (limit = 200) => req<{ id: string; createdAt: string; userId: string | null; username: string; action: string; details: string | null; childId: string | null; childName: string | null }[]>(`/api/audit?limit=${limit}`),
+  auditLog: (params: { q?: string; action?: string; username?: string; from?: string; to?: string; sort?: string; order?: string; page?: number; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== "") qs.set(k, String(v));
+    }
+    const s = qs.toString();
+    return req<{ rows: { id: string; createdAt: string; userId: string | null; username: string; action: string; details: string | null; childId: string | null; childName: string | null }[]; total: number }>(`/api/audit${s ? `?${s}` : ""}`);
+  },
+  auditActions: () => req<string[]>("/api/audit/actions"),
   pack: () =>
     req<{
       country: string;
