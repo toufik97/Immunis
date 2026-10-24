@@ -40,12 +40,12 @@ const UNIT_OF: Record<Indicator, string> = { wfa: "kg", lhfa: "cm", bfa: "" };
 
 function CurveChart({
   months,
-  ref,
+  curves,
   points,
   unit,
 }: {
   months: number[];
-  ref: { neg2: number[]; med: number[]; pos2: number[] };
+  curves: { neg2: number[]; med: number[]; pos2: number[] };
   points: { x: number; y: number; scored: boolean }[];
   unit: string;
 }) {
@@ -57,7 +57,7 @@ function CurveChart({
   const padB = 24;
   const xs = points.map((p) => p.x);
   const xMax = Math.max(12, Math.ceil(Math.max(0, ...xs, 0) / 6) * 6);
-  const allY = [...ref.neg2, ...ref.pos2, ...points.map((p) => p.y)].filter(Number.isFinite);
+  const allY = [...curves.neg2, ...curves.pos2, ...points.map((p) => p.y)].filter(Number.isFinite);
   const lo = Math.min(...allY);
   const hi = Math.max(...allY);
   const pad = (hi - lo) * 0.08 || 1;
@@ -67,8 +67,8 @@ function CurveChart({
   const Y = (v: number): number => padT + (1 - (v - yMin) / (yMax - yMin)) * (H - padT - padB);
   const line = (vals: number[]): string =>
     vals.map((v, m) => `${m === 0 ? "M" : "L"}${X(months[m]).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
-  const band = `${line(ref.neg2)} ${ref.pos2
-    .map((v, m) => `L${X(months[60 - m]).toFixed(1)},${Y(ref.pos2[60 - m]).toFixed(1)}`)
+  const band = `${line(curves.neg2)} ${curves.pos2
+    .map((v, m) => `L${X(months[60 - m]).toFixed(1)},${Y(curves.pos2[60 - m]).toFixed(1)}`)
     .join(" ")} Z`;
   const ticks = Array.from({ length: Math.floor(xMax / 6) + 1 }, (_, i) => i * 6);
   const yTicks = [0, 1, 2, 3].map((i) => yMin + ((yMax - yMin) * (i + 0.5)) / 4);
@@ -77,8 +77,8 @@ function CurveChart({
     <div dir="ltr" style={{ width: "100%" }}>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }} role="img">
         <path d={band} fill="var(--mantine-color-teal-0)" stroke="none" />
-        <path d={line(ref.med)} fill="none" stroke="currentColor" strokeOpacity={0.4} strokeDasharray="4 3" strokeWidth={1} />
-        {[ref.neg2, ref.pos2].map((vals, i) => (
+        <path d={line(curves.med)} fill="none" stroke="currentColor" strokeOpacity={0.4} strokeDasharray="4 3" strokeWidth={1} />
+        {[curves.neg2, curves.pos2].map((vals, i) => (
           <path key={i} d={line(vals)} fill="none" stroke="currentColor" strokeOpacity={0.35} strokeWidth={1} />
         ))}
         {ticks.map((m) => (
@@ -220,7 +220,7 @@ export default function GrowthPanel({
             ]}
           />
           {refs && chartPoints.length > 0 && (
-            <CurveChart months={months} ref={refs[tab]} points={chartPoints} unit={UNIT_OF[tab]} />
+            <CurveChart months={months} curves={refs[tab]} points={chartPoints} unit={UNIT_OF[tab]} />
           )}
           <Text size="xs" c="dimmed">
             {t("growth.bandHint")}
