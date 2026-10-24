@@ -13,6 +13,8 @@ Clinical and registry language. Implementation-free: for tables and code, see `A
 - **No-show**: a child with a past-due appointment that was never honoured.
 - **Override**: a justified deviation from the planner (who, what, why, when). Append-only: never edited or deleted.
 - **Outbox**: local changes queued for the future central sync. Backup is a file copy of the centre database.
+- **Growth score (z)**: how far a weight, height, or BMI is from the WHO 0–5 years average for that age and sex, in steps. Below −2 is too low, above +2 (BMI) is too high.
+- **Paper growth curve**: the child's own measures drawn over the WHO middle line and normal band, shaped like the paper health booklet.
 - **User**: a login account (nurse, admin, reader). One person, one account; tablets may be shared, logins never are.
 - **Role**: what a user may do. Nurse records care, reader only reads, admin also manages users, stock settings, and passes.
 - **Session**: a login ticket on the server, 12 hours. Logout or disable deletes it.

@@ -49,6 +49,14 @@ export function listDosesByChild(db: Database.Database, childId: string): DoseRe
   return toEngineDoses(rows);
 }
 
+/** Weight/height measures over time for one child (growth curves). */
+export function listGrowthMeasures(db: Database.Database, childId: string): { date: string; weightKg: number | null; heightCm: number | null }[] {
+  const rows = db
+    .prepare("SELECT date, weight_kg, height_cm FROM encounters WHERE child_id = ? AND (weight_kg IS NOT NULL OR height_cm IS NOT NULL) ORDER BY date")
+    .all(childId) as { date: string; weight_kg: number | null; height_cm: number | null }[];
+  return rows.map((r) => ({ date: r.date, weightKg: r.weight_kg, heightCm: r.height_cm }));
+}
+
 /** What a session day actually delivered: visits seen + CENTRE doses given (stock rule §5.10). */
 export function administeredFor(
   db: Database.Database,

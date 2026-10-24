@@ -34,6 +34,7 @@ import { formatEngineWarning } from "../engineWarnings";
 import ChildCard from "./ChildCard";
 import DateField from "./DateField";
 import EvalRail from "./EvalRail";
+import GrowthPanel from "./GrowthPanel";
 
 interface Props {
   child: Child;
@@ -402,6 +403,8 @@ export default function VisitPanel({ child, products, programs, expectedProducts
             ))}
           </Stack>
         )}
+
+        <GrowthPanel childId={child.id} sex={child.sex} refreshKey={history.length} />
 
         <Grid>
           <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>

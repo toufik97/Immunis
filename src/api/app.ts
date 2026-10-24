@@ -12,6 +12,7 @@ import { nowIso, todayLocal } from "../infra/time";
 import { recordVisit, RecordGateError } from "../app/record-visit";
 import { addLot, listLots, checkLotUsable, usableLotsFor } from "../infra/repos/stock";
 import { createAppointment, markAppointment } from "../infra/repos/appointments";
+import { growthFor } from "../app/child-growth";
 import { noShowsFor, sessionFor, agendaFor } from "../app/sessions";
 import { insertOverride, listOverridesByChild, listRecentOverrides, insertAuditLog, queryAuditLog, listAuditActions } from "../infra/repos/audit";
 import { countCentreDosesByProduct } from "../app/analytics";
@@ -477,6 +478,21 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
     const me = currentUser(req as never);
     if (!need(reply as never, me, "child.read")) return;
     return listDosesByChild(db, (req.params as Record<string, string>).id);
+  });
+
+  app.get("/api/children/:id/growth", async (req, reply) => {
+    const me = currentUser(req as never);
+    if (!need(reply as never, me, "child.read")) return;
+    const child = getChild(db, (req.params as Record<string, string>).id);
+    if (!child) {
+      reply.code(404).send({ error: "Child not found" });
+      return;
+    }
+    if (!child.sex) {
+      reply.code(400).send({ error: "Sex is required for growth scores" });
+      return;
+    }
+    return growthFor(db, { childId: child.id, birthDate: child.birthDate, sex: child.sex });
   });
 
   // ---- visits ----

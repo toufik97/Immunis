@@ -204,6 +204,20 @@ export const api = {
   allChildren: () => req<Child[]>("/api/children"),
   child: (id: string) => req<Child>(`/api/children/${id}`),
   childDoses: (childId: string) => req<Dose[]>(`/api/children/${childId}/doses`),
+  childGrowth: (childId: string) =>
+    req<{
+      points: {
+        date: string;
+        ageDays: number;
+        ageMonths: number;
+        weightKg: number | null;
+        heightCm: number | null;
+        bmi: number | null;
+        z: { wfa: number | null; lhfa: number | null; bfa: number | null };
+      }[];
+      refs: Record<"wfa" | "lhfa" | "bfa", { neg2: number[]; med: number[]; pos2: number[] }>;
+    }>(`/api/children/${childId}/growth`),
+
   outbox: () => req<{ id: string; kind: string }[]>("/api/outbox"),
   outboxCount: () => req<{ pending: number }>("/api/outbox/count"),
   /** Registration with duplicate surfacing: 409 carries possible matches. */
