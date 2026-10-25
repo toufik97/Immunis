@@ -56,6 +56,15 @@ export function todayCivilDate(now = new Date()): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
+/** Short weekday names starting Monday, in the UI locale (Mon..Sun). */
+export function weekdayNames(lang: string): string[] {
+  try {
+    const fmt = new Intl.DateTimeFormat(localeTag(lang), { weekday: "short", timeZone: "UTC" });
+    return [0, 1, 2, 3, 4, 5, 6].map((i) => fmt.format(new Date(Date.UTC(2026, 10, 23 + i))));
+  } catch {
+    return ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  }
+}
 /** Whole years + remaining months + remaining days between two YYYY-MM-DD dates (clamped at zero). */
 export function ageParts(birthIso: string, atIso: string): { y: number; m: number; d: number } {
   const [by, bm, bd] = birthIso.split("-").map(Number);

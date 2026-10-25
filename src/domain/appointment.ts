@@ -6,6 +6,8 @@ export const AppointmentSchema = z.object({
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   expectedProducts: z.array(z.string().min(1)).default([]),
   kept: z.boolean().nullable().default(null),
+  /** AM/PM session slot; null = legacy pre-slot row, counts as AM. */
+  slot: z.enum(["AM", "PM"]).nullable().default(null),
 });
 
 export type Appointment = z.infer<typeof AppointmentSchema>;

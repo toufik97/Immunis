@@ -18,6 +18,18 @@ import { insertOverride, listOverridesByChild, listRecentOverrides, insertAuditL
 import { countCentreDosesByProduct } from "../app/analytics";
 import { exportCentre, listPendingOutbox, countPendingOutbox, ackOutbox } from "../infra/sync/sync";
 import { DoseRecordSchema, ScreeningResultSchema } from "../domain/encounter";
+import { SlotSchema, SchedulingRuleSchema } from "../domain/scheduling";
+import { checkBooking, suggestBookingSlot } from "../app/scheduling";
+import {
+  listSchedulingRules,
+  replaceSchedulingRules,
+  getBookingHorizon,
+  setBookingHorizon,
+  listClosures,
+  addClosure,
+  deleteClosure,
+  upsertAutoClosures,
+} from "../infra/repos/scheduling";
 import { hasPermission, type Permission, type User } from "../domain/user";
 import { bootstrapFirstAdmin, login, logout, sessionFromHeader } from "../app/auth";
 import {
@@ -520,13 +532,15 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
         const transitionAllowed =
           hasPermission(me.role, "visit.record_transition") && hasActiveGrant(db, me.id, todayLocal());
         const doses = input.doses.map((d) => ({ ...d, recordedBy: me.username }));
-        const { encounter } = recordVisit(db, pack, child.birthDate, listDosesByChild(db, child.id), {
+        const { encounter, waived } = recordVisit(db, pack, child.birthDate, listDosesByChild(db, child.id), {
           ...input,
           doses,
           transition: { allowed: transitionAllowed, source: "paper-transition", reason: input.transitionReason ?? "" },
         });
         const given = doses.filter((d) => d.origin === "CENTRE").map((d) => d.productGroupId);
-        log(me, me.username, "encounter.record", `${child.givenName} ${child.familyName} visit ${input.date}${given.length ? ` (${given.join(", ")})` : ""}${doses.some((d) => d.origin === "CENTRE" && !d.lotId) ? " [transition]" : ""}`, child.id);
+        const waivedCodes = [...new Set(waived.map((w) => w.code))];
+        const overrideSuffix = waived.length > 0 ? ` [override ${waivedCodes.join("+")}: ${input.overrideReason?.trim() ?? ""}]` : "";
+        log(me, me.username, "encounter.record", `${child.givenName} ${child.familyName} visit ${input.date}${given.length ? ` (${given.join(", ")})` : ""}${doses.some((d) => d.origin === "CENTRE" && !d.lotId) ? " [transition]" : ""}${overrideSuffix}`, child.id);
         reply.code(201).send(encounter);
       } catch (e) {
         if (e instanceof RecordGateError) {
@@ -620,15 +634,133 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
           childId: z.string().min(1),
           dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
           expectedProducts: z.array(z.string().min(1)).default([]),
+          slot: SlotSchema.default("AM"),
+          overrideReason: z.string().min(1).optional(),
+          /** Engine-recommended date this booking follows: horizon anchor. */
+          engineDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         })
         .parse(req.body);
       if (!getChild(db, input.childId)) {
         reply.code(404).send({ error: "Child not found" });
         return;
       }
+      // Operational scheduling rules constrain the booked date/slot, never the clinical plan.
+      const issues = checkBooking(db, {
+        dueDate: input.dueDate,
+        slot: input.slot,
+        expectedProducts: input.expectedProducts,
+        referenceDate: input.engineDate ?? todayLocal(),
+      });
+      if (issues.length > 0 && !input.overrideReason) {
+        return reply.code(409).send({ error: "Booking breaks scheduling rules", issues });
+      }
       const appt = createAppointment(db, input);
-      log(me!, me!.username, "appointment.create", `${input.childId} due ${input.dueDate}`, input.childId);
+      if (issues.length > 0) {
+        insertOverride(db, {
+          childId: input.childId,
+          author: me!.username,
+          what: `appointment.scheduling: ${issues.map((i) => i.code).join(", ")}`,
+          reason: input.overrideReason!,
+          createdAt: nowIso(),
+        });
+        log(me!, me!.username, "appointment.override", `${input.dueDate} ${input.slot}: ${input.overrideReason}`, input.childId);
+      } else {
+        log(me!, me!.username, "appointment.create", `${input.childId} due ${input.dueDate}`, input.childId);
+      }
       reply.code(201).send(appt);
+    } catch (e) {
+      sendError(reply, e);
+    }
+  });
+
+  // ---- scheduling (workflow settings: operational rules, nurse+admin write) ----
+  app.get("/api/scheduling", async (req, reply) => {
+    const me = currentUser(req as never);
+    if (!me) return reply.code(401).send({ error: "Unauthorized: log in first" });
+    return { rules: listSchedulingRules(db), horizonDays: getBookingHorizon(db) };
+  });
+
+  app.put("/api/scheduling", async (req, reply) => {
+    try {
+      const me = currentUser(req as never);
+      if (!need(reply as never, me, "appointment.manage")) return;
+      const input = z
+        .object({
+          rules: z.array(SchedulingRuleSchema),
+          horizonDays: z.number().int().min(1).max(365).nullable(),
+        })
+        .parse(req.body);
+      const rules = replaceSchedulingRules(db, input.rules);
+      const horizonDays = setBookingHorizon(db, input.horizonDays);
+      log(me!, me!.username, "scheduling.update", `${rules.length} rules, horizon ${horizonDays ?? "none"}`);
+      return { rules, horizonDays };
+    } catch (e) {
+      sendError(reply, e);
+    }
+  });
+
+  // Booking suggestion: first open day/slot at or after a date (nurse picks freely; gate still validates).
+  app.get("/api/scheduling/suggest", async (req, reply) => {
+    const me = currentUser(req as never);
+    if (!me) return reply.code(401).send({ error: "Unauthorized: log in first" });
+    const q = req.query as Record<string, string>;
+    const from = q.from ?? "";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) return reply.code(400).send({ error: "Bad from date" });
+    const products = (q.products ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    const slot = q.slot === "PM" ? ("PM" as const) : ("AM" as const);
+    return (
+      suggestBookingSlot(db, { fromDate: from, expectedProducts: products, preferSlot: slot }) ?? null
+    );
+  });
+
+  app.get("/api/closures", async (req, reply) => {
+    const me = currentUser(req as never);
+    if (!me) return reply.code(401).send({ error: "Unauthorized: log in first" });
+    const year = (req.query as Record<string, string>).year;
+    return listClosures(db, year && /^\d{4}$/.test(year) ? year : undefined);
+  });
+
+  app.post("/api/closures", async (req, reply) => {
+    try {
+      const me = currentUser(req as never);
+      if (!need(reply as never, me, "appointment.manage")) return;
+      const input = z
+        .object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), label: z.string().min(1).max(120) })
+        .parse(req.body);
+      const row = addClosure(db, input);
+      log(me!, me!.username, "closure.add", `${row.date} ${row.label}`);
+      reply.code(201).send(row);
+    } catch (e) {
+      sendError(reply, e);
+    }
+  });
+
+  app.delete("/api/closures/:date", async (req, reply) => {
+    const me = currentUser(req as never);
+    if (!need(reply as never, me, "appointment.manage")) return;
+    const date = (req.params as Record<string, string>).date;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? "")) return reply.code(400).send({ error: "Bad date" });
+    if (!deleteClosure(db, date)) return reply.code(404).send({ error: "Closure not found" });
+    log(me!, me!.username, "closure.delete", date);
+    return { ok: true };
+  });
+
+  // Pull national + religious holidays for a year (Nager.Date v3, pinned).
+  // Cached locally: the pull is a refresh button, the table is the truth offline.
+  app.post("/api/closures/pull", async (req, reply) => {
+    try {
+      const me = currentUser(req as never);
+      if (!need(reply as never, me, "appointment.manage")) return;
+      const year = z.object({ year: z.number().int().min(2000).max(2100) }).parse(req.body).year;
+      const res = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/MA`);
+      if (!res.ok) return reply.code(502).send({ error: `Holiday service answered ${res.status}` });
+      const days = (await res.json()) as { date?: unknown; localName?: unknown; name?: unknown }[];
+      const holidays = days
+        .filter((d) => typeof d.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d.date))
+        .map((d) => ({ date: d.date as string, label: typeof d.localName === "string" && d.localName ? d.localName : String(d.name ?? d.date) }));
+      const added = upsertAutoClosures(db, holidays);
+      log(me!, me!.username, "closure.pull", `${year}: ${added} new`);
+      return { added, holidays: listClosures(db, String(year)) };
     } catch (e) {
       sendError(reply, e);
     }

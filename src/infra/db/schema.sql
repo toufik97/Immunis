@@ -59,7 +59,8 @@ CREATE TABLE IF NOT EXISTS appointments (
   child_id TEXT NOT NULL REFERENCES children(id),
   due_date TEXT NOT NULL,
   expected_products TEXT NOT NULL DEFAULT '[]',
-  kept INTEGER CHECK (kept IN (0, 1)) -- NULL = pending, 1 = kept, 0 = missed
+  kept INTEGER CHECK (kept IN (0, 1)), -- NULL = pending, 1 = kept, 0 = missed
+  slot TEXT CHECK (slot IN ('AM', 'PM')) -- NULL = legacy pre-slot row, counts as AM
 );
 
 CREATE TABLE IF NOT EXISTS overrides (
@@ -140,6 +141,29 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 
+-- Vaccination-workflow scheduling (operational only): per (scope, weekday, slot) caps.
+-- Scope 'global' or a product-group id; 0 = Sunday … 6 = Saturday; cap 0 closes the cell.
+CREATE TABLE IF NOT EXISTS scheduling_rules (
+  scope TEXT NOT NULL,
+  weekday INTEGER NOT NULL CHECK (weekday BETWEEN 0 AND 6),
+  slot TEXT NOT NULL CHECK (slot IN ('AM', 'PM')),
+  cap INTEGER NOT NULL CHECK (cap >= 0),
+  PRIMARY KEY (scope, weekday, slot)
+);
+
+-- Closure days: pulled national/religious holidays (auto) + ad-hoc centre closures (manual).
+CREATE TABLE IF NOT EXISTS closure_dates (
+  date TEXT PRIMARY KEY,               -- YYYY-MM-DD
+  label TEXT NOT NULL,
+  source TEXT NOT NULL CHECK (source IN ('auto', 'manual'))
+);
+CREATE INDEX IF NOT EXISTS idx_closure_dates_date ON closure_dates(date);
+
+-- Single-row centre prefs (booking_horizon_days = max days ahead, unset = no limit).
+CREATE TABLE IF NOT EXISTS centre_prefs (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 -- Transition pass: admin grants nurse the right to record old paper as CENTRE with no lot.
 CREATE TABLE IF NOT EXISTS transition_grants (
   id TEXT PRIMARY KEY,

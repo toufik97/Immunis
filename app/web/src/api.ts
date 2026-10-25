@@ -74,6 +74,28 @@ export interface Appointment {
   kept: boolean | null;
   lastVisitDate?: string | null;
   daysOverdue?: number;
+  slot?: "AM" | "PM" | null;
+}
+
+export interface SchedulingRule {
+  scope: string;
+  weekday: number;
+  slot: "AM" | "PM";
+  cap: number;
+}
+
+export interface ClosureDate {
+  date: string;
+  label: string;
+  source: "auto" | "manual";
+}
+
+export interface SchedulingIssue {
+  code: "closed_day" | "slot_full" | "closure_day" | "beyond_horizon";
+  productGroupId: string | null;
+  booked: number | null;
+  cap: number | null;
+  limit: string | null;
 }
 
 export interface DuplicateChild extends Child {
@@ -287,8 +309,43 @@ export const api = {
     return req<{ date: string; children: number; doses: number }[]>(`/api/sessions/agenda${q ? `?${q}` : ""}`);
   },
   noShows: (asOf: string) => req<Appointment[]>(`/api/no-shows?asOf=${asOf}`),
-  createAppointment: (body: { childId: string; dueDate: string; expectedProducts: string[] }) =>
-    req<Appointment>("/api/appointments", { method: "POST", body: JSON.stringify(body) }),
+  createAppointment: async (body: { childId: string; dueDate: string; expectedProducts: string[]; slot?: "AM" | "PM"; overrideReason?: string; engineDate?: string }) => {
+    const res = await fetch("/api/appointments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(body),
+    });
+    const data = (await res.json()) as Appointment & { error?: string; issues?: SchedulingIssue[] };
+    if (!res.ok) {
+      const e = new Error(data.error ?? `Request failed (${res.status})`) as Error & {
+        issues?: SchedulingIssue[];
+      };
+      e.issues = data.issues;
+      throw e;
+    }
+    return data as Appointment;
+  },
+  scheduling: () =>
+    req<{ rules: SchedulingRule[]; horizonDays: number | null }>("/api/scheduling"),
+  suggestSlot: (from: string, products: string[], slot: "AM" | "PM" = "AM") =>
+    req<{ date: string; slot: "AM" | "PM" } | null>(
+      `/api/scheduling/suggest?from=${from}&products=${products.join(",")}&slot=${slot}`
+    ),
+  saveScheduling: (body: { rules: SchedulingRule[]; horizonDays: number | null }) =>
+    req<{ rules: SchedulingRule[]; horizonDays: number | null }>("/api/scheduling", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  closures: (year?: string) =>
+    req<ClosureDate[]>(`/api/closures${year ? `?year=${year}` : ""}`),
+  addClosure: (body: { date: string; label: string }) =>
+    req<ClosureDate>("/api/closures", { method: "POST", body: JSON.stringify(body) }),
+  deleteClosure: (date: string) => req<{ ok: boolean }>(`/api/closures/${date}`, { method: "DELETE" }),
+  pullClosures: (year: number) =>
+    req<{ added: number; holidays: ClosureDate[] }>("/api/closures/pull", {
+      method: "POST",
+      body: JSON.stringify({ year }),
+    }),
   lots: (product?: string, usableOn?: string) =>
     req<Lot[]>(
       product

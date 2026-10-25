@@ -6,6 +6,8 @@ export interface NewAppointment {
   childId: string;
   dueDate: string;
   expectedProducts?: string[];
+  /** Session slot; defaults to AM (mornings-first workflow predates slots). */
+  slot?: "AM" | "PM";
 }
 
 interface AppointmentRow {
@@ -14,6 +16,7 @@ interface AppointmentRow {
   due_date: string;
   expected_products: string;
   kept: number | null;
+  slot: string | null;
 }
 
 function toAppointment(row: AppointmentRow): Appointment {
@@ -30,14 +33,15 @@ function toAppointment(row: AppointmentRow): Appointment {
     dueDate: row.due_date,
     expectedProducts,
     kept: row.kept === null ? null : row.kept === 1,
+    slot: row.slot === "AM" || row.slot === "PM" ? row.slot : null,
   });
 }
 
 export function createAppointment(db: Database.Database, input: NewAppointment): Appointment {
   const id = randomUUID();
   db.prepare(
-    "INSERT INTO appointments (id, child_id, due_date, expected_products, kept) VALUES (?, ?, ?, ?, NULL)"
-  ).run(id, input.childId, input.dueDate, JSON.stringify(input.expectedProducts ?? []));
+    "INSERT INTO appointments (id, child_id, due_date, expected_products, kept, slot) VALUES (?, ?, ?, ?, NULL, ?)"
+  ).run(id, input.childId, input.dueDate, JSON.stringify(input.expectedProducts ?? []), input.slot ?? "AM");
   return toAppointment(db.prepare("SELECT * FROM appointments WHERE id = ?").get(id) as AppointmentRow);
 }
 

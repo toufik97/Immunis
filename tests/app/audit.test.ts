@@ -111,4 +111,37 @@ describe("override audit trail", () => {
     expect(child.id).toBeTruthy();
     db.close();
   });
+
+  it("flags overridden visits in the encounter.record audit row with the reason", async () => {
+    const db = openTestDb();
+    const app = buildApp(db, pack);
+    const admin = await adminHeaders(db, app);
+    const child = JSON.parse((await app.inject({ method: "POST", url: "/api/children", headers: admin, payload: { familyName: "O", givenName: "O", birthDate: "2026-01-01", sex: "M" } })).body) as { id: string };
+    await app.inject({ method: "POST", url: "/api/lots", headers: admin, payload: { productGroupId: "PENTA", lotNumber: "L1", expiryDate: "2027-12-01", coldChainOk: true, qtyOnHand: 5 } });
+    await app.inject({ method: "POST", url: "/api/lots", headers: admin, payload: { productGroupId: "PCV_PRIMOVAX", lotNumber: "L2", expiryDate: "2027-12-01", coldChainOk: true, qtyOnHand: 5 } });
+    const lots = JSON.parse((await app.inject({ method: "GET", url: "/api/lots", headers: admin })).body) as { id: string; productGroupId: string }[];
+    const lotFor = (p: string) => lots.find((l) => l.productGroupId === p)!.id;
+    const { todayLocal } = await import("../../src/infra/time");
+    const today = todayLocal();
+    await app.inject({
+      method: "POST",
+      url: "/api/encounters",
+      headers: admin,
+      payload: { childId: child.id, birthDate: "2026-01-01", date: today, screening: "VACCINATE", doses: [{ productGroupId: "PENTA", administeredOn: today, origin: "CENTRE", overridden: false, recordedBy: "x", lotId: lotFor("PENTA") }] },
+    });
+    const reason = "clinician decision, single trip family";
+    const rec = await app.inject({
+      method: "POST",
+      url: "/api/encounters",
+      headers: admin,
+      payload: { childId: child.id, birthDate: "2026-01-01", date: today, screening: "VACCINATE", doses: [{ productGroupId: "PCV_PRIMOVAX", administeredOn: today, origin: "CENTRE", overridden: true, recordedBy: "x", lotId: lotFor("PCV_PRIMOVAX") }], overrideReason: reason },
+    });
+    expect(rec.statusCode).toBe(201);
+    const audit = JSON.parse((await app.inject({ method: "GET", url: "/api/audit?action=encounter.record", headers: admin })).body) as { rows: { details: string | null }[] };
+    const overrideRow = audit.rows.find((r) => r.details?.includes("PCV_PRIMOVAX"));
+    expect(overrideRow?.details).toContain("[override SPACING_VIOLATION:");
+    expect(overrideRow?.details).toContain(reason);
+    expect(listOverridesByChild(db, child.id)).toHaveLength(1);
+    db.close();
+  });
 });

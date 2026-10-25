@@ -10,6 +10,7 @@ const MIGRATIONS: { table: string; column: string; ddl: string }[] = [
   { table: "doses", column: "source", ddl: "TEXT" },
   { table: "users", column: "failed_attempts", ddl: "INTEGER NOT NULL DEFAULT 0" },
   { table: "users", column: "locked_until", ddl: "TEXT" },
+  { table: "appointments", column: "slot", ddl: "TEXT CHECK (slot IN ('AM', 'PM'))" },
 ];
 
 const NEW_TABLES: string[] = [
@@ -52,6 +53,23 @@ const NEW_TABLES: string[] = [
 )`,
   `CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_transition_grants_user ON transition_grants(user_id)`,
+  `CREATE TABLE IF NOT EXISTS scheduling_rules (
+  scope TEXT NOT NULL,
+  weekday INTEGER NOT NULL CHECK (weekday BETWEEN 0 AND 6),
+  slot TEXT NOT NULL CHECK (slot IN ('AM', 'PM')),
+  cap INTEGER NOT NULL CHECK (cap >= 0),
+  PRIMARY KEY (scope, weekday, slot)
+)`,
+  `CREATE TABLE IF NOT EXISTS closure_dates (
+  date TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  source TEXT NOT NULL CHECK (source IN ('auto', 'manual'))
+)`,
+  `CREATE INDEX IF NOT EXISTS idx_closure_dates_date ON closure_dates(date)`,
+  `CREATE TABLE IF NOT EXISTS centre_prefs (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+)`,
 ];
 
 export function runMigrations(db: Database.Database): void {

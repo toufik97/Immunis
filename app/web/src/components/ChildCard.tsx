@@ -8,7 +8,7 @@ import { ageParts, formatCivilDate, todayCivilDate } from "../format";
 export default function ChildCard({ child, onClose }: { child: Child; onClose: () => void }) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
-  const { y, m } = ageParts(child.birthDate, todayCivilDate());
+  const { y, m, d } = ageParts(child.birthDate, todayCivilDate());
 
   return (
     <Card>
@@ -33,7 +33,7 @@ export default function ChildCard({ child, onClose }: { child: Child; onClose: (
         </Group>
         <Text size="sm" c="dimmed" className="tabular">
           {t("child.birthDate", { date: formatCivilDate(child.birthDate, lang) })} ·{" "}
-          {y > 0 ? t("child.ageYM", { y, m }) : t("child.ageM", { m })}
+          {y > 0 ? t("child.ageYMD", { y, m, d }) : m > 0 ? t("child.ageMD", { m, d }) : t("child.ageD", { d })}
         </Text>
         {([child.fatherName, child.motherName].filter(Boolean).length > 0 || child.address) && (
           <Text size="sm" c="dimmed">

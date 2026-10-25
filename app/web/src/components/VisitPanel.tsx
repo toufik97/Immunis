@@ -13,6 +13,7 @@ import {
   MultiSelect,
   Paper,
   Select,
+  SegmentedControl,
   Stack,
   Text,
   TextInput,
@@ -28,7 +29,7 @@ import {
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
-import { api, type Child, type Dose, type GateIssue, type Lot } from "../api";
+import { api, type Child, type Dose, type GateIssue, type Lot, type SchedulingIssue } from "../api";
 import { ageParts, formatCivilDate, todayCivilDate } from "../format";
 import { formatEngineWarning } from "../engineWarnings";
 import ChildCard from "./ChildCard";
@@ -65,6 +66,10 @@ export default function VisitPanel({ child, products, programs, expectedProducts
   const [railOpen, setRailOpen] = useState(true);
   const [rdv, setRdv] = useState<{ date: string; products: string[] } | null>(null);
   const [rdvDate, setRdvDate] = useState("");
+  const [rdvSlot, setRdvSlot] = useState<"AM" | "PM">("AM");
+  const [rdvIssues, setRdvIssues] = useState<SchedulingIssue[]>([]);
+  const [rdvReason, setRdvReason] = useState("");
+  const [rdvSuggested, setRdvSuggested] = useState<{ date: string; slot: "AM" | "PM" } | null>(null);
   const [rdvSaving, setRdvSaving] = useState(false);
   const [recording, setRecording] = useState(false);
   const [gateIssues, setGateIssues] = useState<GateIssue[]>([]);
@@ -178,19 +183,45 @@ export default function VisitPanel({ child, products, programs, expectedProducts
     if (rdv) rdvRef.current?.scrollIntoView({ block: "nearest" });
   }, [rdv]);
 
-  async function confirmRdv(): Promise<void> {
+  async function confirmRdv(override = false): Promise<void> {
     if (!rdv || !rdvDate) return;
     setErr("");
     setRdvSaving(true);
     try {
-      await api.createAppointment({ childId: child.id, dueDate: rdvDate, expectedProducts: rdv.products });
+      await api.createAppointment({
+        childId: child.id,
+        dueDate: rdvDate,
+        expectedProducts: rdv.products,
+        slot: rdvSlot,
+        overrideReason: override ? rdvReason || undefined : undefined,
+        engineDate: rdv.date,
+      });
       setRdv(null);
+      setRdvIssues([]);
+      setRdvReason("");
       setMsg(t("visit.rdvRecorded"));
       onFinished();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      const issues = (e as Error & { issues?: SchedulingIssue[] }).issues;
+      if (issues && issues.length > 0 && !override) setRdvIssues(issues);
+      else setErr(e instanceof Error ? e.message : String(e));
     } finally {
       setRdvSaving(false);
+    }
+  }
+
+  /** Scheduling-gate sentence (codes + params, never hardcoded). */
+  function schedText(i: SchedulingIssue): string {
+    const product = i.productGroupId ? ` · ${productLabel(i.productGroupId)}` : "";
+    switch (i.code) {
+      case "closed_day":
+        return t("sched.closedDay", { product });
+      case "slot_full":
+        return t("sched.slotFull", { booked: i.booked ?? 0, cap: i.cap ?? 0, product });
+      case "closure_day":
+        return t("sched.closureDay", { label: i.limit ?? "" });
+      case "beyond_horizon":
+        return t("sched.beyondHorizon", { days: i.limit ?? "" });
     }
   }
 
@@ -305,6 +336,19 @@ export default function VisitPanel({ child, products, programs, expectedProducts
           if (rec) {
             setRdv({ date: rec.date, products: rec.products });
             setRdvDate(rec.date);
+            setRdvSlot("AM");
+            setRdvSuggested(null);
+            // Prefill the first open slot: engine date stays the clinical reference.
+            try {
+              const s = await api.suggestSlot(rec.date, rec.products, "AM");
+              if (s && (s.date !== rec.date || s.slot !== "AM")) {
+                setRdvDate(s.date);
+                setRdvSlot(s.slot);
+                setRdvSuggested(s);
+              }
+            } catch {
+              /* unconstrained booking keeps the engine date */
+            }
           } else {
             setRdv(null);
           }
@@ -662,13 +706,39 @@ export default function VisitPanel({ child, products, programs, expectedProducts
                   products: rdv.products.map(productLabel).join(", "),
                 })}
               </Text>
+              {rdvSuggested && (
+                <Text size="xs" c="dimmed" className="tabular">
+                  {t("sched.suggestNote", {
+                    date: formatCivilDate(rdvSuggested.date, lang),
+                    slot: rdvSuggested.slot,
+                  })}
+                </Text>
+              )}
               <Group align="end" wrap="wrap">
                 <DateField
                   label={t("visit.nextRdv")}
                   name="rdvDate"
                   value={rdvDate}
                   min={visitDate}
-                  onChange={setRdvDate}
+                  onChange={(v) => {
+                    setRdvDate(v);
+                    setRdvIssues([]);
+                    setRdvSuggested(null);
+                  }}
+                />
+                <SegmentedControl
+                  size="xs"
+                  aria-label={t("visit.rdvSlot")}
+                  value={rdvSlot}
+                  onChange={(v) => {
+                    setRdvSlot(v as "AM" | "PM");
+                    setRdvIssues([]);
+                    setRdvSuggested(null);
+                  }}
+                  data={[
+                    { label: "AM", value: "AM" },
+                    { label: "PM", value: "PM" },
+                  ]}
                 />
                 <Button onClick={() => void confirmRdv()} loading={rdvSaving}>
                   {t("visit.rdvConfirm")}
@@ -683,6 +753,35 @@ export default function VisitPanel({ child, products, programs, expectedProducts
                   {t("visit.rdvSkip")}
                 </Button>
               </Group>
+              {rdvIssues.length > 0 && (
+                <Alert color="yellow" title={t("visit.gateTitle")}>
+                  <List size="sm" mt="xs">
+                    {rdvIssues.map((g, idx) => (
+                      <List.Item key={idx} className="tabular">
+                        {schedText(g)}{" "}
+                        <Text span size="xs" c="dimmed" translate="no">
+                          {g.code}
+                        </Text>
+                      </List.Item>
+                    ))}
+                  </List>
+                  <Stack gap="xs" mt="sm">
+                    <TextInput
+                      label={t("visit.overrideReason")}
+                      name="rdvOverrideReason"
+                      autoComplete="off"
+                      required
+                      value={rdvReason}
+                      onChange={(e) => setRdvReason(e.target.value)}
+                    />
+                    <div>
+                      <Button size="sm" color="yellow" onClick={() => void confirmRdv(true)} loading={rdvSaving} disabled={!rdvReason}>
+                        {t("visit.rdvOverride")}
+                      </Button>
+                    </div>
+                  </Stack>
+                </Alert>
+              )}
             </Stack>
           </Paper>
         )}
