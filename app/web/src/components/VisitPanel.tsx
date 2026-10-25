@@ -13,7 +13,6 @@ import {
   MultiSelect,
   Paper,
   Select,
-  SegmentedControl,
   Stack,
   Text,
   TextInput,
@@ -29,10 +28,11 @@ import {
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
-import { api, type Child, type Dose, type GateIssue, type Lot, type SchedulingIssue } from "../api";
+import { api, type Child, type Dose, type GateIssue, type Lot } from "../api";
 import { ageParts, formatCivilDate, todayCivilDate } from "../format";
 import { formatEngineWarning } from "../engineWarnings";
 import ChildCard from "./ChildCard";
+import AppointmentForm from "./AppointmentForm";
 import DateField from "./DateField";
 import EvalRail from "./EvalRail";
 import GrowthPanel from "./GrowthPanel";
@@ -65,12 +65,8 @@ export default function VisitPanel({ child, products, programs, expectedProducts
   const [historyAsc, setHistoryAsc] = useState(true);
   const [railOpen, setRailOpen] = useState(true);
   const [rdv, setRdv] = useState<{ date: string; products: string[] } | null>(null);
-  const [rdvDate, setRdvDate] = useState("");
-  const [rdvSlot, setRdvSlot] = useState<"AM" | "PM">("AM");
-  const [rdvIssues, setRdvIssues] = useState<SchedulingIssue[]>([]);
-  const [rdvReason, setRdvReason] = useState("");
-  const [rdvSuggested, setRdvSuggested] = useState<{ date: string; slot: "AM" | "PM" } | null>(null);
-  const [rdvSaving, setRdvSaving] = useState(false);
+  /** Due-now products left out of the just-recorded visit: they get their own appointment first. */
+  const [skipped, setSkipped] = useState<string[]>([]);
   const [recording, setRecording] = useState(false);
   const [gateIssues, setGateIssues] = useState<GateIssue[]>([]);
   const [overrideReason, setOverrideReason] = useState("");
@@ -178,51 +174,27 @@ export default function VisitPanel({ child, products, programs, expectedProducts
     return () => window.removeEventListener("beforeunload", handler);
   }, [doses.length]);
 
+  const showRdvCard = rdv !== null || skipped.length > 0;
+
   // The post-record RDV step must be impossible to miss.
   useEffect(() => {
-    if (rdv) rdvRef.current?.scrollIntoView({ block: "nearest" });
-  }, [rdv]);
+    if (showRdvCard) rdvRef.current?.scrollIntoView({ block: "nearest" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showRdvCard]);
 
-  async function confirmRdv(override = false): Promise<void> {
-    if (!rdv || !rdvDate) return;
-    setErr("");
-    setRdvSaving(true);
-    try {
-      await api.createAppointment({
-        childId: child.id,
-        dueDate: rdvDate,
-        expectedProducts: rdv.products,
-        slot: rdvSlot,
-        overrideReason: override ? rdvReason || undefined : undefined,
-        engineDate: rdv.date,
-      });
-      setRdv(null);
-      setRdvIssues([]);
-      setRdvReason("");
-      setMsg(t("visit.rdvRecorded"));
-      onFinished();
-    } catch (e) {
-      const issues = (e as Error & { issues?: SchedulingIssue[] }).issues;
-      if (issues && issues.length > 0 && !override) setRdvIssues(issues);
-      else setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setRdvSaving(false);
-    }
+  /** Catch-up and next visit coincide: book once with everything. */
+  function combineAppointments(): void {
+    if (!rdv) return;
+    setRdv({ date: rdv.date, products: [...rdv.products, ...skipped.filter((p) => !rdv.products.includes(p))] });
+    setSkipped([]);
   }
 
-  /** Scheduling-gate sentence (codes + params, never hardcoded). */
-  function schedText(i: SchedulingIssue): string {
-    const product = i.productGroupId ? ` · ${productLabel(i.productGroupId)}` : "";
-    switch (i.code) {
-      case "closed_day":
-        return t("sched.closedDay", { product });
-      case "slot_full":
-        return t("sched.slotFull", { booked: i.booked ?? 0, cap: i.cap ?? 0, product });
-      case "closure_day":
-        return t("sched.closureDay", { label: i.limit ?? "" });
-      case "beyond_horizon":
-        return t("sched.beyondHorizon", { days: i.limit ?? "" });
-    }
+  /** Catch-up booked on its own day: the next visit is still pending. */
+  function catchupBooked(): void {
+    setSkipped([]);
+    const done = t("visit.rdvRecorded");
+    setMsg(done);
+    notifications.show({ title: done, message: `${child.givenName} ${child.familyName}`, color: "teal", icon: <IconCheck size={16} aria-hidden="true" /> });
   }
 
   const blockedByScreening = screening !== "VACCINATE" && doses.length > 0;
@@ -319,6 +291,7 @@ export default function VisitPanel({ child, products, programs, expectedProducts
       });
       if (r.status === "gated") {
         setGateIssues(r.issues);
+        setSkipped([]);
       } else {
         setGateIssues([]);
         setOverrideReason("");
@@ -335,19 +308,20 @@ export default function VisitPanel({ child, products, programs, expectedProducts
           const rec = fresh.visitPlan.visits.find((v) => v.date > visitDate);
           if (rec) {
             setRdv({ date: rec.date, products: rec.products });
-            setRdvDate(rec.date);
-            setRdvSlot("AM");
-            setRdvSuggested(null);
-            // Prefill the first open slot: engine date stays the clinical reference.
-            try {
-              const s = await api.suggestSlot(rec.date, rec.products, "AM");
-              if (s && (s.date !== rec.date || s.slot !== "AM")) {
-                setRdvDate(s.date);
-                setRdvSlot(s.slot);
-                setRdvSuggested(s);
-              }
-            } catch {
-              /* unconstrained booking keeps the engine date */
+            // Memory refresh: due-now products left out of this visit get their own appointment first.
+            if (screening === "VACCINATE") {
+              const dueNow = [
+                ...new Set(
+                  (result?.visitPlan.visits ?? [])
+                    .filter((v) => v.status === "DUE_NOW")
+                    .flatMap((v) => v.products)
+                ),
+              ];
+              const recorded = new Set(payload.map((d) => d.productGroupId));
+              const planned = new Set(rec.products);
+              setSkipped(dueNow.filter((p) => !recorded.has(p) && !planned.has(p)));
+            } else {
+              setSkipped([]);
             }
           } else {
             setRdv(null);
@@ -694,93 +668,64 @@ export default function VisitPanel({ child, products, programs, expectedProducts
           />
         )}
 
-        {rdv && (
+        {showRdvCard && (
           <Paper withBorder p="sm" radius="md" ref={rdvRef}>
-            <Stack gap="xs">
+            <Stack gap="md">
               <Title order={3} size="h5">
                 {t("visit.rdvTitle")}
               </Title>
-              <Text size="sm" className="tabular">
-                {t("visit.rdvRecommended", {
-                  date: formatCivilDate(rdv.date, lang),
-                  products: rdv.products.map(productLabel).join(", "),
-                })}
-              </Text>
-              {rdvSuggested && (
-                <Text size="xs" c="dimmed" className="tabular">
-                  {t("sched.suggestNote", {
-                    date: formatCivilDate(rdvSuggested.date, lang),
-                    slot: rdvSuggested.slot,
-                  })}
-                </Text>
+              {skipped.length > 0 && (
+                <AppointmentForm
+                  childId={child.id}
+                  heading={
+                    <Group gap={6} wrap="wrap" align="center">
+                      <Text size="sm" fw={600}>
+                        {t("visit.catchup")}
+                      </Text>
+                      {skipped.map((p) => (
+                        <Badge key={p} size="sm" variant="light" color="yellow">
+                          {productLabel(p)}
+                        </Badge>
+                      ))}
+                    </Group>
+                  }
+                  products={skipped}
+                  engineDate={visitDate}
+                  suggestFrom={visitDate}
+                  productLabel={productLabel}
+                  combineTarget={rdv ? { date: rdv.date, products: rdv.products } : null}
+                  onCombine={combineAppointments}
+                  skipLabel={t("visit.skippedLater")}
+                  onSkip={() => setSkipped([])}
+                  onBooked={catchupBooked}
+                />
               )}
-              <Group align="end" wrap="wrap">
-                <DateField
-                  label={t("visit.nextRdv")}
-                  name="rdvDate"
-                  value={rdvDate}
-                  min={visitDate}
-                  onChange={(v) => {
-                    setRdvDate(v);
-                    setRdvIssues([]);
-                    setRdvSuggested(null);
-                  }}
-                />
-                <SegmentedControl
-                  size="xs"
-                  aria-label={t("visit.rdvSlot")}
-                  value={rdvSlot}
-                  onChange={(v) => {
-                    setRdvSlot(v as "AM" | "PM");
-                    setRdvIssues([]);
-                    setRdvSuggested(null);
-                  }}
-                  data={[
-                    { label: "AM", value: "AM" },
-                    { label: "PM", value: "PM" },
-                  ]}
-                />
-                <Button onClick={() => void confirmRdv()} loading={rdvSaving}>
-                  {t("visit.rdvConfirm")}
-                </Button>
-                <Button
-                  variant="default"
-                  onClick={() => {
+              {rdv && (
+                <AppointmentForm
+                  childId={child.id}
+                  heading={
+                    <Text size="sm" className="tabular">
+                      {t("visit.rdvRecommended", {
+                        date: formatCivilDate(rdv.date, lang),
+                        products: rdv.products.map(productLabel).join(", "),
+                      })}
+                    </Text>
+                  }
+                  products={rdv.products}
+                  engineDate={rdv.date}
+                  suggestFrom={rdv.date}
+                  productLabel={productLabel}
+                  skipLabel={t("visit.rdvSkip")}
+                  onSkip={() => {
                     setRdv(null);
                     onFinished();
                   }}
-                >
-                  {t("visit.rdvSkip")}
-                </Button>
-              </Group>
-              {rdvIssues.length > 0 && (
-                <Alert color="yellow" title={t("visit.gateTitle")}>
-                  <List size="sm" mt="xs">
-                    {rdvIssues.map((g, idx) => (
-                      <List.Item key={idx} className="tabular">
-                        {schedText(g)}{" "}
-                        <Text span size="xs" c="dimmed" translate="no">
-                          {g.code}
-                        </Text>
-                      </List.Item>
-                    ))}
-                  </List>
-                  <Stack gap="xs" mt="sm">
-                    <TextInput
-                      label={t("visit.overrideReason")}
-                      name="rdvOverrideReason"
-                      autoComplete="off"
-                      required
-                      value={rdvReason}
-                      onChange={(e) => setRdvReason(e.target.value)}
-                    />
-                    <div>
-                      <Button size="sm" color="yellow" onClick={() => void confirmRdv(true)} loading={rdvSaving} disabled={!rdvReason}>
-                        {t("visit.rdvOverride")}
-                      </Button>
-                    </div>
-                  </Stack>
-                </Alert>
+                  onBooked={() => {
+                    setRdv(null);
+                    setMsg(t("visit.rdvRecorded"));
+                    onFinished();
+                  }}
+                />
               )}
             </Stack>
           </Paper>
