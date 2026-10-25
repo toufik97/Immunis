@@ -11,6 +11,21 @@ const MIGRATIONS: { table: string; column: string; ddl: string }[] = [
   { table: "users", column: "failed_attempts", ddl: "INTEGER NOT NULL DEFAULT 0" },
   { table: "users", column: "locked_until", ddl: "TEXT" },
   { table: "appointments", column: "slot", ddl: "TEXT CHECK (slot IN ('AM', 'PM'))" },
+  { table: "encounters", column: "void_requested_by", ddl: "TEXT" },
+  { table: "encounters", column: "void_requested_at", ddl: "TEXT" },
+  { table: "encounters", column: "void_request_reason", ddl: "TEXT" },
+  { table: "encounters", column: "voided_at", ddl: "TEXT" },
+  { table: "encounters", column: "voided_by", ddl: "TEXT" },
+  { table: "encounters", column: "void_reason", ddl: "TEXT" },
+  { table: "encounters", column: "reinstated_at", ddl: "TEXT" },
+  { table: "encounters", column: "reinstated_by", ddl: "TEXT" },
+  { table: "encounters", column: "reinstated_reason", ddl: "TEXT" },
+  { table: "encounters", column: "approved_by", ddl: "TEXT" },
+  { table: "encounters", column: "approved_role", ddl: "TEXT" },
+  { table: "encounters", column: "approved_at", ddl: "TEXT" },
+  { table: "doses", column: "invalidated_at", ddl: "TEXT" },
+  { table: "doses", column: "invalidated_by", ddl: "TEXT" },
+  { table: "doses", column: "invalidated_reason", ddl: "TEXT" },
 ];
 
 const NEW_TABLES: string[] = [

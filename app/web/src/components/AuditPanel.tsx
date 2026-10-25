@@ -11,15 +11,17 @@ import Pager, { PAGE_SIZE } from "./Pager";
 type ActionRow = Awaited<ReturnType<typeof api.auditLog>>["rows"][number];
 type OverrideRow = Awaited<ReturnType<typeof api.overrides>>[number];
 type GrantRow = Awaited<ReturnType<typeof api.grantHistory>>[number];
+type Queue = Awaited<ReturnType<typeof api.reviewQueue>>;
 
 type SortKey = "created_at" | "username" | "action";
 
 /** Audit trail: every change (who did what), waivers, and pass history. Admin and reader only. */
-export default function AuditPanel() {
+export default function AuditPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
   const [rows, setRows] = useState<OverrideRow[]>([]);
   const [grants, setGrants] = useState<GrantRow[]>([]);
+  const [queue, setQueue] = useState<Queue | null>(null);
   const [err, setErr] = useState("");
   const [opage, setOpage] = useState(0);
 
@@ -76,14 +78,27 @@ export default function AuditPanel() {
   }, [debouncedQuery, action, debouncedUser, from, to, sortKey, asc, page]);
 
   useEffect(() => {
-    void Promise.all([api.overrides(), api.grantHistory(), api.auditActions()])
-      .then(([o, g, a]) => {
-        setRows(o);
-        setGrants(g);
-        setActionNames(a);
+    let cancelled = false;
+    const base = Promise.all([api.overrides(), api.grantHistory(), api.auditActions()]);
+    const withQueue = isAdmin
+      ? Promise.all([base, api.reviewQueue().catch(() => null)])
+      : Promise.all([base, Promise.resolve(null)]);
+    void withQueue
+      .then(([[o, g, a], q]) => {
+        if (!cancelled) {
+          setRows(o);
+          setGrants(g);
+          setActionNames(a);
+          setQueue(q);
+        }
       })
-      .catch((e) => setErr(e instanceof Error ? e.message : String(e)));
-  }, []);
+      .catch((e) => {
+        if (!cancelled) setErr(e instanceof Error ? e.message : String(e));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin]);
 
   const opages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const safeOpage = Math.min(opage, opages - 1);
@@ -182,8 +197,47 @@ export default function AuditPanel() {
             <Pager page={safePage} total={total} onPage={setPage} />
           </>
         )}
-        <Title order={3} size="h5">{t("audit.overrides")}</Title>
-        {rows.length === 0 ? (
+        {isAdmin && (
+          <>
+            <Title order={3} size="h5">{t("correction.reviewQueue")}</Title>
+            {!queue || (queue.flagged.length === 0 && queue.invalidated.length === 0) ? (
+              <Text size="sm" c="dimmed">{t("correction.queueEmpty")}</Text>
+            ) : (
+              <Stack gap="xs">
+                {(queue.flagged as { id: string; child_name: string; date: string; void_requested_by: string; void_request_reason: string }[]).length > 0 && (
+                  <>
+                    <Text size="sm" fw={600}>{t("correction.flaggedVisits")}</Text>
+                    {(queue.flagged as { id: string; child_name: string; date: string; void_requested_by: string; void_request_reason: string }[]).map((f) => (
+                      <Group key={f.id} gap="xs" wrap="wrap">
+                        <Badge variant="light" color="yellow">{t("correction.statusFlagged")}</Badge>
+                        <Text size="sm" className="tabular break-words">
+                          {f.child_name} · {formatCivilDate(String(f.date), lang)} · {t("correction.by", { who: String(f.void_requested_by) })}
+                        </Text>
+                        <Text size="xs" c="dimmed" className="break-words">{String(f.void_request_reason)}</Text>
+                      </Group>
+                    ))}
+                  </>
+                )}
+                {(queue.invalidated as { id: string; child_name: string; product_group_id: string; administered_on: string; invalidated_by: string; invalidated_reason: string }[]).length > 0 && (
+                  <>
+                    <Text size="sm" fw={600}>{t("correction.invalidatedDoses")}</Text>
+                    {(queue.invalidated as { id: string; child_name: string; product_group_id: string; administered_on: string; invalidated_by: string; invalidated_reason: string }[]).map((d) => (
+                      <Group key={d.id} gap="xs" wrap="wrap">
+                        <Badge variant="light" color="red">{t("correction.statusInvalidated")}</Badge>
+                        <Text size="sm" className="tabular break-words">
+                          {d.child_name} · {String(d.product_group_id)} · {formatCivilDate(String(d.administered_on), lang)} · {t("correction.by", { who: String(d.invalidated_by) })}
+                        </Text>
+                        <Text size="xs" c="dimmed" className="break-words">{String(d.invalidated_reason)}</Text>
+                      </Group>
+                    ))}
+                  </>
+                )}
+                <Text size="xs" c="dimmed">{t("correction.queueHint")}</Text>
+              </Stack>
+            )}
+          </>
+        )}
+        <Title order={3} size="h5">{t("audit.overrides")}</Title>        {rows.length === 0 ? (
           <Text size="sm" c="dimmed">{t("audit.empty")}</Text>
         ) : (
           <>

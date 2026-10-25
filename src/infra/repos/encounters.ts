@@ -19,6 +19,9 @@ export interface NewEncounter {
 }
 
 interface DoseRow {
+  id: string;
+  encounter_id: string;
+  child_id: string;
   product_group_id: string;
   administered_on: string;
   origin: string;
@@ -27,6 +30,9 @@ interface DoseRow {
   recorded_by: string;
   transition: number;
   source: string | null;
+  invalidated_at: string | null;
+  invalidated_by: string | null;
+  invalidated_reason: string | null;
 }
 
 export function toEngineDoses(rows: DoseRow[]): DoseRecord[] {  return rows.map((r) => ({
@@ -41,20 +47,131 @@ export function toEngineDoses(rows: DoseRow[]): DoseRecord[] {  return rows.map(
   }));
 }
 
-/** All recorded doses for a child (CENTRE + EXTERNAL + CAMPAIGN). */
+/** All recorded doses for a child (CENTRE + EXTERNAL + CAMPAIGN), voided visits excluded. */
 export function listDosesByChild(db: Database.Database, childId: string): DoseRecord[] {
   const rows = db
-    .prepare("SELECT * FROM doses WHERE child_id = ? ORDER BY administered_on")
+    .prepare(
+      `SELECT d.* FROM doses d JOIN encounters e ON e.id = d.encounter_id
+       WHERE d.child_id = ? AND e.voided_at IS NULL ORDER BY d.administered_on`
+    )
     .all(childId) as DoseRow[];
   return toEngineDoses(rows);
 }
 
-/** Weight/height measures over time for one child (growth curves). */
+/** Dose rows with identity + correction state for the UI ledger and per-dose actions. */
+export interface DoseDetail extends DoseRecord {
+  id: string;
+  encounterId: string;
+  invalidatedAt: string | null;
+  invalidatedBy: string | null;
+  invalidatedReason: string | null;
+}
+
+export function listDoseDetailsByChild(db: Database.Database, childId: string): DoseDetail[] {
+  const rows = db
+    .prepare(
+      `SELECT d.* FROM doses d JOIN encounters e ON e.id = d.encounter_id
+       WHERE d.child_id = ? AND e.voided_at IS NULL ORDER BY d.administered_on`
+    )
+    .all(childId) as DoseRow[];
+  return rows.map((r) => ({
+    ...toEngineDoses([r])[0],
+    id: r.id,
+    encounterId: r.encounter_id,
+    invalidatedAt: r.invalidated_at,
+    invalidatedBy: r.invalidated_by,
+    invalidatedReason: r.invalidated_reason,
+  }));
+}
+
+/** Weight/height measures over time for one child (growth curves), voided visits excluded. */
 export function listGrowthMeasures(db: Database.Database, childId: string): { date: string; weightKg: number | null; heightCm: number | null }[] {
   const rows = db
-    .prepare("SELECT date, weight_kg, height_cm FROM encounters WHERE child_id = ? AND (weight_kg IS NOT NULL OR height_cm IS NOT NULL) ORDER BY date")
+    .prepare("SELECT date, weight_kg, height_cm FROM encounters WHERE child_id = ? AND voided_at IS NULL AND (weight_kg IS NOT NULL OR height_cm IS NOT NULL) ORDER BY date")
     .all(childId) as { date: string; weight_kg: number | null; height_cm: number | null }[];
   return rows.map((r) => ({ date: r.date, weightKg: r.weight_kg, heightCm: r.height_cm }));
+}
+
+/** Encounter ledger for the correction ticket UI (includes voided visits, newest last). */
+export interface EncounterDetail {
+  id: string;
+  childId: string;
+  date: string;
+  screening: string;
+  doseIds: string[];
+  voidRequestedBy: string | null;
+  voidRequestedAt: string | null;
+  voidRequestReason: string | null;
+  voidedAt: string | null;
+  voidedBy: string | null;
+  voidReason: string | null;
+  reinstatedAt: string | null;
+  reinstatedBy: string | null;
+  reinstatedReason: string | null;
+  /** Canonical product ids on the visit (for voided rows whose doses are excluded elsewhere). */
+  products: string[];
+}
+
+export function listEncountersByChild(db: Database.Database, childId: string): EncounterDetail[] {
+  const rows = db
+    .prepare("SELECT * FROM encounters WHERE child_id = ? ORDER BY date")
+    .all(childId) as Record<string, string | null>[];
+  const doseRows = db
+    .prepare("SELECT id, encounter_id, product_group_id FROM doses WHERE child_id = ?")
+    .all(childId) as { id: string; encounter_id: string; product_group_id: string }[];
+  const byEncounter = new Map<string, string[]>();
+  const productsByEncounter = new Map<string, string[]>();
+  for (const d of doseRows) {
+    byEncounter.set(d.encounter_id, [...(byEncounter.get(d.encounter_id) ?? []), d.id]);
+    productsByEncounter.set(d.encounter_id, [...(productsByEncounter.get(d.encounter_id) ?? []), d.product_group_id]);
+  }
+  return rows.map((r) => ({
+    id: r.id as string,
+    childId: r.child_id as string,
+    date: r.date as string,
+    screening: r.screening as string,
+    doseIds: byEncounter.get(r.id as string) ?? [],
+    voidRequestedBy: (r.void_requested_by as string) ?? null,
+    voidRequestedAt: (r.void_requested_at as string) ?? null,
+    voidRequestReason: (r.void_request_reason as string) ?? null,
+    voidedAt: (r.voided_at as string) ?? null,
+    voidedBy: (r.voided_by as string) ?? null,
+    voidReason: (r.void_reason as string) ?? null,
+    reinstatedAt: (r.reinstated_at as string) ?? null,
+    reinstatedBy: (r.reinstated_by as string) ?? null,
+    reinstatedReason: (r.reinstated_reason as string) ?? null,
+    products: productsByEncounter.get(r.id as string) ?? [],
+  }));
+}
+
+/** Single encounter or null. */
+export function getEncounter(db: Database.Database, id: string): EncounterDetail | null {
+  const r = db.prepare("SELECT * FROM encounters WHERE id = ?").get(id) as Record<string, string | null> | undefined;
+  if (!r) return null;
+  const doseRows = db.prepare("SELECT id FROM doses WHERE encounter_id = ?").all(id) as { id: string }[];
+  const productRows = db.prepare("SELECT product_group_id FROM doses WHERE encounter_id = ?").all(id) as { product_group_id: string }[];
+  return {
+    id: r.id as string,
+    childId: r.child_id as string,
+    date: r.date as string,
+    screening: r.screening as string,
+    doseIds: doseRows.map((d) => d.id),
+    voidRequestedBy: (r.void_requested_by as string) ?? null,
+    voidRequestedAt: (r.void_requested_at as string) ?? null,
+    voidRequestReason: (r.void_request_reason as string) ?? null,
+    voidedAt: (r.voided_at as string) ?? null,
+    voidedBy: (r.voided_by as string) ?? null,
+    voidReason: (r.void_reason as string) ?? null,
+    reinstatedAt: (r.reinstated_at as string) ?? null,
+    reinstatedBy: (r.reinstated_by as string) ?? null,
+    reinstatedReason: (r.reinstated_reason as string) ?? null,
+    products: productRows.map((d) => d.product_group_id),
+  };
+}
+
+/** Single dose row or null. */
+export function getDose(db: Database.Database, id: string): DoseRow | null {
+  return (db.prepare("SELECT * FROM doses WHERE id = ?").get(id) as DoseRow | undefined) ?? null;
 }
 
 /** What a session day actually delivered: visits seen + CENTRE doses given (stock rule §5.10). */
@@ -63,18 +180,18 @@ export function administeredFor(
   date: string
 ): { childrenSeen: number; dosesByProduct: Record<string, number>; perChild: { childId: string; products: string[] }[] } {
   const seen = db
-    .prepare("SELECT COUNT(DISTINCT child_id) AS n FROM encounters WHERE date = ?")
+    .prepare("SELECT COUNT(DISTINCT child_id) AS n FROM encounters WHERE date = ? AND voided_at IS NULL")
     .get(date) as { n: number };
   const rows = db
     .prepare(
-      "SELECT d.product_group_id AS productGroupId, COUNT(*) AS n FROM doses d JOIN encounters e ON e.id = d.encounter_id WHERE e.date = ? AND d.origin = 'CENTRE' GROUP BY d.product_group_id"
+      "SELECT d.product_group_id AS productGroupId, COUNT(*) AS n FROM doses d JOIN encounters e ON e.id = d.encounter_id WHERE e.date = ? AND e.voided_at IS NULL AND d.origin = 'CENTRE' GROUP BY d.product_group_id"
     )
     .all(date) as { productGroupId: string; n: number }[];
   const dosesByProduct: Record<string, number> = {};
   for (const r of rows) dosesByProduct[r.productGroupId] = r.n;
   const childRows = db
     .prepare(
-      "SELECT e.child_id AS childId, d.product_group_id AS productGroupId FROM encounters e LEFT JOIN doses d ON d.encounter_id = e.id AND d.origin = 'CENTRE' WHERE e.date = ? ORDER BY e.child_id"
+      "SELECT e.child_id AS childId, d.product_group_id AS productGroupId FROM encounters e LEFT JOIN doses d ON d.encounter_id = e.id AND d.origin = 'CENTRE' WHERE e.date = ? AND e.voided_at IS NULL ORDER BY e.child_id"
     )
     .all(date) as { childId: string; productGroupId: string | null }[];
   const perChildMap = new Map<string, string[]>();

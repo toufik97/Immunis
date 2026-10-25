@@ -10,8 +10,11 @@ import {
   Grid,
   Group,
   List,
+  Menu,
+  Modal,
   MultiSelect,
   Paper,
+  Radio,
   Select,
   Stack,
   Text,
@@ -25,10 +28,11 @@ import {
   IconCheck,
   IconChevronDown,
   IconChevronUp,
+  IconDots,
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
-import { api, type Child, type Dose, type GateIssue, type Lot } from "../api";
+import { api, type Child, type Dose, type EncounterHistory, type GateIssue, type Lot } from "../api";
 import { ageParts, formatCivilDate, todayCivilDate } from "../format";
 import { formatEngineWarning } from "../engineWarnings";
 import ChildCard from "./ChildCard";
@@ -42,6 +46,8 @@ interface Props {
   child: Child;
   products: { id: string; label_fr?: string }[];
   programs: { id: string; label_fr?: string }[];
+  /** Logged-in user: flag button shows for the recorder or an admin; void/invalidate are admin-only. */
+  user: { username: string; role: string };
   /** Appointment products the child was opened from: prefilled as pending rows. */
   expectedProducts?: string[];
   onDone: () => void;
@@ -51,7 +57,13 @@ interface Props {
   onClose: () => void;
 }
 
-export default function VisitPanel({ child, products, programs, expectedProducts, onDone, onFinished, onClose }: Props) {
+type CorrectionModal =
+  | { action: "flag"; encounterId: string }
+  | { action: "void"; encounterId: string; injected: "yes" | "no" }
+  | { action: "reinstate"; encounterId: string }
+  | { action: "invalidate" | "revalidate"; doseId: string };
+
+export default function VisitPanel({ child, products, programs, user, expectedProducts, onDone, onFinished, onClose }: Props) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
   const [visitDate, setVisitDate] = useState(todayCivilDate());
@@ -59,6 +71,10 @@ export default function VisitPanel({ child, products, programs, expectedProducts
   const [weightKg, setWeightKg] = useState("");
   const [heightCm, setHeightCm] = useState("");
   const [history, setHistory] = useState<Dose[]>([]);
+  const [encounters, setEncounters] = useState<EncounterHistory[]>([]);
+  const [correction, setCorrection] = useState<CorrectionModal | null>(null);
+  const [correctionReason, setCorrectionReason] = useState("");
+  const [correcting, setCorrecting] = useState(false);
   const [doses, setDoses] = useState<Dose[]>([]);
   const [lotsByProduct, setLotsByProduct] = useState<Record<string, Lot[]>>({});
   const [result, setResult] = useState<Awaited<ReturnType<typeof api.evaluate>> | null>(null);
@@ -83,7 +99,9 @@ export default function VisitPanel({ child, products, programs, expectedProducts
 
   async function fetchHistory(): Promise<void> {
     try {
-      setHistory(await api.childDoses(child.id));
+      const [doses, encs] = await Promise.all([api.childDoses(child.id), api.childEncounters(child.id)]);
+      setHistory(doses);
+      setEncounters(encs);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     }
@@ -343,18 +361,23 @@ export default function VisitPanel({ child, products, programs, expectedProducts
   const todayStr = todayCivilDate();
   const originColor = (o: string): string => (o === "CENTRE" ? "teal" : o === "CAMPAIGN" ? "orange" : "gray");
 
-  // History grouped by day (carnet order: oldest first, toggleable).
-  const historyByDate = [...history]
-    .sort((a, b) => {
-      const cmp = a.administeredOn < b.administeredOn ? -1 : a.administeredOn > b.administeredOn ? 1 : 0;
-      return historyAsc ? cmp : -cmp;
-    })
-    .reduce<{ date: string; doses: Dose[] }[]>((groups, d) => {
-      const last = groups[groups.length - 1];
-      if (last && last.date === d.administeredOn) last.doses.push(d);
-      else groups.push({ date: d.administeredOn, doses: [d] });
-      return groups;
-    }, []);
+  // History grouped per encounter (voided visits stay visible via the encounter ledger).
+  const isAdmin = user.role === "admin";
+  const encById = new Map(encounters.map((e) => [e.id, e]));
+  const legacyByDate = new Map<string, Dose[]>();
+  for (const d of history) {
+    if (d.encounterId && encById.has(d.encounterId)) continue;
+    legacyByDate.set(d.administeredOn, [...(legacyByDate.get(d.administeredOn) ?? []), d]);
+  }
+  const orderedEncounters = [...encounters].sort((a, b) =>
+    historyAsc ? (a.date < b.date ? -1 : 1) : a.date > b.date ? -1 : 1
+  );
+  const canFlag = (enc: EncounterHistory, doses: Dose[]): boolean => {
+    if (enc.voidedAt || enc.voidRequestedBy) return false;
+    if (isAdmin) return true;
+    if (doses.length === 0) return false;
+    return doses.every((d) => d.recordedBy === user.username);
+  };
 
   // Recorded doses that did not count (or counted with a warning), keyed for the ledger.
   const doseFlags = new Map<string, string[]>();
@@ -380,6 +403,55 @@ export default function VisitPanel({ child, products, programs, expectedProducts
   const live = scoreLive(child.sex, child.birthDate, visitDate, liveWeight, liveHeight);
   const liveReady = live !== null && (liveWeight !== null || liveHeight !== null);
 
+  async function submitCorrection(): Promise<void> {
+    const c = correction;
+    if (!c) return;
+    if (!correctionReason.trim()) {
+      setErr(t("correction.needReason"));
+      return;
+    }
+    setCorrecting(true);
+    try {
+      const reason = correctionReason.trim();
+      switch (c.action) {
+        case "flag":
+          await api.flagVoid(c.encounterId, reason);
+          break;
+        case "void":
+          await api.voidEncounter(c.encounterId, reason);
+          break;
+        case "reinstate":
+          await api.reinstateEncounter(c.encounterId, reason);
+          break;
+        case "invalidate":
+          await api.invalidateDose(c.doseId, reason);
+          break;
+        case "revalidate":
+          await api.revalidateDose(c.doseId, reason);
+          break;
+      }
+      setCorrection(null);
+      setCorrectionReason("");
+      setMsg(t(c.action === "flag" ? "correction.sent" : "correction.done"));
+      await fetchHistory();
+      await evaluate(true);
+      onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCorrecting(false);
+    }
+  }
+
+  function correctionTitle(): string {
+    if (!correction) return "";
+    if (correction.action === "flag") return t("correction.report");
+    if (correction.action === "void") return t("correction.confirmVoid");
+    if (correction.action === "reinstate") return t("correction.confirmReinstate");
+    if (correction.action === "invalidate") return t("correction.confirmInvalidate");
+    return t("correction.confirmRevalidate");
+  }
+
   return (
     <Grid>
       <Grid.Col span={{ base: 12, lg: 8 }}>
@@ -397,46 +469,222 @@ export default function VisitPanel({ child, products, programs, expectedProducts
                   </Button>
                 )}
               </Group>
-        {history.length === 0 ? (
+        {history.length === 0 && encounters.length === 0 ? (
           <Text size="sm" c="dimmed">
             {t("visit.noRecorded")}
           </Text>
         ) : (
           <Stack gap="xs">
-            {historyByDate.map((g) => (
-              <Group key={g.date} gap="sm" wrap="wrap" align="center">
+            {orderedEncounters.map((enc) => {
+              const doses = history.filter((d) => d.encounterId === enc.id);
+              const flaggable = canFlag(enc, doses);
+              const voidable = isAdmin && !enc.voidedAt;
+              const reinstatable = isAdmin && !!enc.voidedAt;
+              const toInvalidate = isAdmin && !enc.voidedAt ? doses.filter((d) => d.overridden && !d.invalidatedAt && d.id) : [];
+              const toRevalidate = isAdmin ? doses.filter((d) => d.invalidatedAt && d.id) : [];
+              const hasMenu = flaggable || voidable || reinstatable || toInvalidate.length > 0 || toRevalidate.length > 0;
+              return (
+                <Group key={enc.id} gap="sm" wrap="wrap" align="center">
+                  <Stack gap={0} style={{ minWidth: 110 }}>
+                    <Text size="sm" fw={600} className="tabular" td={enc.voidedAt ? "line-through" : undefined}>
+                      {formatCivilDate(enc.date, lang)}
+                    </Text>
+                    <Text size="xs" c="dimmed" className="tabular">
+                      {ageWord(enc.date)}
+                    </Text>
+                  </Stack>
+                  <Group gap={6} wrap="wrap" style={{ flex: 1 }}>
+                    {doses.map((d) => (
+                      <Badge
+                        key={d.id ?? `${d.productGroupId}|${d.administeredOn}`}
+                        variant="light"
+                        color={d.invalidatedAt ? "red" : originColor(d.origin)}
+                        title={d.invalidatedAt ? (d.invalidatedReason ?? undefined) : undefined}
+                      >
+                        {productLabel(d.productGroupId)}
+                        {d.overridden && !d.invalidatedAt ? ` · ${t("correction.statusOverridden")}` : ""}
+                        {d.invalidatedAt ? ` · ${t("correction.statusInvalidated")}` : ""}
+                      </Badge>
+                    ))}
+                    {enc.voidedAt && (
+                      <Text size="xs" c="dimmed" td="line-through">
+                        {enc.products.map(productLabel).join(" · ")}
+                      </Text>
+                    )}
+                  </Group>
+                  <Text size="xs" c="dimmed">
+                    {[...new Set(doses.map((d) => t(`origin.${d.origin}`)))].join(" · ")}
+                  </Text>
+                  {doses.some((d) => doseFlags.has(`${d.productGroupId}|${d.administeredOn}`)) && (
+                    <IconAlertTriangle
+                      size={14}
+                      color="orange"
+                      title={[...new Set(doses.flatMap((d) => doseFlags.get(`${d.productGroupId}|${d.administeredOn}`) ?? []))]
+                        .map((w) => formatEngineWarning(w, lang))
+                        .join("\n")}
+                      aria-label={t("visit.notCounted")}
+                    />
+                  )}
+                  {enc.voidRequestedBy && !enc.voidedAt && (
+                    <Badge size="sm" color="yellow" variant="light" title={enc.voidRequestReason ?? undefined}>
+                      {t("correction.statusFlagged")}
+                    </Badge>
+                  )}
+                  {enc.voidedAt && (
+                    <Badge size="sm" color="red" variant="light" title={enc.voidReason ?? undefined}>
+                      {t("correction.statusVoided")}
+                    </Badge>
+                  )}
+                  {hasMenu && (
+                    <Menu position="bottom-end">
+                      <Menu.Target>
+                        <ActionIcon variant="subtle" aria-label={t("correction.report")}>
+                          <IconDots size={16} aria-hidden="true" />
+                        </ActionIcon>
+                      </Menu.Target>
+                      <Menu.Dropdown>
+                        {flaggable && (
+                          <Menu.Item
+                            onClick={() => {
+                              setCorrectionReason("");
+                              setCorrection({ action: "flag", encounterId: enc.id });
+                            }}
+                          >
+                            {t("correction.report")}
+                          </Menu.Item>
+                        )}
+                        {voidable && (
+                          <Menu.Item
+                            color="red"
+                            onClick={() => {
+                              setCorrectionReason("");
+                              setCorrection({ action: "void", encounterId: enc.id, injected: "no" });
+                            }}
+                          >
+                            {t("correction.void")}
+                          </Menu.Item>
+                        )}
+                        {reinstatable && (
+                          <Menu.Item
+                            onClick={() => {
+                              setCorrectionReason("");
+                              setCorrection({ action: "reinstate", encounterId: enc.id });
+                            }}
+                          >
+                            {t("correction.reinstate")}
+                          </Menu.Item>
+                        )}
+                        {toInvalidate.map((d) => (
+                          <Menu.Item
+                            key={d.id}
+                            color="red"
+                            onClick={() => {
+                              setCorrectionReason("");
+                              setCorrection({ action: "invalidate", doseId: d.id! });
+                            }}
+                          >
+                            {t("correction.invalidate")} ({productLabel(d.productGroupId)})
+                          </Menu.Item>
+                        ))}
+                        {toRevalidate.map((d) => (
+                          <Menu.Item
+                            key={d.id}
+                            onClick={() => {
+                              setCorrectionReason("");
+                              setCorrection({ action: "revalidate", doseId: d.id! });
+                            }}
+                          >
+                            {t("correction.revalidate")} ({productLabel(d.productGroupId)})
+                          </Menu.Item>
+                        ))}
+                      </Menu.Dropdown>
+                    </Menu>
+                  )}
+                </Group>
+              );
+            })}
+            {[...legacyByDate.entries()].map(([date, doses]) => (
+              <Group key={`legacy-${date}`} gap="sm" wrap="wrap" align="center">
                 <Stack gap={0} style={{ minWidth: 110 }}>
                   <Text size="sm" fw={600} className="tabular">
-                    {formatCivilDate(g.date, lang)}
+                    {formatCivilDate(date, lang)}
                   </Text>
                   <Text size="xs" c="dimmed" className="tabular">
-                    {ageWord(g.date)}
+                    {ageWord(date)}
                   </Text>
                 </Stack>
                 <Group gap={6} wrap="wrap" style={{ flex: 1 }}>
-                  {g.doses.map((d, i) => (
+                  {doses.map((d, i) => (
                     <Badge key={i} variant="light" color={originColor(d.origin)}>
                       {productLabel(d.productGroupId)}
                     </Badge>
                   ))}
                 </Group>
-                <Text size="xs" c="dimmed">
-                  {[...new Set(g.doses.map((d) => t(`origin.${d.origin}`)))].join(" · ")}
-                </Text>
-                {g.doses.some((d) => doseFlags.has(`${d.productGroupId}|${d.administeredOn}`)) && (
-                  <IconAlertTriangle
-                    size={14}
-                    color="orange"
-                    title={[...new Set(g.doses.flatMap((d) => doseFlags.get(`${d.productGroupId}|${d.administeredOn}`) ?? []))]
-                      .map((w) => formatEngineWarning(w, lang))
-                      .join("\n")}
-                    aria-label={t("visit.notCounted")}
-                  />
-                )}
               </Group>
             ))}
           </Stack>
         )}
+      <Modal
+        opened={correction !== null}
+        onClose={() => setCorrection(null)}
+        title={correctionTitle()}
+      >
+        <Stack gap="sm">
+          {correction?.action === "void" && (
+            <>
+              <Text size="sm" fw={600}>
+                {t("correction.injectedQ")}
+              </Text>
+              <Radio.Group
+                value={correction.injected}
+                onChange={(v) =>
+                  setCorrection((c) => (c && "injected" in c ? { ...c, injected: v as "yes" | "no" } : c))
+                }
+              >
+                <Stack gap="xs">
+                  <Radio value="no" label={t("correction.injectedNo")} />
+                  <Radio value="yes" label={t("correction.injectedYes")} />
+                </Stack>
+              </Radio.Group>
+              {correction.injected === "no" ? (
+                <Text size="sm" c="dimmed">{t("correction.voidNote")}</Text>
+              ) : (
+                <Alert color="yellow">{t("correction.invalidateNote")}</Alert>
+              )}
+            </>
+          )}
+          {correction?.action === "reinstate" && (
+            <Text size="sm" c="dimmed">{t("correction.reinstateNote")}</Text>
+          )}
+          {(correction?.action === "invalidate" || correction?.action === "revalidate") && (
+            <Text size="sm" c="dimmed">{t("correction.invalidateNote")}</Text>
+          )}
+          <TextInput
+            label={t("correction.reason")}
+            name="correctionReason"
+            autoComplete="off"
+            required
+            value={correctionReason}
+            onChange={(e) => setCorrectionReason(e.target.value)}
+          />
+          <Group justify="end">
+            <Button
+              color={correction?.action === "flag" || correction?.action === "reinstate" || correction?.action === "revalidate" ? undefined : "red"}
+              onClick={submitCorrection}
+              loading={correcting}
+              disabled={
+                !correctionReason.trim() ||
+                (correction?.action === "void" && (correction.injected === "yes"))
+              }
+            >
+              {correction?.action === "flag" ? t("correction.confirm") : correctionTitle()}
+            </Button>
+          </Group>
+          {correction?.action === "void" && correction.injected === "yes" && (
+            <Text size="xs" c="dimmed">{t("correction.queueHint")}</Text>
+          )}
+        </Stack>
+      </Modal>
 
             </Stack>
           </Card>

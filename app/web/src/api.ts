@@ -46,12 +46,40 @@ export interface Child {
 }
 
 export interface Dose {
+  id?: string;
+  encounterId?: string;
   productGroupId: string;
   administeredOn: string;
   origin: "CENTRE" | "EXTERNAL" | "CAMPAIGN";
   lotId?: string;
   overridden: boolean;
   recordedBy: string;
+  invalidatedAt?: string | null;
+  invalidatedReason?: string | null;
+}
+
+export interface EncounterHistory {
+  id: string;
+  childId: string;
+  date: string;
+  screening: string;
+  doseIds: string[];
+  voidRequestedBy: string | null;
+  voidRequestedAt: string | null;
+  voidRequestReason: string | null;
+  voidedAt: string | null;
+  voidedBy: string | null;
+  voidReason: string | null;
+  reinstatedAt: string | null;
+  reinstatedBy: string | null;
+  reinstatedReason: string | null;
+  products: string[];
+}
+
+export interface ReviewQueue {
+  flagged: Record<string, unknown>[];
+  voided: Record<string, unknown>[];
+  invalidated: Record<string, unknown>[];
 }
 
 export interface Lot {
@@ -232,6 +260,18 @@ export const api = {
   allChildren: () => req<Child[]>("/api/children"),
   child: (id: string) => req<Child>(`/api/children/${id}`),
   childDoses: (childId: string) => req<Dose[]>(`/api/children/${childId}/doses`),
+  childEncounters: (childId: string) => req<EncounterHistory[]>(`/api/children/${childId}/encounters`),
+  flagVoid: (encounterId: string, reason: string) =>
+    req<{ ok: boolean }>(`/api/encounters/${encounterId}/flag-void`, { method: "POST", body: JSON.stringify({ reason }) }),
+  voidEncounter: (encounterId: string, reason: string) =>
+    req<{ ok: boolean }>(`/api/encounters/${encounterId}/void`, { method: "POST", body: JSON.stringify({ reason }) }),
+  reinstateEncounter: (encounterId: string, reason: string) =>
+    req<{ ok: boolean }>(`/api/encounters/${encounterId}/reinstate`, { method: "POST", body: JSON.stringify({ reason }) }),
+  invalidateDose: (doseId: string, reason: string) =>
+    req<{ ok: boolean }>(`/api/doses/${doseId}/invalidate`, { method: "POST", body: JSON.stringify({ reason }) }),
+  revalidateDose: (doseId: string, reason: string) =>
+    req<{ ok: boolean }>(`/api/doses/${doseId}/revalidate`, { method: "POST", body: JSON.stringify({ reason }) }),
+  reviewQueue: () => req<ReviewQueue>("/api/review-queue"),
   childGrowth: (childId: string) =>
     req<{
       points: {

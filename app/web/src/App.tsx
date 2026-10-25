@@ -351,6 +351,7 @@ export default function App() {
                       child={child}
                       products={pack.productGroups}
                       programs={pack.programs}
+                      user={{ username: user.username, role: user.role }}
                       expectedProducts={pendingExpected}
                       onDone={() => {
                         setChild({ ...child });
@@ -403,7 +404,7 @@ export default function App() {
                 )}
                 {(user.role === "admin" || user.role === "reader") && (
                   <Tabs.Panel value="audit">
-                    <AuditPanel />
+                    <AuditPanel isAdmin={user.role === "admin"} />
                   </Tabs.Panel>
                 )}
                 <Tabs.Panel value="settings">

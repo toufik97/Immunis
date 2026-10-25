@@ -18,6 +18,9 @@ export const PERMISSIONS = [
   "prefs.edit",
   "backup.export",
   "audit.view",
+  "visit.void",
+  /** Reserved: future doctor clinical sign-off on voids/invalidations (admin holds it in v1). */
+  "visit.void_approve",
   "user.manage",
   "transition.grant",
 ] as const;

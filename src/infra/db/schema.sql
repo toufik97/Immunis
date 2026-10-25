@@ -37,7 +37,21 @@ CREATE TABLE IF NOT EXISTS encounters (
   screening_note TEXT,
   weight_kg REAL,
   height_cm REAL,
-  next_appointment_date TEXT
+  next_appointment_date TEXT,
+  -- Correction ticket (Scenario B: phantom / disputed override). NULL = no ticket.
+  void_requested_by TEXT,
+  void_requested_at TEXT,            -- UTC ISO
+  void_request_reason TEXT,
+  voided_at TEXT,                    -- UTC ISO; set = excluded from engine/planning/analytics
+  voided_by TEXT,
+  void_reason TEXT,
+  reinstated_at TEXT,                -- UTC ISO; last undo of a void
+  reinstated_by TEXT,
+  reinstated_reason TEXT,
+  -- Future doctor clinical sign-off (v1: admin self-approves, NULL until used).
+  approved_by TEXT,
+  approved_role TEXT,
+  approved_at TEXT                    -- UTC ISO
 );
 
 CREATE TABLE IF NOT EXISTS doses (
@@ -51,7 +65,12 @@ CREATE TABLE IF NOT EXISTS doses (
   overridden INTEGER NOT NULL DEFAULT 0 CHECK (overridden IN (0, 1)),
   recorded_by TEXT NOT NULL,
   transition INTEGER NOT NULL DEFAULT 0 CHECK (transition IN (0, 1)), -- 1 = paper-move CENTRE without lot, no stock move
-  source TEXT -- e.g. 'paper-transition', NULL = normal
+  source TEXT, -- e.g. 'paper-transition', NULL = normal
+  -- Admin invalidation of a nurse override (dose was given, waiver disagreed with).
+  -- Engine sees overridden = 0 while set; no stock move (vial was really used).
+  invalidated_at TEXT,               -- UTC ISO
+  invalidated_by TEXT,
+  invalidated_reason TEXT
 );
 
 CREATE TABLE IF NOT EXISTS appointments (

@@ -7,9 +7,17 @@ import { isValidDateString, parseDate } from "../engine/duration";
 import { toEngineHistory } from "../app/evaluate-child";
 import { findChildrenByName, getChild, listChildren } from "../infra/repos/children";
 import { registerChild } from "../app/register-child";
-import { listDosesByChild } from "../infra/repos/encounters";
+import { listDosesByChild, listDoseDetailsByChild, listEncountersByChild } from "../infra/repos/encounters";
 import { nowIso, todayLocal } from "../infra/time";
 import { recordVisit, RecordGateError } from "../app/record-visit";
+import {
+  flagVoidEncounter,
+  voidEncounter,
+  reinstateEncounter,
+  invalidateDose,
+  revalidateDose,
+  CorrectionError,
+} from "../app/encounter-correction";
 import { addLot, listLots, checkLotUsable, usableLotsFor } from "../infra/repos/stock";
 import { createAppointment, markAppointment } from "../infra/repos/appointments";
 import { growthFor } from "../app/child-growth";
@@ -489,7 +497,19 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
   app.get("/api/children/:id/doses", async (req, reply) => {
     const me = currentUser(req as never);
     if (!need(reply as never, me, "child.read")) return;
-    return listDosesByChild(db, (req.params as Record<string, string>).id);
+    // Voided visits excluded (phantom records never reach the engine or ledger counts).
+    return listDoseDetailsByChild(db, (req.params as Record<string, string>).id);
+  });
+
+  // ---- encounter ledger (per-visit status for the correction ticket UI) ----
+  app.get("/api/children/:id/encounters", async (req, reply) => {
+    const me = currentUser(req as never);
+    if (!need(reply as never, me, "child.read")) return;
+    if (!getChild(db, (req.params as Record<string, string>).id)) {
+      reply.code(404).send({ error: "Child not found" });
+      return;
+    }
+    return listEncountersByChild(db, (req.params as Record<string, string>).id);
   });
 
   app.get("/api/children/:id/growth", async (req, reply) => {
@@ -552,6 +572,119 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
     } catch (e) {
       sendError(reply, e);
     }
+  });
+
+  // ---- correction tickets (Scenario B: phantom void + override invalidate) ----
+  function getChildByEncounter(db: Database.Database, encounterId: string): string | null {
+    const row = db.prepare("SELECT child_id FROM encounters WHERE id = ?").get(encounterId) as
+      | { child_id: string }
+      | undefined;
+    return row?.child_id ?? null;
+  }
+
+  app.post("/api/encounters/:id/flag-void", async (req, reply) => {
+    const me = currentUser(req as never);
+    if (!me) return reply.code(401).send({ error: "Unauthorized: log in first" });
+    try {
+      const { reason } = z.object({ reason: z.string().min(1) }).parse(req.body);
+      const id = (req.params as Record<string, string>).id;
+      flagVoidEncounter(db, id, { username: me.username, role: me.role }, reason);
+      log(me, me.username, "encounter.flag_void", `visit ${id}: ${reason}`, getChildByEncounter(db, id) ?? undefined);
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof CorrectionError) return reply.code(e.status).send({ error: e.message });
+      sendError(reply, e);
+    }
+  });
+
+  app.post("/api/encounters/:id/void", async (req, reply) => {
+    const me = currentUser(req as never);
+    if (!need(reply as never, me, "visit.void")) return;
+    try {
+      const { reason } = z.object({ reason: z.string().min(1) }).parse(req.body);
+      const id = (req.params as Record<string, string>).id;
+      const childId = getChildByEncounter(db, id);
+      voidEncounter(db, id, me!.username, reason);
+      log(me!, me!.username, "encounter.void", `visit ${id} voided: ${reason}`, childId ?? undefined);
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof CorrectionError) return reply.code(e.status).send({ error: e.message });
+      sendError(reply, e);
+    }
+  });
+
+  app.post("/api/encounters/:id/reinstate", async (req, reply) => {
+    const me = currentUser(req as never);
+    if (!need(reply as never, me, "visit.void")) return;
+    try {
+      const { reason } = z.object({ reason: z.string().min(1) }).parse(req.body);
+      const id = (req.params as Record<string, string>).id;
+      const childId = getChildByEncounter(db, id);
+      reinstateEncounter(db, id, me!.username, reason);
+      log(me!, me!.username, "encounter.reinstate", `visit ${id} reinstated: ${reason}`, childId ?? undefined);
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof CorrectionError) return reply.code(e.status).send({ error: e.message });
+      sendError(reply, e);
+    }
+  });
+
+  app.post("/api/doses/:id/invalidate", async (req, reply) => {
+    const me = currentUser(req as never);
+    if (!need(reply as never, me, "visit.void")) return;
+    try {
+      const { reason } = z.object({ reason: z.string().min(1) }).parse(req.body);
+      const id = (req.params as Record<string, string>).id;
+      invalidateDose(db, id, me!.username, reason);
+      log(me!, me!.username, "dose.invalidate", `dose ${id}: ${reason}`);
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof CorrectionError) return reply.code(e.status).send({ error: e.message });
+      sendError(reply, e);
+    }
+  });
+
+  app.post("/api/doses/:id/revalidate", async (req, reply) => {
+    const me = currentUser(req as never);
+    if (!need(reply as never, me, "visit.void")) return;
+    try {
+      const { reason } = z.object({ reason: z.string().min(1) }).parse(req.body);
+      const id = (req.params as Record<string, string>).id;
+      revalidateDose(db, id, me!.username, reason);
+      log(me!, me!.username, "dose.revalidate", `dose ${id}: ${reason}`);
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof CorrectionError) return reply.code(e.status).send({ error: e.message });
+      sendError(reply, e);
+    }
+  });
+
+  // Admin review queue: flagged visits + voided visits + invalidated doses.
+  app.get("/api/review-queue", async (req, reply) => {
+    const me = currentUser(req as never);
+    if (!need(reply as never, me, "visit.void")) return;
+    const flagged = db
+      .prepare(
+        `SELECT e.*, c.given_name || ' ' || c.family_name AS child_name FROM encounters e
+         JOIN children c ON c.id = e.child_id
+         WHERE e.void_requested_by IS NOT NULL AND e.voided_at IS NULL ORDER BY e.void_requested_at DESC`
+      )
+      .all() as Record<string, unknown>[];
+    const voided = db
+      .prepare(
+        `SELECT e.*, c.given_name || ' ' || c.family_name AS child_name FROM encounters e
+         JOIN children c ON c.id = e.child_id
+         WHERE e.voided_at IS NOT NULL ORDER BY e.voided_at DESC LIMIT 100`
+      )
+      .all() as Record<string, unknown>[];
+    const invalidated = db
+      .prepare(
+        `SELECT d.*, c.given_name || ' ' || c.family_name AS child_name FROM doses d
+         JOIN children c ON c.id = d.child_id
+         WHERE d.invalidated_at IS NOT NULL ORDER BY d.invalidated_at DESC LIMIT 100`
+      )
+      .all() as Record<string, unknown>[];
+    return { flagged, voided, invalidated };
   });
 
   // ---- stock ----
