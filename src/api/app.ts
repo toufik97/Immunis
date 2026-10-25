@@ -19,7 +19,7 @@ import {
   CorrectionError,
 } from "../app/encounter-correction";
 import { addLot, listLots, checkLotUsable, usableLotsFor } from "../infra/repos/stock";
-import { createAppointment, markAppointment } from "../infra/repos/appointments";
+import { createAppointment, listByChild, updateAppointment } from "../infra/repos/appointments";
 import { growthFor } from "../app/child-growth";
 import { noShowsFor, sessionFor, agendaFor } from "../app/sessions";
 import { insertOverride, listOverridesByChild, listRecentOverrides, insertAuditLog, queryAuditLog, listAuditActions } from "../infra/repos/audit";
@@ -512,8 +512,17 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
     return listEncountersByChild(db, (req.params as Record<string, string>).id);
   });
 
-  app.get("/api/children/:id/growth", async (req, reply) => {
+  app.get("/api/children/:id/appointments", async (req, reply) => {
     const me = currentUser(req as never);
+    if (!need(reply as never, me, "child.read")) return;
+    if (!getChild(db, (req.params as Record<string, string>).id)) {
+      reply.code(404).send({ error: "Child not found" });
+      return;
+    }
+    return listByChild(db, (req.params as Record<string, string>).id);
+  });
+
+  app.get("/api/children/:id/growth", async (req, reply) => {    const me = currentUser(req as never);
     if (!need(reply as never, me, "child.read")) return;
     const child = getChild(db, (req.params as Record<string, string>).id);
     if (!child) {
@@ -899,23 +908,70 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
     }
   });
 
-  app.patch("/api/appointments/:id", async (req, reply) => {
+  // Past appointments are history (kept/missed is written by visit recording, never by hand):
+  // only future pending rows move. Horizon is anchored on the current due date so
+  // shifting inside the original plan never false-triggers; pushing past it needs a reason.
+  app.put("/api/appointments/:id", async (req, reply) => {
     try {
       const me = currentUser(req as never);
       if (!need(reply as never, me, "appointment.manage")) return;
-      const { kept } = z.object({ kept: z.boolean() }).parse(req.body);
+      const input = z
+        .object({
+          dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          slot: SlotSchema.default("AM"),
+          expectedProducts: z.array(z.string().min(1)).default([]),
+          overrideReason: z.string().min(1).optional(),
+        })
+        .parse(req.body);
       const id = (req.params as Record<string, string>).id;
-      const row = db.prepare("SELECT child_id FROM appointments WHERE id = ?").get(id) as { child_id: string } | undefined;
+      const row = db.prepare("SELECT child_id, due_date, kept FROM appointments WHERE id = ?").get(id) as
+        | { child_id: string; due_date: string; kept: number | null }
+        | undefined;
       if (!row) {
         reply.code(404).send({ error: "Appointment not found" });
         return;
       }
-      if (!markAppointment(db, id, kept)) {
+      if (row.kept !== null) {
+        reply.code(400).send({ error: "Resolved appointments cannot be edited" });
+        return;
+      }
+      const today = todayLocal();
+      if (row.due_date < today) {
+        reply.code(400).send({ error: "Past appointments cannot be edited" });
+        return;
+      }
+      if (input.dueDate < today) {
+        reply.code(400).send({ error: "New date must not be in the past" });
+        return;
+      }
+      const issues = checkBooking(db, {
+        dueDate: input.dueDate,
+        slot: input.slot,
+        expectedProducts: input.expectedProducts,
+        referenceDate: row.due_date,
+        excludeAppointmentId: id,
+      });
+      if (issues.length > 0 && !input.overrideReason) {
+        return reply.code(409).send({ error: "Booking breaks scheduling rules", issues });
+      }
+      const updated = updateAppointment(db, id, input);
+      if (!updated) {
         reply.code(404).send({ error: "Appointment not found" });
         return;
       }
-      log(me!, me!.username, kept ? "appointment.kept" : "appointment.missed", undefined, row.child_id);
-      return { ok: true };
+      if (issues.length > 0) {
+        insertOverride(db, {
+          childId: row.child_id,
+          author: me!.username,
+          what: `appointment.reschedule: ${issues.map((i) => i.code).join(", ")}`,
+          reason: input.overrideReason!,
+          createdAt: nowIso(),
+        });
+        log(me!, me!.username, "appointment.override", `${row.due_date} → ${input.dueDate} ${input.slot}: ${input.overrideReason}`, row.child_id);
+      } else {
+        log(me!, me!.username, "appointment.reschedule", `${row.child_id} ${row.due_date} → ${input.dueDate}`, row.child_id);
+      }
+      return updated;
     } catch (e) {
       sendError(reply, e);
     }

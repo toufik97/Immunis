@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { openTestDb } from "./db-helper";
 import { registerChild } from "../../src/app/register-child";
-import { createAppointment, markAppointment } from "../../src/infra/repos/appointments";
+import { createAppointment } from "../../src/infra/repos/appointments";
 import { addLot } from "../../src/infra/repos/stock";
 import { recordEncounter } from "../../src/infra/repos/encounters";
 import { noShowsFor, sessionFor } from "../../src/app/sessions";
@@ -42,7 +42,7 @@ describe("sessions seam", () => {
     const b = child(db as never, "B");
     const apptA = createAppointment(db, { childId: a.id, dueDate: "2026-10-01", expectedProducts: ["BCG"] });
     createAppointment(db, { childId: b.id, dueDate: "2026-10-01", expectedProducts: ["BCG"] });
-    markAppointment(db, apptA.id, true);
+    db.prepare("UPDATE appointments SET kept = 1 WHERE id = ?").run(apptA.id);
 
     const rows = noShowsFor(db, "2026-12-01");
     expect(rows.map((r) => r.childId)).toEqual([b.id]);
@@ -128,7 +128,7 @@ describe("sessions seam", () => {
     const db = openTestDb();
     const a = child(db as never, "A");
     const appt = createAppointment(db, { childId: a.id, dueDate: "2026-10-16", expectedProducts: ["BCG"] });
-    markAppointment(db, appt.id, true);
+    db.prepare("UPDATE appointments SET kept = 1 WHERE id = ?").run(appt.id);
     const s = sessionFor(db, "2026-10-18");
     expect(s.probable).toEqual([]);
     expect(s.possible).toEqual([]);

@@ -23,6 +23,8 @@ export interface BookingInput {
    * booking day — booking the recommended date itself is always in horizon.
    */
   referenceDate: string;
+  /** Row being rescheduled: excluded from cell counts so keeping its slot never blocks. */
+  excludeAppointmentId?: string;
 }
 
 /**
@@ -70,7 +72,7 @@ export function checkBooking(db: Database.Database, input: BookingInput): Schedu
     }
     // The count follows the cell's own scope: a global cell counts every
     // booking in it, a per-group cell only bookings expecting that group.
-    const booked = countCellBookings(db, input.dueDate, input.slot, own ? g! : undefined);
+    const booked = countCellBookings(db, input.dueDate, input.slot, own ? g! : undefined, input.excludeAppointmentId);
     if (booked >= cell.cap) {
       issues.push({ code: "slot_full", productGroupId: g, booked, cap: cell.cap, limit: null });
     }

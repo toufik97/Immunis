@@ -61,9 +61,25 @@ export function listDueAll(db: Database.Database, date: string): Appointment[] {
   return rows.map(toAppointment);
 }
 
-export function markAppointment(db: Database.Database, id: string, kept: boolean): boolean {
-  const r = db.prepare("UPDATE appointments SET kept = ? WHERE id = ?").run(kept ? 1 : 0, id);
-  return r.changes > 0;
+/** Reschedule a future pending appointment (past/kept/missed rows are immutable; enforced by callers). */
+export function updateAppointment(
+  db: Database.Database,
+  id: string,
+  input: { dueDate: string; slot: "AM" | "PM"; expectedProducts: string[] }
+): Appointment | null {
+  const r = db
+    .prepare("UPDATE appointments SET due_date = ?, slot = ?, expected_products = ? WHERE id = ?")
+    .run(input.dueDate, input.slot, JSON.stringify(input.expectedProducts), id);
+  if (r.changes === 0) return null;
+  return toAppointment(db.prepare("SELECT * FROM appointments WHERE id = ?").get(id) as AppointmentRow);
+}
+
+/** All appointments for one child, oldest first (child file view). */
+export function listByChild(db: Database.Database, childId: string): Appointment[] {
+  const rows = db
+    .prepare("SELECT * FROM appointments WHERE child_id = ? ORDER BY due_date ASC")
+    .all(childId) as AppointmentRow[];
+  return rows.map(toAppointment);
 }
 
 /** Past-due appointments never honoured (FR-7.1). */

@@ -15,6 +15,7 @@ import {
   MultiSelect,
   Paper,
   Radio,
+  SegmentedControl,
   Select,
   Stack,
   Text,
@@ -32,7 +33,7 @@ import {
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
-import { api, type Child, type Dose, type EncounterHistory, type GateIssue, type Lot } from "../api";
+import { api, type Appointment, type Child, type Dose, type EncounterHistory, type GateIssue, type Lot, type SchedulingIssue } from "../api";
 import { ageParts, formatCivilDate, todayCivilDate } from "../format";
 import { formatEngineWarning } from "../engineWarnings";
 import ChildCard from "./ChildCard";
@@ -72,6 +73,14 @@ export default function VisitPanel({ child, products, programs, user, expectedPr
   const [heightCm, setHeightCm] = useState("");
   const [history, setHistory] = useState<Dose[]>([]);
   const [encounters, setEncounters] = useState<EncounterHistory[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDate, setEditDate] = useState("");
+  const [editSlot, setEditSlot] = useState<"AM" | "PM">("AM");
+  const [editProducts, setEditProducts] = useState<string[]>([]);
+  const [editIssues, setEditIssues] = useState<SchedulingIssue[]>([]);
+  const [editReason, setEditReason] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
   const [correction, setCorrection] = useState<CorrectionModal | null>(null);
   const [correctionReason, setCorrectionReason] = useState("");
   const [correcting, setCorrecting] = useState(false);
@@ -99,11 +108,62 @@ export default function VisitPanel({ child, products, programs, user, expectedPr
 
   async function fetchHistory(): Promise<void> {
     try {
-      const [doses, encs] = await Promise.all([api.childDoses(child.id), api.childEncounters(child.id)]);
+      const [doses, encs, appts] = await Promise.all([api.childDoses(child.id), api.childEncounters(child.id), api.childAppointments(child.id)]);
       setHistory(doses);
       setEncounters(encs);
+      setAppointments(appts);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  function startEdit(a: Appointment): void {
+    setEditIssues([]);
+    setEditReason("");
+    setEditDate(a.dueDate);
+    setEditSlot(a.slot ?? "AM");
+    setEditProducts(a.expectedProducts);
+    setEditingId(a.id);
+  }
+
+  /** Scheduling-gate sentence (codes + params, never hardcoded). */
+  function schedText(i: SchedulingIssue): string {
+    const product = i.productGroupId ? ` · ${productLabel(i.productGroupId)}` : "";
+    switch (i.code) {
+      case "closed_day":
+        return t("sched.closedDay", { product });
+      case "slot_full":
+        return t("sched.slotFull", { booked: i.booked ?? 0, cap: i.cap ?? 0, product });
+      case "closure_day":
+        return t("sched.closureDay", { label: i.limit ?? "" });
+      case "beyond_horizon":
+        return t("sched.beyondHorizon", { days: i.limit ?? "" });
+    }
+  }
+
+  async function saveEdit(id: string, override = false): Promise<void> {
+    if (!editDate) return;
+    setErr("");
+    setSavingEdit(true);
+    try {
+      const updated = await api.updateAppointment(id, {
+        dueDate: editDate,
+        slot: editSlot,
+        expectedProducts: editProducts,
+        overrideReason: override ? editReason || undefined : undefined,
+      });
+      setAppointments((as) => as.map((a) => (a.id === id ? updated : a)));
+      setEditingId(null);
+      setEditIssues([]);
+      setEditReason("");
+      setMsg(t("visit.apptUpdated"));
+      onDone();
+    } catch (e) {
+      const iss = (e as Error & { issues?: SchedulingIssue[] }).issues;
+      if (iss && iss.length > 0 && !override) setEditIssues(iss);
+      else setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingEdit(false);
     }
   }
 
@@ -363,6 +423,11 @@ export default function VisitPanel({ child, products, programs, user, expectedPr
 
   // History grouped per encounter (voided visits stay visible via the encounter ledger).
   const isAdmin = user.role === "admin";
+  const canManageAppt = user.role === "nurse" || user.role === "admin";
+  // Kept/missed is written by visit recording, never by hand: pending rows past
+  // their date read as missed (no visit that day), future pending rows are editable.
+  const upcomingAppts = appointments.filter((a) => a.kept === null && a.dueDate >= todayStr);
+  const pastAppts = appointments.filter((a) => a.kept !== null || a.dueDate < todayStr).slice(-5).reverse();
   const encById = new Map(encounters.map((e) => [e.id, e]));
   const legacyByDate = new Map<string, Dose[]>();
   for (const d of history) {
@@ -457,6 +522,136 @@ export default function VisitPanel({ child, products, programs, user, expectedPr
       <Grid.Col span={{ base: 12, lg: 8 }}>
         <Stack gap="sm">
           <ChildCard child={child} onClose={onClose} />
+          <Card>
+            <Stack gap="xs">
+              <Title order={3} size="h5">
+                {t("visit.apptTitle")}
+              </Title>
+              {appointments.length === 0 ? (
+                <Text size="sm" c="dimmed">
+                  {t("visit.apptNone")}
+                </Text>
+              ) : (
+                <Stack gap="xs">
+                  {upcomingAppts.map((a) => (
+                    <Stack key={a.id} gap="xs">
+                      <Group gap="sm" wrap="wrap" align="center">
+                        <Text size="sm" fw={600} className="tabular">
+                          {formatCivilDate(a.dueDate, lang)}{a.slot ? ` · ${a.slot}` : ""}
+                        </Text>
+                        <Group gap={6} wrap="wrap" style={{ flex: 1 }}>
+                          {a.expectedProducts.map((p) => (
+                            <Badge key={p} size="sm" variant="light" color="teal">
+                              {productLabel(p)}
+                            </Badge>
+                          ))}
+                        </Group>
+                        {canManageAppt && editingId !== a.id && (
+                          <Button size="compact-xs" variant="default" onClick={() => startEdit(a)}>
+                            {t("visit.apptEdit")}
+                          </Button>
+                        )}
+                      </Group>
+                      {editingId === a.id && (
+                        <Stack gap="xs">
+                          <Group align="end" wrap="wrap">
+                            <DateField
+                              label={t("visit.nextRdv")}
+                              name={`apptDate-${a.id}`}
+                              value={editDate}
+                              min={todayStr}
+                              onChange={(v) => {
+                                setEditDate(v);
+                                setEditIssues([]);
+                              }}
+                            />
+                            <SegmentedControl
+                              size="xs"
+                              aria-label={t("visit.rdvSlot")}
+                              value={editSlot}
+                              onChange={(v) => {
+                                setEditSlot(v as "AM" | "PM");
+                                setEditIssues([]);
+                              }}
+                              data={[
+                                { label: "AM", value: "AM" },
+                                { label: "PM", value: "PM" },
+                              ]}
+                            />
+                            <Button size="compact-sm" onClick={() => void saveEdit(a.id)} loading={savingEdit}>
+                              {t("visit.apptSave")}
+                            </Button>
+                            <Button size="compact-sm" variant="default" onClick={() => setEditingId(null)}>
+                              {t("visit.apptCancel")}
+                            </Button>
+                          </Group>
+                          <MultiSelect
+                            label={t("visit.apptProducts")}
+                            name={`apptProducts-${a.id}`}
+                            aria-label={t("visit.apptProducts")}
+                            searchable
+                            limit={20}
+                            value={editProducts}
+                            onChange={(v) => {
+                              setEditProducts(v);
+                              setEditIssues([]);
+                            }}
+                            data={products.map((p) => ({ value: p.id, label: p.label_fr ?? p.id }))}
+                          />
+                          {editIssues.length > 0 && (
+                            <Alert color="yellow" title={t("visit.gateTitle")}>
+                              <List size="sm" mt="xs">
+                                {editIssues.map((g, idx) => (
+                                  <List.Item key={idx} className="tabular">
+                                    {schedText(g)}{" "}
+                                    <Text span size="xs" c="dimmed" translate="no">
+                                      {g.code}
+                                    </Text>
+                                  </List.Item>
+                                ))}
+                              </List>
+                              <Stack gap="xs" mt="sm">
+                                <TextInput
+                                  label={t("visit.overrideReason")}
+                                  name={`apptOverrideReason-${a.id}`}
+                                  autoComplete="off"
+                                  required
+                                  value={editReason}
+                                  onChange={(e) => setEditReason(e.target.value)}
+                                />
+                                <div>
+                                  <Button size="sm" color="yellow" onClick={() => void saveEdit(a.id, true)} loading={savingEdit} disabled={!editReason}>
+                                    {t("visit.rdvOverride")}
+                                  </Button>
+                                </div>
+                              </Stack>
+                            </Alert>
+                          )}
+                        </Stack>
+                      )}
+                    </Stack>
+                  ))}
+                  {pastAppts.map((a) => (
+                    <Group key={a.id} gap="sm" wrap="wrap" align="center">
+                      <Text size="sm" c="dimmed" className="tabular">
+                        {formatCivilDate(a.dueDate, lang)}{a.slot ? ` · ${a.slot}` : ""}
+                      </Text>
+                      <Badge size="sm" color={a.kept ? "teal" : "gray"} variant="light">
+                        {a.kept ? t("visit.apptKept") : t("visit.apptMissed")}
+                      </Badge>
+                      <Group gap={6} wrap="wrap" style={{ flex: 1 }}>
+                        {a.expectedProducts.map((p) => (
+                          <Badge key={p} size="sm" variant="light" color="gray">
+                            {productLabel(p)}
+                          </Badge>
+                        ))}
+                      </Group>
+                    </Group>
+                  ))}
+                </Stack>
+              )}
+            </Stack>
+          </Card>
           <Card>
             <Stack gap="sm">
               <Group justify="space-between" wrap="wrap">

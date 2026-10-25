@@ -261,6 +261,23 @@ export const api = {
   child: (id: string) => req<Child>(`/api/children/${id}`),
   childDoses: (childId: string) => req<Dose[]>(`/api/children/${childId}/doses`),
   childEncounters: (childId: string) => req<EncounterHistory[]>(`/api/children/${childId}/encounters`),
+  childAppointments: (childId: string) => req<Appointment[]>(`/api/children/${childId}/appointments`),
+  updateAppointment: async (id: string, body: { dueDate: string; slot?: "AM" | "PM"; expectedProducts: string[]; overrideReason?: string }) => {
+    const res = await fetch(`/api/appointments/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(body),
+    });
+    const data = (await res.json()) as Appointment & { error?: string; issues?: SchedulingIssue[] };
+    if (!res.ok) {
+      const e = new Error(data.error ?? `Request failed (${res.status})`) as Error & {
+        issues?: SchedulingIssue[];
+      };
+      e.issues = data.issues;
+      throw e;
+    }
+    return data as Appointment;
+  },
   flagVoid: (encounterId: string, reason: string) =>
     req<{ ok: boolean }>(`/api/encounters/${encounterId}/flag-void`, { method: "POST", body: JSON.stringify({ reason }) }),
   voidEncounter: (encounterId: string, reason: string) =>

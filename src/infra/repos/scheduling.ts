@@ -110,14 +110,15 @@ export function countCellBookings(
   db: Database.Database,
   date: string,
   slot: Slot,
-  productGroupId?: string
+  productGroupId?: string,
+  excludeId?: string
 ): number {
   const rows = db
     .prepare(
       `SELECT expected_products FROM appointments
-       WHERE due_date = ? AND kept IS NULL AND (slot = ? OR (slot IS NULL AND ? = 'AM'))`
+       WHERE due_date = ? AND kept IS NULL AND (slot = ? OR (slot IS NULL AND ? = 'AM'))${excludeId ? " AND id != ?" : ""}`
     )
-    .all(date, slot, slot) as { expected_products: string }[];
+    .all(...(excludeId ? [date, slot, slot, excludeId] : [date, slot, slot])) as { expected_products: string }[];
   if (!productGroupId) return rows.length;
   let n = 0;
   for (const r of rows) {

@@ -193,10 +193,10 @@ describe("api", () => {
     expect(appt.statusCode).toBe(404);
 
     const patch = await app.inject({
-      method: "PATCH",
+      method: "PUT",
       url: "/api/appointments/does-not-exist",
       headers: h,
-      payload: { kept: true },
+      payload: { dueDate: "2026-02-01", expectedProducts: [] },
     });
     expect(patch.statusCode).toBe(404);
 

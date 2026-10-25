@@ -284,8 +284,7 @@ describe("appointments booking gate", () => {
     db.close();
   });
 
-  it("serves scheduling prefs and closures over HTTP", async () => {
-    const { db, app, h } = await setup();
+  it("serves scheduling prefs and closures over HTTP", async () => {    const { db, app, h } = await setup();
     const put = await app.inject({
       method: "PUT",
       url: "/api/scheduling",
@@ -328,6 +327,84 @@ describe("appointments booking gate", () => {
     const body = JSON.parse(res.body) as { added: number };
     expect(body.added).toBe(1);
     expect(listClosures(db, "2026")[0]).toMatchObject({ date: "2026-01-01", source: "auto" });
+    db.close();
+  });
+});
+
+describe("appointment rescheduling", () => {
+  async function setup() {
+    const db = openTestDb();
+    const app = buildApp(db, pack);
+    const h = await adminHeaders(db, app);
+    const child = createChild(db, { familyName: "G", givenName: "G", birthDate: "2026-01-01" });
+    return { db, app, h, childId: child.id };
+  }
+
+  it("moves a future pending appointment, past and resolved rows are immutable", async () => {
+    const { db, app, h, childId } = await setup();
+    const future = createAppointment(db, { childId, dueDate: "2026-12-10", expectedProducts: ["PENTA"] });
+    const ok = await app.inject({
+      method: "PUT",
+      url: `/api/appointments/${future.id}`,
+      headers: h,
+      payload: { dueDate: "2026-12-17", slot: "PM", expectedProducts: ["PENTA", "VPO"] },
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(JSON.parse(ok.body)).toMatchObject({ dueDate: "2026-12-17", slot: "PM", expectedProducts: ["PENTA", "VPO"] });
+
+    const past = createAppointment(db, { childId, dueDate: "2020-01-01", expectedProducts: [] });
+    const pastRes = await app.inject({
+      method: "PUT",
+      url: `/api/appointments/${past.id}`,
+      headers: h,
+      payload: { dueDate: "2026-12-20", expectedProducts: [] },
+    });
+    expect(pastRes.statusCode).toBe(400);
+
+    db.prepare("UPDATE appointments SET kept = 1 WHERE id = ?").run(future.id);
+    const keptRes = await app.inject({
+      method: "PUT",
+      url: `/api/appointments/${future.id}`,
+      headers: h,
+      payload: { dueDate: "2026-12-20", expectedProducts: [] },
+    });
+    expect(keptRes.statusCode).toBe(400);
+    db.close();
+  });
+
+  it("runs the scheduling gate with the row excluded from its own cell", async () => {
+    const { db, app, h, childId } = await setup();
+    replaceSchedulingRules(db, [{ scope: "global", weekday: 4, slot: "AM", cap: 1 }]);
+    const appt = createAppointment(db, { childId, dueDate: "2026-11-26", slot: "AM", expectedProducts: ["PENTA"] });
+    // Keeping the same cell must not block on itself.
+    const same = await app.inject({
+      method: "PUT",
+      url: `/api/appointments/${appt.id}`,
+      headers: h,
+      payload: { dueDate: "2026-11-26", slot: "AM", expectedProducts: ["BCG"] },
+    });
+    expect(same.statusCode).toBe(200);
+    // Moving onto a full cell needs a reason, then succeeds and audits.
+    createAppointment(db, { childId, dueDate: "2026-12-03", slot: "AM", expectedProducts: ["PENTA"] });
+    const blocked = await app.inject({
+      method: "PUT",
+      url: `/api/appointments/${appt.id}`,
+      headers: h,
+      payload: { dueDate: "2026-12-03", slot: "AM", expectedProducts: ["PENTA"] },
+    });
+    expect(blocked.statusCode).toBe(409);
+    const forced = await app.inject({
+      method: "PUT",
+      url: `/api/appointments/${appt.id}`,
+      headers: h,
+      payload: { dueDate: "2026-12-03", slot: "AM", expectedProducts: ["PENTA"], overrideReason: "family asked Thursday" },
+    });
+    expect(forced.statusCode).toBe(200);
+    const overrides = db
+      .prepare("SELECT what, reason FROM overrides WHERE child_id = ?")
+      .all(childId) as { what: string; reason: string }[];
+    expect(overrides).toHaveLength(1);
+    expect(overrides[0].what).toContain("appointment.reschedule");
     db.close();
   });
 });
