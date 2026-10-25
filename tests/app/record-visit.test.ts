@@ -238,4 +238,29 @@ describe("record gate (engine cross-check)", () => {
     expect(getLot(db, penta.id)?.qtyOnHand).toBe(5);
     db.close();
   });
+
+  it("merges same-day saves into one encounter (growth then doses)", () => {
+    const { db, child, lot } = setup();
+    const penta = lot("PENTA");
+    const first = recordVisit(db, pack, child.birthDate, [], {
+      childId: child.id,
+      date: "2026-03-01",
+      screening: "VACCINATE",
+      weightKg: 5,
+      heightCm: 58,
+    }, { today: "2026-03-01" });
+    const second = recordVisit(db, pack, child.birthDate, listDosesByChild(db, child.id), {
+      childId: child.id,
+      date: "2026-03-01",
+      screening: "VACCINATE",
+      doses: [{ ...dose("PENTA", "2026-03-01"), lotId: penta.id }],
+    }, { today: "2026-03-01" });
+    expect(second.encounter.id).toBe(first.encounter.id);
+    const rows = db.prepare("SELECT * FROM encounters WHERE child_id = ? AND date = ? AND voided_at IS NULL").all(child.id, "2026-03-01") as unknown[];
+    expect(rows).toHaveLength(1);
+    const row = db.prepare("SELECT weight_kg, height_cm FROM encounters WHERE id = ?").get(first.encounter.id) as { weight_kg: number; height_cm: number };
+    expect(row.weight_kg).toBe(5);
+    expect(listDosesByChild(db, child.id)).toHaveLength(1);
+    db.close();
+  });
 });

@@ -105,7 +105,7 @@ describe("correction tickets (phantom void + override invalidate)", () => {
       doses: [{ ...dose("PCV_PRIMOVAX", "2026-03-01"), overridden: true, lotId: lots.pcv.id }],
       overrideReason: "single trip family",
     }, { today: "2026-03-01" });
-    const doseRow = db.prepare("SELECT * FROM doses WHERE encounter_id = ?").get(encounter.id) as { id: string; overridden: number };
+    const doseRow = db.prepare("SELECT * FROM doses WHERE encounter_id = ? AND product_group_id = 'PCV_PRIMOVAX'").get(encounter.id) as { id: string; overridden: number };
     expect(doseRow.overridden).toBe(1);
     // Non-overridden dose cannot be invalidated.
     const pentaRow = db.prepare("SELECT * FROM doses WHERE product_group_id = 'PENTA'").get() as { id: string };

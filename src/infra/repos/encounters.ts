@@ -240,20 +240,41 @@ export function storeEncounter(
   opts?: { nowIso?: string }
 ): Encounter {
   const stamp = opts?.nowIso ?? nowIso();
-  const encounterId = parsed.id;
 
-  db.prepare(
-    "INSERT INTO encounters (id, child_id, date, screening, screening_note, weight_kg, height_cm, next_appointment_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-  ).run(
-    encounterId,
-    parsed.childId,
-    parsed.date,
-    parsed.screening,
-    parsed.screeningNote ?? null,
-    parsed.weightKg ?? null,
-    parsed.heightCm ?? null,
-    parsed.nextAppointmentDate ?? null
-  );
+  // One visit = one encounter: a second save the same day (e.g. growth first,
+  // doses after) merges into the existing non-voided row instead of creating
+  // a duplicate date line. Voided visits are never merge targets.
+  const existing = db
+    .prepare("SELECT * FROM encounters WHERE child_id = ? AND date = ? AND voided_at IS NULL ORDER BY rowid LIMIT 1")
+    .get(parsed.childId, parsed.date) as Record<string, string | number | null> | undefined;
+
+  const encounterId = (existing?.id as string) ?? parsed.id;
+
+  if (existing) {
+    db.prepare(
+      "UPDATE encounters SET screening = ?, screening_note = ?, weight_kg = ?, height_cm = ?, next_appointment_date = ? WHERE id = ?"
+    ).run(
+      parsed.screening,
+      parsed.screeningNote ?? (existing.screening_note as string | null) ?? null,
+      parsed.weightKg ?? (existing.weight_kg as number | null) ?? null,
+      parsed.heightCm ?? (existing.height_cm as number | null) ?? null,
+      parsed.nextAppointmentDate ?? (existing.next_appointment_date as string | null) ?? null,
+      encounterId
+    );
+  } else {
+    db.prepare(
+      "INSERT INTO encounters (id, child_id, date, screening, screening_note, weight_kg, height_cm, next_appointment_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run(
+      encounterId,
+      parsed.childId,
+      parsed.date,
+      parsed.screening,
+      parsed.screeningNote ?? null,
+      parsed.weightKg ?? null,
+      parsed.heightCm ?? null,
+      parsed.nextAppointmentDate ?? null
+    );
+  }
 
   for (const dose of parsed.doses) {
     if (isStockCounted(dose.origin, dose.transition)) {
@@ -289,9 +310,16 @@ export function storeEncounter(
   );
 
   if (parsed.nextAppointmentDate) {
-    const expected = (expectedProducts ?? []).filter((p) => typeof p === "string" && p.length > 0);    db.prepare(
-      "INSERT INTO appointments (id, child_id, due_date, expected_products, kept) VALUES (?, ?, ?, ?, NULL)"
-    ).run(randomUUID(), parsed.childId, parsed.nextAppointmentDate, JSON.stringify(expected));
+    const expected = (expectedProducts ?? []).filter((p) => typeof p === "string" && p.length > 0);
+    // Merged second save may repeat the same RDV: never double-book it.
+    const apptExists = db
+      .prepare("SELECT 1 FROM appointments WHERE child_id = ? AND due_date = ? LIMIT 1")
+      .get(parsed.childId, parsed.nextAppointmentDate) as { 1: number } | undefined;
+    if (!apptExists) {
+      db.prepare(
+        "INSERT INTO appointments (id, child_id, due_date, expected_products, kept) VALUES (?, ?, ?, ?, NULL)"
+      ).run(randomUUID(), parsed.childId, parsed.nextAppointmentDate, JSON.stringify(expected));
+    }
   }
 
   db.prepare("INSERT INTO outbox (id, kind, payload, created_at, synced_at) VALUES (?, ?, ?, ?, NULL)").run(
@@ -301,7 +329,7 @@ export function storeEncounter(
     stamp
   );
 
-  return parsed;
+  return { ...parsed, id: encounterId };
 }
 
 /**

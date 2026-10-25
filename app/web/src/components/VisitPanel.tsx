@@ -437,6 +437,13 @@ export default function VisitPanel({ child, products, programs, user, expectedPr
   const orderedEncounters = [...encounters].sort((a, b) =>
     historyAsc ? (a.date < b.date ? -1 : 1) : a.date > b.date ? -1 : 1
   );
+  // Legacy data may hold two rows for one day (growth saved apart from doses
+  // before the write-path merge): display stays one row per date.
+  const encountersByDate = new Map<string, typeof encounters>();
+  for (const enc of orderedEncounters) {
+    encountersByDate.set(enc.date, [...(encountersByDate.get(enc.date) ?? []), enc]);
+  }
+  const orderedDates = [...encountersByDate.keys()];
   const canFlag = (enc: EncounterHistory, doses: Dose[]): boolean => {
     if (enc.voidedAt || enc.voidRequestedBy) return false;
     if (isAdmin) return true;
@@ -670,22 +677,31 @@ export default function VisitPanel({ child, products, programs, user, expectedPr
           </Text>
         ) : (
           <Stack gap="xs">
-            {orderedEncounters.map((enc) => {
-              const doses = history.filter((d) => d.encounterId === enc.id);
-              const flaggable = canFlag(enc, doses);
-              const voidable = isAdmin && !enc.voidedAt;
-              const reinstatable = isAdmin && !!enc.voidedAt;
-              const toInvalidate = isAdmin && !enc.voidedAt ? doses.filter((d) => d.overridden && !d.invalidatedAt && d.id) : [];
+            {orderedDates.map((date) => {
+              const encs = encountersByDate.get(date)!;
+              const encIds = new Set(encs.map((e) => e.id));
+              const doses = history.filter((d) => d.encounterId && encIds.has(d.encounterId));
+              const dosesByEnc = (id: string): Dose[] => history.filter((d) => d.encounterId === id);
+              const flaggableEncs = encs.filter((e) => canFlag(e, dosesByEnc(e.id)));
+              const voidableEncs = isAdmin ? encs.filter((e) => !e.voidedAt) : [];
+              const reinstatableEncs = isAdmin ? encs.filter((e) => !!e.voidedAt) : [];
+              const toInvalidate = isAdmin && !encs.every((e) => e.voidedAt) ? doses.filter((d) => d.overridden && !d.invalidatedAt && d.id) : [];
               const toRevalidate = isAdmin ? doses.filter((d) => d.invalidatedAt && d.id) : [];
-              const hasMenu = flaggable || voidable || reinstatable || toInvalidate.length > 0 || toRevalidate.length > 0;
+              const hasMenu = flaggableEncs.length > 0 || voidableEncs.length > 0 || reinstatableEncs.length > 0 || toInvalidate.length > 0 || toRevalidate.length > 0;
+              const allVoided = encs.every((e) => e.voidedAt);
+              const anyFlagged = encs.some((e) => e.voidRequestedBy && !e.voidedAt);
+              const anyVoided = encs.some((e) => e.voidedAt);
+              const voidReason = encs.find((e) => e.voidedAt)?.voidReason ?? undefined;
+              const flagReason = encs.find((e) => e.voidRequestedBy && !e.voidedAt)?.voidRequestReason ?? undefined;
+              const voidedProducts = encs.filter((e) => e.voidedAt).flatMap((e) => e.products);
               return (
-                <Group key={enc.id} gap="sm" wrap="wrap" align="center">
+                <Group key={date} gap="sm" wrap="wrap" align="center">
                   <Stack gap={0} style={{ minWidth: 110 }}>
-                    <Text size="sm" fw={600} className="tabular" td={enc.voidedAt ? "line-through" : undefined}>
-                      {formatCivilDate(enc.date, lang)}
+                    <Text size="sm" fw={600} className="tabular" td={allVoided ? "line-through" : undefined}>
+                      {formatCivilDate(date, lang)}
                     </Text>
                     <Text size="xs" c="dimmed" className="tabular">
-                      {ageWord(enc.date)}
+                      {ageWord(date)}
                     </Text>
                   </Stack>
                   <Group gap={6} wrap="wrap" style={{ flex: 1 }}>
@@ -701,9 +717,9 @@ export default function VisitPanel({ child, products, programs, user, expectedPr
                         {d.invalidatedAt ? ` · ${t("correction.statusInvalidated")}` : ""}
                       </Badge>
                     ))}
-                    {enc.voidedAt && (
+                    {anyVoided && (
                       <Text size="xs" c="dimmed" td="line-through">
-                        {enc.products.map(productLabel).join(" · ")}
+                        {voidedProducts.map(productLabel).join(" · ")}
                       </Text>
                     )}
                   </Group>
@@ -720,13 +736,13 @@ export default function VisitPanel({ child, products, programs, user, expectedPr
                       aria-label={t("visit.notCounted")}
                     />
                   )}
-                  {enc.voidRequestedBy && !enc.voidedAt && (
-                    <Badge size="sm" color="yellow" variant="light" title={enc.voidRequestReason ?? undefined}>
+                  {anyFlagged && (
+                    <Badge size="sm" color="yellow" variant="light" title={flagReason}>
                       {t("correction.statusFlagged")}
                     </Badge>
                   )}
-                  {enc.voidedAt && (
-                    <Badge size="sm" color="red" variant="light" title={enc.voidReason ?? undefined}>
+                  {anyVoided && (
+                    <Badge size="sm" color="red" variant="light" title={voidReason}>
                       {t("correction.statusVoided")}
                     </Badge>
                   )}
@@ -738,37 +754,40 @@ export default function VisitPanel({ child, products, programs, user, expectedPr
                         </ActionIcon>
                       </Menu.Target>
                       <Menu.Dropdown>
-                        {flaggable && (
+                        {flaggableEncs.map((e) => (
                           <Menu.Item
+                            key={`flag-${e.id}`}
                             onClick={() => {
                               setCorrectionReason("");
-                              setCorrection({ action: "flag", encounterId: enc.id });
+                              setCorrection({ action: "flag", encounterId: e.id });
                             }}
                           >
                             {t("correction.report")}
                           </Menu.Item>
-                        )}
-                        {voidable && (
+                        ))}
+                        {voidableEncs.map((e) => (
                           <Menu.Item
+                            key={`void-${e.id}`}
                             color="red"
                             onClick={() => {
                               setCorrectionReason("");
-                              setCorrection({ action: "void", encounterId: enc.id, injected: "no" });
+                              setCorrection({ action: "void", encounterId: e.id, injected: "no" });
                             }}
                           >
                             {t("correction.void")}
                           </Menu.Item>
-                        )}
-                        {reinstatable && (
+                        ))}
+                        {reinstatableEncs.map((e) => (
                           <Menu.Item
+                            key={`reinstate-${e.id}`}
                             onClick={() => {
                               setCorrectionReason("");
-                              setCorrection({ action: "reinstate", encounterId: enc.id });
+                              setCorrection({ action: "reinstate", encounterId: e.id });
                             }}
                           >
                             {t("correction.reinstate")}
                           </Menu.Item>
-                        )}
+                        ))}
                         {toInvalidate.map((d) => (
                           <Menu.Item
                             key={d.id}
