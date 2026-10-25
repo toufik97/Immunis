@@ -1,5 +1,8 @@
 # Immunis — Agent Guide
 
+> Phase flag (remove at production): still in dev, all data is test data —
+> DB migrations are cheap, no production data to protect.
+
 Local-first vaccination point-of-service for MA-PNI (Morocco).
 App is state + workflow around the existing pure planning engine.
 Spec is French; all code, docs, and responses are English. UI supports en/fr/ar.

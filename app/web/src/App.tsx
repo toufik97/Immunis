@@ -22,6 +22,7 @@ import {
   IconCalendarCheck,
   IconMoon,
   IconPackages,
+  IconSettings,
   IconShieldCheck,
   IconStethoscope,
   IconSun,
@@ -31,7 +32,7 @@ import {
   IconWifiOff,
 } from "@tabler/icons-react";
 import "./i18n";
-import { applyLocale, type Locale } from "./i18n";
+import { applyLocale, setLocale, type Locale } from "./i18n";
 import { api, type AuthUser, type Child } from "./api";
 import { formatCount, todayCivilDate } from "./format";
 import { isTab, resolveInitialTab, type Tab } from "./tabs";
@@ -45,6 +46,7 @@ const StockPanel = lazy(() => import("./components/Panels").then((m) => ({ defau
 const AuthScreen = lazy(() => import("./components/AuthScreen"));
 const UsersPanel = lazy(() => import("./components/UsersPanel"));
 const AuditPanel = lazy(() => import("./components/AuditPanel"));
+const SettingsPanel = lazy(() => import("./components/SettingsPanel"));
 import "./styles.css";
 
 type PackInfo = Awaited<ReturnType<typeof api.pack>>;
@@ -277,10 +279,7 @@ export default function App() {
                   size="xs"
                   aria-label="Language"
                   value={lang}
-                  onChange={(l) => {
-                    void i18n.changeLanguage(l);
-                    applyLocale(l as Locale);
-                  }}
+                  onChange={(l) => setLocale(l as "en" | "fr" | "ar")}
                   data={[
                     { label: "EN", value: "en" },
                     { label: "FR", value: "fr" },
@@ -317,6 +316,9 @@ export default function App() {
                       {t("nav.audit")}
                     </Tabs.Tab>
                   )}
+                  <Tabs.Tab value="settings" leftSection={<IconSettings size={14} aria-hidden="true" />}>
+                    {t("nav.settings")}
+                  </Tabs.Tab>
                 </Tabs.List>
               </ScrollArea>
             </Tabs>
@@ -404,6 +406,9 @@ export default function App() {
                     <AuditPanel />
                   </Tabs.Panel>
                 )}
+                <Tabs.Panel value="settings">
+                  <SettingsPanel role={user.role} pack={pack} />
+                </Tabs.Panel>
                 </Suspense>
               </Tabs>
             </Stack>

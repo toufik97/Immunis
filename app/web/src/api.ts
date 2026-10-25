@@ -189,6 +189,12 @@ export const api = {
     return req<{ rows: { id: string; createdAt: string; userId: string | null; username: string; action: string; details: string | null; childId: string | null; childName: string | null }[]; total: number }>(`/api/audit${s ? `?${s}` : ""}`);
   },
   auditActions: () => req<string[]>("/api/audit/actions"),
+  /** Whole-centre JSON dump (admin only): fetched as a file, not parsed. */
+  backup: async (): Promise<Blob> => {
+    const res = await fetch("/api/backup", { headers: { ...authHeaders() } });
+    if (!res.ok) throw new Error(`Backup failed (${res.status})`);
+    return res.blob();
+  },
   pack: () =>
     req<{
       country: string;

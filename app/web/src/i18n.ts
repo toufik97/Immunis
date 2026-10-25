@@ -15,6 +15,7 @@ const resources = {
       "nav.stock": "Stock",
       "nav.users": "Users",
       "nav.audit": "Audit",
+      "nav.settings": "Settings",
       "search.placeholder": "Search child by name…",
       "search.button": "Search",
       "search.noresults": "No children found.",
@@ -191,6 +192,19 @@ const resources = {
       "role.nurse": "Nurse",
       "role.admin": "Admin",
       "role.reader": "Reader",
+      "settings.title": "Settings",
+      "settings.section.preferences": "Preferences",
+      "settings.section.user": "User",
+      "settings.section.workflow": "Workflow",
+      "settings.section.administration": "Administration",
+      "settings.language": "Language",
+      "settings.theme": "Theme",
+      "settings.account": "Change password",
+      "settings.save": "Save",
+      "settings.backup": "Centre backup",
+      "settings.backupHint": "Download all centre data as a JSON file. Keep it somewhere safe.",
+      "settings.workflowEmpty": "No workflow settings yet — appointment rules will live here.",
+      "settings.download": "Download backup",
       "audit.title": "Audit trail",
       "audit.actions": "Every change (who did what)",
       "audit.who": "Who",
@@ -268,6 +282,7 @@ const resources = {
       "nav.stock": "Stock",
       "nav.users": "Utilisateurs",
       "nav.audit": "Audit",
+      "nav.settings": "Paramètres",
       "search.placeholder": "Rechercher un enfant par nom…",
       "search.button": "Rechercher",
       "search.noresults": "Aucun enfant trouvé.",
@@ -444,6 +459,19 @@ const resources = {
       "role.nurse": "Infirmier",
       "role.admin": "Admin",
       "role.reader": "Lecteur",
+      "settings.title": "Paramètres",
+      "settings.section.preferences": "Préférences",
+      "settings.section.user": "Utilisateur",
+      "settings.section.workflow": "Flux de travail",
+      "settings.section.administration": "Administration",
+      "settings.language": "Langue",
+      "settings.theme": "Thème",
+      "settings.account": "Changer le mot de passe",
+      "settings.save": "Enregistrer",
+      "settings.backup": "Sauvegarde du centre",
+      "settings.backupHint": "Téléchargez toutes les données du centre en fichier JSON. Gardez-le en lieu sûr.",
+      "settings.workflowEmpty": "Aucun paramètre de flux pour l’instant — les règles de rendez-vous vivront ici.",
+      "settings.download": "Télécharger la sauvegarde",
       "audit.title": "Journal d’audit",
       "audit.actions": "Chaque changement (qui a fait quoi)",
       "audit.who": "Qui",
@@ -521,6 +549,7 @@ const resources = {
       "nav.stock": "المخزون",
       "nav.users": "المستخدمون",
       "nav.audit": "التدقيق",
+      "nav.settings": "الإعدادات",
       "search.placeholder": "ابحث عن طفل بالاسم…",
       "search.button": "بحث",
       "search.noresults": "لا يوجد أطفال.",
@@ -697,6 +726,19 @@ const resources = {
       "role.nurse": "ممرض",
       "role.admin": "مدير",
       "role.reader": "قارئ",
+      "settings.title": "الإعدادات",
+      "settings.section.preferences": "التفضيلات",
+      "settings.section.user": "المستخدم",
+      "settings.section.workflow": "سير العمل",
+      "settings.section.administration": "الإدارة",
+      "settings.language": "اللغة",
+      "settings.theme": "المظهر",
+      "settings.account": "تغيير كلمة المرور",
+      "settings.save": "حفظ",
+      "settings.backup": "نسخة احتياطية للمركز",
+      "settings.backupHint": "نزّل كل بيانات المركز كملف JSON. احتفظ به في مكان آمن.",
+      "settings.workflowEmpty": "لا توجد إعدادات سير عمل بعد — ستكون قواعد المواعيد هنا.",
+      "settings.download": "تنزيل النسخة",
       "audit.title": "سجل التدقيق",
       "audit.actions": "كل تغيير (من فعل ماذا)",
       "audit.who": "من",
@@ -770,9 +812,32 @@ export function applyLocale(locale: Locale): void {
   document.documentElement.dir = locale === "ar" ? "rtl" : "ltr";
 }
 
+const LOCALE_KEY = "immunis.lang";
+
+/** Persisted UI language, shared by the header switcher and the settings tab. */
+export function setLocale(locale: Locale): void {
+  try {
+    localStorage.setItem(LOCALE_KEY, locale);
+  } catch {
+    /* private mode: keep it for this tab */
+  }
+  void i18n.changeLanguage(locale);
+  applyLocale(locale);
+}
+
+function initialLocale(): Locale {
+  try {
+    const v = localStorage.getItem(LOCALE_KEY);
+    if (v === "en" || v === "fr" || v === "ar") return v;
+  } catch {
+    /* private mode: fall through */
+  }
+  return "fr";
+}
+
 void i18n.use(initReactI18next).init({
   resources,
-  lng: "fr",
+  lng: initialLocale(),
   fallbackLng: "en",
   interpolation: { escapeValue: false },
 });
