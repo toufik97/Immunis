@@ -32,6 +32,8 @@ interface Row {
   products: string[];
   lastVisitDate: string | null;
   daysOverdue: number | null;
+  status?: "booked" | "walkin" | "pending" | "moved";
+  expected?: string[];
 }
 
 function toRow(a: Appointment): Row {
@@ -61,12 +63,14 @@ function PersonTable({
   showNoShow,
   productLabel,
   actions,
+  dosesHeader,
 }: {
   rows: Row[];
   showDue: boolean;
   showNoShow?: boolean;
   productLabel: (id: string) => string;
   actions?: TableActions;
+  dosesHeader?: string;
 }) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
@@ -126,6 +130,13 @@ function PersonTable({
   }
 
   const showActions = actions?.onOpen !== undefined;
+  const showStatus = rows.some((r) => r.status !== undefined);
+  function statusBadge(s: NonNullable<Row["status"]>) {
+    if (s === "booked") return <Badge color="teal" variant="light">{t("session.booked")}</Badge>;
+    if (s === "walkin") return <Badge color="yellow" variant="light">{t("session.walkin")}</Badge>;
+    if (s === "moved") return <Badge color="blue" variant="light">{t("session.movedVisit")}</Badge>;
+    return <Badge color="gray" variant="light">{t("session.pendingVisit")}</Badge>;
+  }
 
   return (
     <Stack gap="sm">
@@ -143,8 +154,8 @@ function PersonTable({
           style={{ flex: 1, minWidth: 200 }}
         />
         <Select
-          label={t("table.doses")}
-          aria-label={t("table.doses")}
+          label={dosesHeader ?? t("table.doses")}
+          aria-label={dosesHeader ?? t("table.doses")}
           name="tableProduct"
           searchable
           limit={20}
@@ -164,7 +175,9 @@ function PersonTable({
               {showDue && header("dueDate", t("table.due"))}
               {showNoShow && header("daysOverdue", t("noshow.overdue"))}
               {showNoShow && header("lastVisit", t("noshow.lastVisit"))}
-              <Table.Th>{t("table.doses")}</Table.Th>
+              {showStatus && <Table.Th>{t("session.status")}</Table.Th>
+              }
+              <Table.Th>{dosesHeader ?? t("table.doses")}</Table.Th>
               {showActions && <Table.Th aria-label="actions" />}
             </Table.Tr>
           </Table.Thead>
@@ -177,7 +190,17 @@ function PersonTable({
                 {showDue && <Table.Td>{formatCivilDate(r.dueDate, lang)}</Table.Td>}
                 {showNoShow && <Table.Td>{r.daysOverdue ?? "—"}</Table.Td>}
                 {showNoShow && <Table.Td>{r.lastVisitDate ? formatCivilDate(r.lastVisitDate, lang) : "—"}</Table.Td>}
-                <Table.Td>{r.products.map(productLabel).join(", ") || "—"}</Table.Td>
+                {showStatus && <Table.Td>{r.status ? statusBadge(r.status) : "—"}</Table.Td>}
+                <Table.Td>
+                  {r.products.map(productLabel).join(", ") || "—"}
+                  {r.expected !== undefined && (
+                    <Text size="xs" c="dimmed">
+                      {r.expected.length > 0
+                        ? t("session.bookedLine", { list: r.expected.map(productLabel).join(", ") })
+                        : t("session.walkin")}
+                    </Text>
+                  )}
+                </Table.Td>
                 {showActions && (
                   <Table.Td>
                     <Group gap={6} wrap="wrap">
@@ -355,13 +378,13 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
           {t("session.results")}
         </Text>
         <Group gap="xs" wrap="wrap">
-          <Badge color="teal" variant="filled" className="tabular">
+          <Badge color="teal" variant="filled" className="tabular" title={t("session.seenHint")}>
             {t("session.seen", { n: formatCount(results.childrenSeen, lang) })}
           </Badge>
-          <Badge color="gray" variant="light" className="tabular">
+          <Badge color="gray" variant="light" className="tabular" title={t("session.plannedTip")}>
             {t("session.planned", { n: formatCount(results.plannedChildren, lang) })}
           </Badge>
-          <Badge color="teal" variant="light" className="tabular">
+          <Badge color="teal" variant="light" className="tabular" title={t("session.keptTip")}>
             {t("session.kept", { n: formatCount(results.kept, lang) })}
           </Badge>
         </Group>
@@ -388,8 +411,13 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
                       variant="light"
                       color={given >= planned ? "teal" : "yellow"}
                       className="tabular"
+                      title={t("session.plannedHint")}
                     >
-                      {productLabel(p)} {formatCount(given, lang)}/{formatCount(planned, lang)}
+                      {productLabel(p)}{" "}
+                      {t("session.doseCount", {
+                        given: formatCount(given, lang),
+                        planned: formatCount(planned, lang),
+                      })}
                     </Badge>
                   );
                 })}
@@ -418,9 +446,12 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
                 products: s.dosesGiven,
                 lastVisitDate: null,
                 daysOverdue: null,
+                status: (s.bookedToday ? "booked" : "walkin") as "booked" | "walkin",
+                expected: s.expectedToday ?? [],
               }))}
               showDue={false}
               productLabel={productLabel}
+              dosesHeader={t("session.dosesGivenCol")}
               actions={{ onOpen: (id) => onOpen(id, []) }}
             />
           </Stack>
@@ -431,7 +462,10 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
               {t("session.missedList", { n: formatCount(results.missed?.length ?? 0, lang) })}
             </Text>
             <PersonTable
-              rows={(results.missed ?? []).map(toRow)}
+              rows={(results.missed ?? []).map((a) => ({
+                ...toRow(a),
+                status: (a.kept === false ? "moved" : "pending") as "moved" | "pending",
+              }))}
               showDue={false}
               productLabel={productLabel}
               actions={{ onOpen }}
@@ -512,7 +546,16 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
                   size="compact-sm"
                   variant={selected ? "filled" : info ? "light" : "subtle"}
                   color={selected ? undefined : info ? "teal" : undefined}
-                  aria-label={`${formatCivilDate(day, lang)}${info ? ` — ${formatCount(info.children, lang)}` : ""}`}
+                  aria-label={
+                    info
+                      ? `${formatCivilDate(day, lang)} — ${t("session.pending", { n: formatCount(info.children, lang) })}`
+                      : formatCivilDate(day, lang)
+                  }
+                  title={
+                    info
+                      ? `${formatCivilDate(day, lang)} — ${t("session.pending", { n: formatCount(info.children, lang) })}`
+                      : formatCivilDate(day, lang)
+                  }
                   aria-pressed={selected}
                   onClick={() => pick(day)}
                   style={isToday && !selected ? { outline: "2px solid var(--mantine-color-teal-5)", outlineOffset: -2 } : undefined}

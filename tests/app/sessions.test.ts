@@ -184,4 +184,20 @@ describe("sessions seam", () => {
     expect(s.results.seen.map((r) => r.childId)).toEqual([a.id]);
     db.close();
   });
+
+  it("flags seen rows as booked vs walk-in with expected doses", () => {
+    const db = openTestDb();
+    const a = child(db as never, "A");
+    const w = child(db as never, "W");
+    createAppointment(db, { childId: a.id, dueDate: "2026-10-10", expectedProducts: ["BCG", "VPO"] });
+    recordEncounter(db, { childId: a.id, date: "2026-10-10", screening: "VACCINATE", doses: [] }, { today: "2026-10-10" });
+    recordEncounter(db, { childId: w.id, date: "2026-10-10", screening: "VACCINATE", doses: [] }, { today: "2026-10-10" });
+
+    const s = sessionFor(db, "2026-10-10");
+    expect(s.results.seen.find((r) => r.childId === a.id)?.bookedToday).toBe(true);
+    expect(s.results.seen.find((r) => r.childId === a.id)?.expectedToday).toEqual(["BCG", "VPO"]);
+    expect(s.results.seen.find((r) => r.childId === w.id)?.bookedToday).toBe(false);
+    expect(s.results.seen.find((r) => r.childId === w.id)?.expectedToday).toEqual([]);
+    db.close();
+  });
 });

@@ -74,6 +74,10 @@ export interface SeenRow {
   localIds: { centreId: string; value: string }[];
   address: string | null;
   dosesGiven: string[];
+  /** Had an appointment due on this session date (false = walk-in / catch-up from another date). */
+  bookedToday: boolean;
+  /** What was expected for this child on this date (empty for walk-ins). */
+  expectedToday: string[];
 }
 
 export type Likelihood = "due" | "probable" | "possible";
@@ -126,8 +130,16 @@ export function sessionFor(db: Database.Database, date: string): SessionSummary 
   const backlog = countPendingBefore(db, from);
   const dueStats = dueStatsFor(db, date);
   const given = administeredFor(db, date);
-  const seen = enrichSeen(db, given.perChild);
-  const missed = enrichAppointments(db, listDueAll(db, date).filter((a) => a.kept !== true));
+  const dueAll = listDueAll(db, date);
+  // Booked-today lookup for the seen list (same query feeds missed, no extra I/O).
+  const expectedByChild = new Map<string, string[]>();
+  for (const a of dueAll) {
+    const prev = expectedByChild.get(a.childId);
+    if (prev) prev.push(...a.expectedProducts);
+    else expectedByChild.set(a.childId, [...a.expectedProducts]);
+  }
+  const seen = enrichSeen(db, given.perChild, expectedByChild);
+  const missed = enrichAppointments(db, dueAll.filter((a) => a.kept !== true));
   return {
     date,
     expected: due,
@@ -150,7 +162,11 @@ export function sessionFor(db: Database.Database, date: string): SessionSummary 
 }
 
 /** Enrich seen-children ids with registry name + local id + address (no N+1). */
-function enrichSeen(db: Database.Database, entries: { childId: string; products: string[] }[]): SeenRow[] {
+function enrichSeen(
+  db: Database.Database,
+  entries: { childId: string; products: string[] }[],
+  expectedByChild: Map<string, string[]> = new Map()
+): SeenRow[] {
   if (entries.length === 0) return [];
   const childIds = [...new Set(entries.map((e) => e.childId))];
   const byId = new Map<string, { given_name: string; family_name: string; address: string | null }>();
@@ -165,12 +181,15 @@ function enrichSeen(db: Database.Database, entries: { childId: string; products:
   const ids = localIdsForMany(db, childIds);
   return entries.map((e) => {
     const c = byId.get(e.childId);
+    const expectedToday = expectedByChild.get(e.childId) ?? [];
     return {
       childId: e.childId,
       childName: c ? `${c.given_name} ${c.family_name}` : e.childId,
       localIds: ids.get(e.childId) ?? [],
       address: c?.address ?? null,
       dosesGiven: e.products,
+      bookedToday: expectedByChild.has(e.childId),
+      expectedToday,
     };
   });
 }

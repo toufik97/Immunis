@@ -340,7 +340,7 @@ export const api = {
         kept: number;
         childrenSeen: number;
         dosesByProduct: Record<string, number>;
-        seen?: { childId: string; childName: string; localIds?: { centreId: string; value: string }[]; address?: string | null; dosesGiven: string[] }[];
+        seen?: { childId: string; childName: string; localIds?: { centreId: string; value: string }[]; address?: string | null; dosesGiven: string[]; bookedToday?: boolean; expectedToday?: string[] }[];
         missed?: Appointment[];
       };
     }>(`/api/sessions?date=${date}`),
