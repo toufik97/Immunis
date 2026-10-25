@@ -29,12 +29,12 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { api, type Child, type Dose, type GateIssue, type Lot } from "../api";
-import { formatCivilDate, todayCivilDate } from "../format";
+import { ageParts, formatCivilDate, todayCivilDate } from "../format";
 import { formatEngineWarning } from "../engineWarnings";
 import ChildCard from "./ChildCard";
 import DateField from "./DateField";
 import EvalRail from "./EvalRail";
-import GrowthPanel, { useGrowthRefs } from "./GrowthPanel";
+import GrowthPanel from "./GrowthPanel";
 import { bandColor, interpKey, scoreLive, type Indicator } from "../growthLive";
 
 interface Props {
@@ -348,11 +348,18 @@ export default function VisitPanel({ child, products, programs, expectedProducts
     }
   }
 
+  // Age at a past date in the child's own words (same as the header card).
+  const ageWord = (atIso: string): string => {
+    const { y, m, d } = ageParts(child.birthDate, atIso);
+    if (y > 0) return t("child.ageYMD", { y, m, d });
+    if (m > 0) return t("child.ageMD", { m, d });
+    return t("child.ageD", { d });
+  };
+
   // Live growth words while typing (same math as the saved result).
-  const growthRefs = useGrowthRefs(child.id);
   const liveWeight = weightKg.trim() === "" ? null : Number(weightKg);
   const liveHeight = heightCm.trim() === "" ? null : Number(heightCm);
-  const live = scoreLive(growthRefs, child.sex, child.birthDate, visitDate, liveWeight, liveHeight);
+  const live = scoreLive(child.sex, child.birthDate, visitDate, liveWeight, liveHeight);
   const liveReady = live !== null && (liveWeight !== null || liveHeight !== null);
 
   return (
@@ -362,10 +369,6 @@ export default function VisitPanel({ child, products, programs, expectedProducts
           <ChildCard child={child} onClose={onClose} />
           <Card>
             <Stack gap="sm">
-              <Text size="sm" c="dimmed">
-                {t("visit.howto")}
-              </Text>
-
               <Group justify="space-between" wrap="wrap">
                 <Title order={3} size="h5">
                   {t("visit.recordedDoses")}
@@ -384,9 +387,14 @@ export default function VisitPanel({ child, products, programs, expectedProducts
           <Stack gap="xs">
             {historyByDate.map((g) => (
               <Group key={g.date} gap="sm" wrap="wrap" align="center">
-                <Text size="sm" fw={600} className="tabular" style={{ minWidth: 110 }}>
-                  {formatCivilDate(g.date, lang)}
-                </Text>
+                <Stack gap={0} style={{ minWidth: 110 }}>
+                  <Text size="sm" fw={600} className="tabular">
+                    {formatCivilDate(g.date, lang)}
+                  </Text>
+                  <Text size="xs" c="dimmed" className="tabular">
+                    {ageWord(g.date)}
+                  </Text>
+                </Stack>
                 <Group gap={6} wrap="wrap" style={{ flex: 1 }}>
                   {g.doses.map((d, i) => (
                     <Badge key={i} variant="light" color={originColor(d.origin)}>
@@ -412,9 +420,20 @@ export default function VisitPanel({ child, products, programs, expectedProducts
           </Stack>
         )}
 
-        <GrowthPanel childId={child.id} sex={child.sex} refreshKey={history.length} />
+            </Stack>
+          </Card>
 
-        <Grid>
+          <Card>
+            <GrowthPanel childId={child.id} sex={child.sex} refreshKey={history.length} />
+          </Card>
+
+          <Card>
+            <Stack gap="sm">
+              <Text size="sm" c="dimmed">
+                {t("visit.howto")}
+              </Text>
+
+              <Grid>
           <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
             <DateField
               label={t("visit.visitDate")}

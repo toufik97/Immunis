@@ -2,10 +2,9 @@ import { describe, it, expect } from "vitest";
 import { openTestDb, adminHeaders } from "./db-helper";
 import { loadSchedulePack } from "../../src/infra/packs/loader";
 import { buildApp } from "../../src/api/app";
-import { ageDaysBetween, bandOf, lmsAt, scorePoint, zScore } from "../../src/growth/zscore";
+import { ageDaysBetween, bandOf, scorePoint, valueAtZ, zScore } from "../../src/growth/zscore";
 import { growthFor } from "../../src/app/child-growth";
 import { recordEncounter } from "../../src/infra/repos/encounters";
-import tables from "../../src/growth/tables.json";
 import { scoreLive } from "../../app/web/src/growthLive";
 
 const pack = loadSchedulePack("MA");
@@ -21,9 +20,9 @@ describe("WHO growth scores", () => {
 
   it("interpolates between months and signs correctly", () => {
     // Halfway between month 1 and 2 medians reads near zero using interpolated LMS.
-    const m1 = lmsAt("wfa", "F", 30)!;
-    const m2 = lmsAt("wfa", "F", 61)!;
-    expect(m1.m).toBeLessThan(m2.m);
+    const m1 = valueAtZ("wfa", "F", 30, 0)!;
+    const m2 = valueAtZ("wfa", "F", 61, 0)!;
+    expect(m1).toBeLessThan(m2);
     const mid = scorePoint("2026-01-01", "F", "2026-02-15", 4.6, 55);
     expect(mid.z.wfa).not.toBeNull();
     const heavy = scorePoint("2026-01-01", "F", "2026-02-15", 8, 55);
@@ -86,12 +85,7 @@ describe("WHO growth scores", () => {
   });
 
   it("live preview matches the saved server score", () => {
-    const t = tables as unknown as Record<string, Record<string, [number, number, number][]>>;
-    const refs = {
-      wfa: { neg2: [], med: [], pos2: [], lms: t.wfa.M },
-      lhfa: { neg2: [], med: [], pos2: [], lms: t.lhfa.M },
-      bfa: { neg2: [], med: [], pos2: [], lms: t.bfa.M },
-    };
+    // scoreLive bundles the same tables as the server: same inputs, same z.
     const cases: [string, string, number | null, number | null][] = [
       ["2026-01-01", "2026-01-01", 3.3464, 49.9],
       ["2026-01-01", "2026-07-01", 7.8, 66],
@@ -100,8 +94,8 @@ describe("WHO growth scores", () => {
     ];
     for (const [birth, date, w, h] of cases) {
       const saved = scorePoint(birth, "M", date, w, h);
-      const live = scoreLive(refs, "M", birth, date, w, h)!;
-      for (const ind of ["wfa", "lhfa", "bfa"] as const) {
+      const live = scoreLive("M", birth, date, w, h)!;
+      for (const ind of ["wfa", "lhfa", "bfa", "wfl"] as const) {
         const a = saved.z[ind];
         const b = live[ind].z;
         if (a === null || b === null) {

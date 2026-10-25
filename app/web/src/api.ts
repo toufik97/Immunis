@@ -213,9 +213,10 @@ export const api = {
         weightKg: number | null;
         heightCm: number | null;
         bmi: number | null;
-        z: { wfa: number | null; lhfa: number | null; bfa: number | null };
+        z: { wfa: number | null; lhfa: number | null; bfa: number | null; wfl: number | null };
       }[];
-      refs: Record<"wfa" | "lhfa" | "bfa", { neg2: number[]; med: number[]; pos2: number[]; lms: [number, number, number][] }>;
+      refs: Record<"wfa" | "lhfa" | "bfa" | "wfl", { xs: number[]; neg2: number[]; med: number[]; pos2: number[] }>;
+      wflKind: "length" | "height";
     }>(`/api/children/${childId}/growth`),
 
   outbox: () => req<{ id: string; kind: string }[]>("/api/outbox"),

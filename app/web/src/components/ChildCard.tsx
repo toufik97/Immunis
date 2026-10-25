@@ -2,21 +2,7 @@ import { useTranslation } from "react-i18next";
 import { ActionIcon, Badge, Card, Group, Stack, Text, Title } from "@mantine/core";
 import { IconX } from "@tabler/icons-react";
 import type { Child } from "../api";
-import { formatCivilDate, todayCivilDate } from "../format";
-
-/** Whole years + remaining months between two YYYY-MM-DD dates. */
-function ageParts(birthIso: string, todayIso: string): { y: number; m: number } {
-  const [by, bm, bd] = birthIso.split("-").map(Number);
-  const [ty, tm, td] = todayIso.split("-").map(Number);
-  let y = ty - by;
-  let m = tm - bm;
-  if (td < bd) m -= 1;
-  if (m < 0) {
-    y -= 1;
-    m += 12;
-  }
-  return { y: Math.max(0, y), m: Math.max(0, m) };
-}
+import { ageParts, formatCivilDate, todayCivilDate } from "../format";
 
 /** Identity at a glance: who this record belongs to. No actions here. */
 export default function ChildCard({ child, onClose }: { child: Child; onClose: () => void }) {

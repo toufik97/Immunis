@@ -9,43 +9,27 @@ import { bandColor, bandOf, interpKey, type Indicator } from "../growthLive";
 type Point = Awaited<ReturnType<typeof api.childGrowth>>["points"][number];
 type Refs = Awaited<ReturnType<typeof api.childGrowth>>["refs"];
 
-/** Shared reference fetch: the visit form uses it for live words while typing. */
-export function useGrowthRefs(childId: string): Refs | null {
-  const [refs, setRefs] = useState<Refs | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    void api
-      .childGrowth(childId)
-      .then((r) => {
-        if (!cancelled) setRefs(r.refs);
-      })
-      .catch(() => {
-        if (!cancelled) setRefs(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [childId]);
-  return refs;
-}
 
 const VALUE_OF: Record<Indicator, (p: Point) => number | null> = {
   wfa: (p) => p.weightKg,
   lhfa: (p) => p.heightCm,
   bfa: (p) => p.bmi,
+  wfl: (p) => p.weightKg,
 };
-const UNIT_OF: Record<Indicator, string> = { wfa: "kg", lhfa: "cm", bfa: "" };
+const UNIT_OF: Record<Indicator, string> = { wfa: "kg", lhfa: "cm", bfa: "", wfl: "kg" };
 
 function CurveChart({
-  months,
+  xs,
   curves,
   points,
   unit,
+  tickEvery,
 }: {
-  months: number[];
-  curves: { neg2: number[]; med: number[]; pos2: number[] };
+  xs: number[];
+  curves: { xs: number[]; neg2: number[]; med: number[]; pos2: number[] };
   points: { x: number; y: number; scored: boolean }[];
   unit: string;
+  tickEvery: number;
 }) {
   const W = 360;
   const H = 230;
@@ -53,8 +37,7 @@ function CurveChart({
   const padR = 10;
   const padT = 10;
   const padB = 24;
-  const xs = points.map((p) => p.x);
-  const xMax = Math.max(12, Math.ceil(Math.max(0, ...xs, 0) / 6) * 6);
+  const xMax = Math.max(...curves.xs, ...points.map((p) => p.x), 12);
   const allY = [...curves.neg2, ...curves.pos2, ...points.map((p) => p.y)].filter(Number.isFinite);
   const lo = Math.min(...allY);
   const hi = Math.max(...allY);
@@ -64,11 +47,12 @@ function CurveChart({
   const X = (m: number): number => padL + (m / xMax) * (W - padL - padR);
   const Y = (v: number): number => padT + (1 - (v - yMin) / (yMax - yMin)) * (H - padT - padB);
   const line = (vals: number[]): string =>
-    vals.map((v, m) => `${m === 0 ? "M" : "L"}${X(months[m]).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+    vals.map((v, m) => `${m === 0 ? "M" : "L"}${X(xs[m]).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+  const n = xs.length;
   const band = `${line(curves.neg2)} ${curves.pos2
-    .map((v, m) => `L${X(months[60 - m]).toFixed(1)},${Y(curves.pos2[60 - m]).toFixed(1)}`)
+    .map((v, m) => `L${X(xs[n - 1 - m]).toFixed(1)},${Y(curves.pos2[n - 1 - m]).toFixed(1)}`)
     .join(" ")} Z`;
-  const ticks = Array.from({ length: Math.floor(xMax / 6) + 1 }, (_, i) => i * 6);
+  const ticks = xs.filter((x) => x % tickEvery === 0);
   const yTicks = [0, 1, 2, 3].map((i) => yMin + ((yMax - yMin) * (i + 0.5)) / 4);
 
   return (
@@ -131,7 +115,8 @@ export default function GrowthPanel({
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
   const [points, setPoints] = useState<Point[]>([]);
-  const refs = useGrowthRefs(childId);
+  const [refs, setRefs] = useState<Refs | null>(null);
+  const [wflKind, setWflKind] = useState<"length" | "height">("length");
   const [tab, setTab] = useState<Indicator>("wfa");
   const [open, setOpen] = useState(false);
 
@@ -140,10 +125,17 @@ export default function GrowthPanel({
     void api
       .childGrowth(childId)
       .then((r) => {
-        if (!cancelled) setPoints(r.points);
+        if (!cancelled) {
+          setPoints(r.points);
+          setRefs(r.refs);
+          setWflKind(r.wflKind);
+        }
       })
       .catch(() => {
-        if (!cancelled) setPoints([]);
+        if (!cancelled) {
+          setPoints([]);
+          setRefs(null);
+        }
       });
     return () => {
       cancelled = true;
@@ -152,15 +144,17 @@ export default function GrowthPanel({
   }, [childId, refreshKey]);
 
   if (!sex) return null;
-  const scored = points.filter((p) => p.z.wfa !== null || p.z.lhfa !== null || p.z.bfa !== null);
+  const scored = points.filter((p) => p.z.wfa != null || p.z.lhfa != null || p.z.bfa != null || p.z.wfl != null);
   const latest = [...points].reverse().find((p) => p.weightKg !== null || p.heightCm !== null) ?? null;
   const outOfRange = points.length > scored.length;
 
-  const months = Array.from({ length: 61 }, (_, m) => m);
   const rows = [...points].reverse();
   const chartPoints = points
-    .map((p) => ({ x: p.ageMonths, y: VALUE_OF[tab](p), scored: p.z[tab] !== null }))
-    .filter((p) => p.y !== null) as { x: number; y: number; scored: boolean }[];
+    .map((p) => ({ x: tab === "wfl" ? p.heightCm : p.ageMonths, y: VALUE_OF[tab](p), scored: p.z[tab] != null }))
+    .filter((p) => p.y !== null && p.x !== null) as { x: number; y: number; scored: boolean }[];
+  // Degrade (table only) when the server predates the xs curve shape — never blank the page.
+  const curves = refs?.[tab];
+  const canChart = !!curves && Array.isArray(curves.xs) && curves.xs.length > 0 && chartPoints.length > 0;
 
   return (
     <Stack gap="sm" mt="md">
@@ -186,7 +180,10 @@ export default function GrowthPanel({
         <>
           {latest && (
             <Group gap="xs" wrap="wrap">
-              {(["wfa", "lhfa", "bfa"] as const).map((ind) => {
+              <Text size="xs" c="dimmed" className="tabular">
+                {formatCivilDate(latest.date, lang)}
+              </Text>
+              {(["wfa", "lhfa", "bfa", "wfl"] as const).map((ind) => {
                 const z = latest.z[ind];
                 const band = bandOf(z);
                 const key = interpKey(ind, band);
@@ -195,7 +192,7 @@ export default function GrowthPanel({
                 return (
                   <Group key={ind} gap={6} wrap="nowrap">
                     <Text size="sm" className="tabular">
-                      {t(`growth.${ind === "lhfa" ? "height" : ind === "bfa" ? "bmi" : "weight"}`)} {v}
+                      {t(`growth.${ind === "lhfa" ? "height" : ind === "bfa" ? "bmi" : ind === "wfl" ? "wflShort" : "weight"}`)} {v}
                       {UNIT_OF[ind] ? ` ${UNIT_OF[ind]}` : ""}
                     </Text>
                     {key && (
@@ -223,10 +220,24 @@ export default function GrowthPanel({
               { label: t("growth.weight"), value: "wfa" },
               { label: t("growth.height"), value: "lhfa" },
               { label: t("growth.bmi"), value: "bfa" },
+              { label: t("growth.wfl"), value: "wfl" },
             ]}
           />
-          {refs && chartPoints.length > 0 && (
-            <CurveChart months={months} curves={refs[tab]} points={chartPoints} unit={UNIT_OF[tab]} />
+          {refs && canChart && (
+            <>
+              <CurveChart
+                xs={curves!.xs}
+                curves={curves!}
+                points={chartPoints}
+                unit={UNIT_OF[tab]}
+                tickEvery={tab === "wfl" ? 10 : 6}
+              />
+              {tab === "wfl" && (
+                <Text size="xs" c="dimmed">
+                  {t(wflKind === "height" ? "growth.wflHeight" : "growth.wflLength")}
+                </Text>
+              )}
+            </>
           )}
           <Text size="xs" c="dimmed">
             {t("growth.bandHint")}
@@ -250,7 +261,7 @@ export default function GrowthPanel({
                       <Table.Td>{formatCivilDate(p.date, lang)}</Table.Td>
                       <Table.Td>{formatCount(Math.round(p.ageMonths * 10) / 10, lang)}</Table.Td>
                       <Table.Td>{v === null ? "—" : `${v}${UNIT_OF[tab] ? ` ${UNIT_OF[tab]}` : ""}`}</Table.Td>
-                      <Table.Td>{z === null ? "—" : `${z > 0 ? "+" : ""}${(Math.round(z * 10) / 10).toFixed(1)}`}</Table.Td>
+                      <Table.Td>{z == null ? "—" : `${z > 0 ? "+" : ""}${(Math.round(z * 10) / 10).toFixed(1)}`}</Table.Td>
                     </Table.Tr>
                   );
                 })}
