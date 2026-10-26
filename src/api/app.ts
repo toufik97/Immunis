@@ -8,7 +8,7 @@ import { toEngineHistory } from "../app/evaluate-child";
 import { findChildrenByName, getChild, listChildren } from "../infra/repos/children";
 import { registerChild } from "../app/register-child";
 import { listDosesByChild, listDoseDetailsByChild, listEncountersByChild } from "../infra/repos/encounters";
-import { nowIso, todayLocal } from "../infra/time";
+import { nowIso, todayLocal, centreTimeZone } from "../infra/time";
 import { recordVisit, RecordGateError } from "../app/record-visit";
 import {
   flagVoidEncounter,
@@ -217,6 +217,10 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
   };
 
   app.get("/api/health", async () => ({ ok: true }));
+
+  // Centre clock for the UI: zone + today + now, so the visit form and the
+  // audit display never trust the device's own date around midnight.
+  app.get("/api/time", async () => ({ zone: centreTimeZone(), today: todayLocal(), now: nowIso() }));
 
   // ---- auth (login replaces the old shared centre token) ----
   app.get("/api/auth/status", async () => {

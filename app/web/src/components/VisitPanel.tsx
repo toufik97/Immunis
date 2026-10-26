@@ -35,6 +35,7 @@ import {
 } from "@tabler/icons-react";
 import { api, type Appointment, type Child, type Dose, type EncounterHistory, type GateIssue, type Lot, type SchedulingIssue } from "../api";
 import { ageParts, formatCivilDate, todayCivilDate } from "../format";
+import { centreTime } from "../centreTime";
 import { formatEngineWarning } from "../engineWarnings";
 import ChildCard from "./ChildCard";
 import AppointmentForm from "./AppointmentForm";
@@ -68,6 +69,21 @@ export default function VisitPanel({ child, products, programs, user, expectedPr
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
   const [visitDate, setVisitDate] = useState(todayCivilDate());
+  // Device date at mount: adopted only while the field still holds this default.
+  const localTodayAtMount = useRef(todayCivilDate());
+  // Centre today from the server: the only "today" the form trusts for defaults/bounds.
+  const [serverToday, setServerToday] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void centreTime().then((t) => {
+      if (cancelled) return;
+      setServerToday(t.today);
+      setVisitDate((v) => (v === localTodayAtMount.current ? t.today : v));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [screening, setScreening] = useState("VACCINATE");
   const [weightKg, setWeightKg] = useState("");
   const [heightCm, setHeightCm] = useState("");
@@ -418,7 +434,7 @@ export default function VisitPanel({ child, products, programs, user, expectedPr
   }
 
   const canOverride = gateIssues.some((g) => g.overridable);
-  const todayStr = todayCivilDate();
+  const todayStr = serverToday ?? todayCivilDate();
   const originColor = (o: string): string => (o === "CENTRE" ? "teal" : o === "CAMPAIGN" ? "orange" : "gray");
 
   // History grouped per encounter (voided visits stay visible via the encounter ledger).

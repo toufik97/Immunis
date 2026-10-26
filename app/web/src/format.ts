@@ -36,15 +36,16 @@ export function formatCount(n: number, lang: string): string {
   }
 }
 
-/** Display a UTC ISO timestamp (audit rows) in the UI locale. Falls back to raw on bad input. */
-export function formatDateTime(iso: string, lang: string): string {
+/** Display a UTC ISO timestamp (audit rows) in the centre zone (default UTC), with zone label. */
+export function formatDateTime(iso: string, lang: string, timeZone = "UTC"): string {
   const dt = new Date(iso);
   if (Number.isNaN(dt.getTime())) return iso;
   try {
     return new Intl.DateTimeFormat(localeTag(lang), {
       dateStyle: "medium",
       timeStyle: "short",
-      timeZone: "UTC",
+      timeZone,
+      timeZoneName: "short",
     }).format(dt);
   } catch {
     return iso;

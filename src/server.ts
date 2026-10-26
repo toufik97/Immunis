@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { loadSchedulePack } from "./infra/packs/loader";
 import { openDb } from "./infra/db/connection";
+import { centreOffsetLabel, centreTimeZone, nowIso, todayLocal } from "./infra/time";
 import { buildApp } from "./api/app";
 
 const COUNTRY = process.env.COUNTRY_PACK ?? "MA";
@@ -59,6 +60,15 @@ app.listen({ port: PORT, host: HOST }, (err) => {
   console.log("--------------------------------");
   console.log(`URL: http://${HOST === "0.0.0.0" ? "<this-machine-ip>" : HOST}:${PORT}`);
   console.log(`Country pack: ${COUNTRY}`);
+  // A typo'd CENTRE_TZ must crash here at startup, never silently at midnight.
+  let centreToday: string;
+  try {
+    centreToday = todayLocal();
+  } catch {
+    console.error(`Invalid CENTRE_TZ: ${JSON.stringify(process.env.CENTRE_TZ)} (want an IANA zone, e.g. Africa/Casablanca)`);
+    process.exit(1);
+  }
+  console.log(`Centre time: ${centreTimeZone()} (${centreOffsetLabel()}) — today ${centreToday}, now ${nowIso()}`);
   console.log(`DB: ${DB_PATH}`);
   console.log(
     HOST === "127.0.0.1"

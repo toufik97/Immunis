@@ -1,9 +1,18 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { openTestDb } from "./db-helper";
 import { createChild } from "../../src/infra/repos/children";
 import { recordEncounter, validateEncounterDates } from "../../src/infra/repos/encounters";
-import { isFutureDate, nowIso, todayLocal } from "../../src/infra/time";
+import { centreOffsetLabel, centreTimeZone, isFutureDate, nowIso, todayLocal } from "../../src/infra/time";
 import { EncounterSchema } from "../../src/domain/encounter";
+import { loadSchedulePack } from "../../src/infra/packs/loader";
+import { recordVisit } from "../../src/app/record-visit";
+
+const pack = loadSchedulePack("MA");
+
+afterEach(() => {
+  vi.useRealTimers();
+  delete process.env.CENTRE_TZ;
+});
 
 describe("centre time seam", () => {
   it("formats wall-clock dates and UTC stamps", () => {
@@ -44,5 +53,53 @@ describe("centre time seam", () => {
       )
     ).toThrow(/future/);
     db.close();
+  });
+
+  it("computes today in the configured centre zone, not the machine zone", () => {
+    // Fixed-offset zones (no DST) keep this deterministic whatever the tzdata says.
+    process.env.CENTRE_TZ = "Pacific/Kiritimati"; // UTC+14
+    expect(centreTimeZone()).toBe("Pacific/Kiritimati");
+    expect(todayLocal(new Date("2026-10-26T00:30:00.000Z"))).toBe("2026-10-26");
+    expect(centreOffsetLabel(new Date("2026-10-26T00:30:00.000Z"))).toBe("GMT+14");
+    process.env.CENTRE_TZ = "Pacific/Midway"; // UTC-11
+    expect(todayLocal(new Date("2026-10-26T00:30:00.000Z"))).toBe("2026-10-25");
+    expect(centreOffsetLabel(new Date("2026-10-26T00:30:00.000Z"))).toBe("GMT-11");
+  });
+
+  it("record gate follows the centre zone at the midnight boundary (2026-10-25 23:19Z)", () => {
+    // The Enfant-243 incident: machine-local said the 26th while UTC said the 25th.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-25T23:19:00.000Z"));
+    const attempt = (zone: string): "accepted" | "rejected" => {
+      process.env.CENTRE_TZ = zone;
+      const db = openTestDb();
+      try {
+        const child = createChild(db, { familyName: "T", givenName: "T", birthDate: "2025-01-01" });
+        recordVisit(db, pack, child.birthDate, [], {
+          childId: child.id,
+          date: "2026-10-26",
+          screening: "VACCINATE",
+          doses: [
+            {
+              productGroupId: "PENTA",
+              administeredOn: "2026-10-26",
+              origin: "EXTERNAL",
+              overridden: false,
+              recordedBy: "nurse1",
+            },
+          ],
+        });
+        return "accepted";
+      } catch (e) {
+        expect(String((e as Error)?.message ?? e)).toMatch(/future|TODAY/i);
+        return "rejected";
+      } finally {
+        db.close();
+      }
+    };
+    // Centre east of the instant (already the 26th there): the 26th visit is legitimate.
+    expect(attempt("Pacific/Kiritimati")).toBe("accepted");
+    // Centre west of the instant (still the 25th there): the 26th visit is in the future.
+    expect(attempt("Pacific/Midway")).toBe("rejected");
   });
 });

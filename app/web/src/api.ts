@@ -195,6 +195,8 @@ export interface AuthUser {
 
 export const api = {
   health: () => req<{ ok: boolean }>("/api/health"),
+  /** Centre clock: the visit form and audit display trust this, never the device date. */
+  time: () => req<{ zone: string; today: string; now: string }>("/api/time"),
   authStatus: () => req<{ needsBootstrap: boolean; userCount: number }>("/api/auth/status"),
   login: async (username: string, password: string) => {
     const r = await req<{ user: AuthUser; sessionId: string }>("/api/auth/login", {

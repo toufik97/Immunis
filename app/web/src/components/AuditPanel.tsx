@@ -5,6 +5,7 @@ import { Alert, Badge, Button, Card, Group, Select, Stack, Table, Text, TextInpu
 import { IconAlertCircle } from "@tabler/icons-react";
 import { api } from "../api";
 import { formatCivilDate, formatDateTime } from "../format";
+import { centreTime } from "../centreTime";
 import DateField from "./DateField";
 import Pager, { PAGE_SIZE } from "./Pager";
 
@@ -40,6 +41,18 @@ export default function AuditPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   const [asc, setAsc] = useState(false);
   const [actionNames, setActionNames] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  // Centre zone for audit timestamps: silent UTC once read as "still the 25th".
+  const [zone, setZone] = useState("UTC");
+
+  useEffect(() => {
+    let cancelled = false;
+    void centreTime().then((t) => {
+      if (!cancelled) setZone(t.zone);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     setPage(0);
@@ -182,7 +195,7 @@ export default function AuditPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                 <Table.Tbody className="tabular">
                   {actions.map((a) => (
                     <Table.Tr key={a.id}>
-                      <Table.Td>{formatDateTime(a.createdAt, lang)}</Table.Td>
+                      <Table.Td>{formatDateTime(a.createdAt, lang, zone)}</Table.Td>
                       <Table.Td className="break-words">{a.username}</Table.Td>
                       <Table.Td className="break-words">
                         {t(`audit.action.${a.action}`, { defaultValue: a.action })}
@@ -256,7 +269,7 @@ export default function AuditPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                 <Table.Tbody className="tabular">
                   {pagedRows.map((r) => (
                     <Table.Tr key={r.id}>
-                      <Table.Td>{formatDateTime(r.createdAt, lang)}</Table.Td>
+                      <Table.Td>{formatDateTime(r.createdAt, lang, zone)}</Table.Td>
                       <Table.Td className="break-words">{r.childName}</Table.Td>
                       <Table.Td>{r.encounterDate ? formatCivilDate(r.encounterDate, lang) : "—"}</Table.Td>
                       <Table.Td className="break-words">{r.author}</Table.Td>
