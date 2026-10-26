@@ -386,12 +386,14 @@ export default function App() {
                   <SessionPanel
                     products={products}
                     onOpen={(id, expected) => void openChildById(id, expected)}
+                    active={tab === "session"}
                   />
                 </Tabs.Panel>
                 <Tabs.Panel value="noshows">
                   <NoShowPanel
                     products={products}
                     onOpen={(id, expected) => void openChildById(id, expected)}
+                    active={tab === "noshows"}
                   />
                 </Tabs.Panel>
                 <Tabs.Panel value="stock">

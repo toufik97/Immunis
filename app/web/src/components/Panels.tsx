@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useDebouncedValue } from "@mantine/hooks";
 import {
@@ -225,6 +225,8 @@ function PersonTable({
 interface PanelProps {
   products: { id: string; label_fr?: string }[];
   onOpen: (childId: string, expectedProducts: string[]) => void;
+  /** True while the tab is visible; panels reload stale data on return. */
+  active?: boolean;
 }
 
 function labelOf(products: { id: string; label_fr?: string }[], id: string): string {
@@ -265,7 +267,7 @@ function weekdayNames(lang: string): string[] {
   }
 }
 
-export function SessionPanel({ products, onOpen }: PanelProps) {
+export function SessionPanel({ products, onOpen, active }: PanelProps) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
   const [date, setDate] = useState(todayCivilDate());
@@ -278,9 +280,9 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
   const [loading, setLoading] = useState(false);
   const productLabel = (id: string) => labelOf(products, id);
 
-  async function load(forDate = date): Promise<void> {
-    setErr("");
-    setLoading(true);
+  async function load(forDate = date, silent = false): Promise<void> {
+    if (!silent) setErr("");
+    if (!silent) setLoading(true);
     try {
       const [session, usable] = await Promise.all([api.session(forDate), api.lots(undefined, forDate)]);
       setData(session);
@@ -303,9 +305,9 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
       // the day view must never wait on it (offline-friendly).
       void loadMonth(forDate.slice(0, 7));
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      if (!silent) setErr(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
@@ -324,6 +326,26 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
     void loadMonth(today.slice(0, 7));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Visits are recorded from the Today tab while this panel sits hidden:
+  // reload on return so Seen counts never go stale.
+  const wasActive = useRef(active ?? true);
+  useEffect(() => {
+    if (active && !wasActive.current) void load();
+    wasActive.current = active ?? true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+
+  // Same-browser second tab (or Alt-Tab away and back): the data may have
+  // changed with no tab switch here. Silent: an offline focus must never
+  // raise an error banner.
+  useEffect(() => {
+    if (active === false) return;
+    const onFocus = () => void load(undefined, true);
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
 
   function pick(d: string): void {
     setDate(d);
@@ -666,7 +688,7 @@ export function SessionPanel({ products, onOpen }: PanelProps) {
   );
 }
 
-export function NoShowPanel({ products, onOpen }: PanelProps) {
+export function NoShowPanel({ products, onOpen, active }: PanelProps) {
   const { t } = useTranslation();
   const [asOf, setAsOf] = useState(todayCivilDate());
   const [list, setList] = useState<Awaited<ReturnType<typeof api.noShows>>>([]);
@@ -690,6 +712,14 @@ export function NoShowPanel({ products, onOpen }: PanelProps) {
     void load(todayCivilDate());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Same staleness as sessions: reload when the tab becomes visible again.
+  const wasActive = useRef(active ?? true);
+  useEffect(() => {
+    if (active && !wasActive.current) void load();
+    wasActive.current = active ?? true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
 
   return (
     <Card>
