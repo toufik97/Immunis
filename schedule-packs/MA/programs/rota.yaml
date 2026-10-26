@@ -19,12 +19,16 @@ primary_series:
   dose_validity:
     - dose: 1
       min_age:
+        weeks: 8
+      target_min_age:
         months: 2
       max_age:
         months: 24
 
     - dose: 2
       min_age:
+        weeks: 12
+      target_min_age:
         months: 3
       min_interval_from_previous:
         weeks: 4
@@ -33,6 +37,8 @@ primary_series:
 
     - dose: 3
       min_age:
+        weeks: 16
+      target_min_age:
         months: 4
       min_interval_from_previous:
         weeks: 4
@@ -91,4 +97,10 @@ review_flags:
     question: >
       Treated as INVALID (hard per-dose stop: "24 months, no more
       doses").
+    status: clinician_confirmed
+  - id: ROTA-REVIEW-003
+    topic: Min in weeks, recommended in months
+    question: >
+      Dose 1-3 min_age is weeks (8/12/16) with target_min_age months (2/3/4),
+      co-administered with Penta1/2/3; 24-month hard stop unchanged.
     status: clinician_confirmed

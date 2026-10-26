@@ -75,8 +75,13 @@ export function validateCounterDoses(
   const zeroRecords: ImmunizationRecord[] = [];
   const countedRecords: ImmunizationRecord[] = [];
 
+  // Single zero: only the first dose inside the zero window is dose 0.
+  // Later early doses are evaluated as dose 1 (valid or invalid by rule),
+  // never a second silent zero.
+  let zeroUsed = false;
   for (const record of relevantRecords) {
     if (
+      !zeroUsed &&
       context.doseZero &&
       context.doseZero.productGroups.includes(record.productGroupId) &&
       isAgeBefore(
@@ -86,6 +91,7 @@ export function validateCounterDoses(
       )
     ) {
       zeroRecords.push(record);
+      zeroUsed = true;
     } else {
       countedRecords.push(record);
     }
