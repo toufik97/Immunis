@@ -86,11 +86,27 @@ describe("month-based limits keep their behavior", () => {
     const o = evalAt("2026-01-01", "2026-03-10", [{ administeredOn: "2026-03-01", productGroupId: "VPO" }]);
     expect(dose(o, "POLIO_ORAL_DOSES").doseNumber).toBe(1);
   });
-  it("Penta dose 1 on the 2-month day is valid, the day before is not", () => {
+  it("Penta dose 1: 8 weeks is the floor, 2 months is the target", () => {
+    // Birth 2026-01-15: 8w = 2026-03-12 (floor), 2m = 2026-03-15 (target).
     const ok = evalAt("2026-01-15", "2026-03-20", [{ administeredOn: "2026-03-15", productGroupId: "PENTA" }]);
-    const early = evalAt("2026-01-15", "2026-03-20", [{ administeredOn: "2026-03-14", productGroupId: "PENTA" }]);
+    const earlyButPastFloor = evalAt("2026-01-15", "2026-03-20", [{ administeredOn: "2026-03-14", productGroupId: "PENTA" }]);
+    const tooEarly = evalAt("2026-01-15", "2026-03-20", [{ administeredOn: "2026-03-11", productGroupId: "PENTA" }]);
     expect(dose(ok, "DTP_CONTAINING_DOSES").valid).toBe(true);
-    expect(dose(early, "DTP_CONTAINING_DOSES").valid).toBe(false);
+    // Past 8w but before 2m: counts with early warning, never invalid.
+    expect(dose(earlyButPastFloor, "DTP_CONTAINING_DOSES").valid).toBe(true);
+    expect(dose(earlyButPastFloor, "DTP_CONTAINING_DOSES").warnings.some((w: string) => w.startsWith("EARLY_DOSE_1_COUNTED"))).toBe(true);
+    // Before 8w: still invalid.
+    expect(dose(tooEarly, "DTP_CONTAINING_DOSES").valid).toBe(false);
+  });
+  it("VPO: only the first dose before 2 months is dose 0", () => {
+    const r = evalAt("2026-01-01", "2026-03-10", [
+      { administeredOn: "2026-01-20", productGroupId: "VPO" },
+      { administeredOn: "2026-02-28", productGroupId: "VPO" },
+    ]);
+    const all = r.doseValidations["POLIO_ORAL_DOSES"].doses;
+    expect(all[0].doseNumber).toBe(0);
+    // Second early VPO is evaluated as dose 1, not a second zero.
+    expect(all[1].doseNumber).toBe(1);
   });
 });
 
