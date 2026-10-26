@@ -7,16 +7,18 @@ import {
   Button,
   Card,
   Checkbox,
+  Collapse,
   Grid,
   Group,
   Select,
   Stack,
+  Tabs,
   Table,
   Text,
   TextInput,
   Title,
 } from "@mantine/core";
-import { IconAlertCircle, IconCalendarCheck, IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
+import { IconAlertCircle, IconCalendarCheck, IconChevronDown, IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 import { api, type Appointment } from "../api";
 import { formatCivilDate, formatCount, todayCivilDate } from "../format";
 import DateField from "./DateField";
@@ -51,6 +53,16 @@ function toRow(a: Appointment): Row {
 }
 
 type SortKey = "localId" | "name" | "dueDate" | "daysOverdue" | "lastVisit";
+
+interface ExpectedTier {
+  key: string;
+  label: string;
+  rows: Row[];
+  showDue: boolean;
+  showNoShow: boolean;
+  color: string;
+  variant: "filled" | "light";
+}
 
 interface TableActions {
   onOpen?: (childId: string, products: string[]) => void;
@@ -278,6 +290,11 @@ export function SessionPanel({ products, onOpen, active }: PanelProps) {
   const [next, setNext] = useState<{ date: string; children: number } | null>(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
+  const [expectedTab, setExpectedTab] = useState<string | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(true);
+  const [expectedOpen, setExpectedOpen] = useState(true);
+  const [seenOpen, setSeenOpen] = useState(true);
+  const [missedOpen, setMissedOpen] = useState(true);
   const productLabel = (id: string) => labelOf(products, id);
 
   async function load(forDate = date, silent = false): Promise<void> {
@@ -366,6 +383,11 @@ export function SessionPanel({ products, onOpen, active }: PanelProps) {
   const due = data?.expected ?? [];
   const probable = data?.probable ?? [];
   const possible = data?.possible ?? [];
+  const expectedTiers: ExpectedTier[] = [
+    { key: "due", label: t("session.due", { n: formatCount(due.length, lang) }), rows: due.map(toRow), showDue: false, showNoShow: false, color: "teal", variant: "filled" as const },
+    { key: "probable", label: t("session.probable", { n: formatCount(probable.length, lang) }), rows: probable.map(toRow), showDue: true, showNoShow: true, color: "yellow", variant: "light" as const },
+    { key: "possible", label: t("session.possible", { n: formatCount(possible.length, lang) }), rows: possible.map(toRow), showDue: true, showNoShow: true, color: "gray", variant: "light" as const },
+  ].filter((tier) => tier.rows.length > 0);
   const tiers = data?.tiers;
   const backlog = data?.backlog;
   const isPast = date < todayCivilDate();
@@ -454,10 +476,25 @@ export function SessionPanel({ products, onOpen, active }: PanelProps) {
         )}
         {(results.seen ?? []).length > 0 && (
           <Stack gap="xs">
-            <Text size="sm" fw={600} className="tabular">
+            <Button
+              size="compact-sm"
+              variant="subtle"
+              justify="flex-start"
+              onClick={() => setSeenOpen((o) => !o)}
+              aria-expanded={seenOpen}
+              leftSection={
+                seenOpen ? (
+                  <IconChevronDown size={15} aria-hidden="true" />
+                ) : (
+                  <IconChevronRight size={15} aria-hidden="true" />
+                )
+              }
+              className="tabular"
+            >
               {t("session.seenList", { n: formatCount(results.seen?.length ?? 0, lang) })}
-            </Text>
-            <PersonTable
+            </Button>
+            <Collapse in={seenOpen}>
+              <PersonTable
               rows={(results.seen ?? []).map((s) => ({
                 apptId: `seen-${s.childId}`,
                 childId: s.childId,
@@ -476,14 +513,30 @@ export function SessionPanel({ products, onOpen, active }: PanelProps) {
               dosesHeader={t("session.dosesGivenCol")}
               actions={{ onOpen: (id) => onOpen(id, []) }}
             />
+            </Collapse>
           </Stack>
         )}
         {(results.missed ?? []).length > 0 && (
           <Stack gap="xs">
-            <Text size="sm" fw={600} className="tabular">
+            <Button
+              size="compact-sm"
+              variant="subtle"
+              justify="flex-start"
+              onClick={() => setMissedOpen((o) => !o)}
+              aria-expanded={missedOpen}
+              leftSection={
+                missedOpen ? (
+                  <IconChevronDown size={15} aria-hidden="true" />
+                ) : (
+                  <IconChevronRight size={15} aria-hidden="true" />
+                )
+              }
+              className="tabular"
+            >
               {t("session.missedList", { n: formatCount(results.missed?.length ?? 0, lang) })}
-            </Text>
-            <PersonTable
+            </Button>
+            <Collapse in={missedOpen}>
+              <PersonTable
               rows={(results.missed ?? []).map((a) => ({
                 ...toRow(a),
                 status: (a.kept === false ? "moved" : "pending") as "moved" | "pending",
@@ -492,6 +545,7 @@ export function SessionPanel({ products, onOpen, active }: PanelProps) {
               productLabel={productLabel}
               actions={{ onOpen }}
             />
+            </Collapse>
           </Stack>
         )}
       </Stack>
@@ -499,36 +553,47 @@ export function SessionPanel({ products, onOpen, active }: PanelProps) {
   }
 
   return (
-    <Card>
-      <Stack gap="sm">
-        <Group justify="space-between" wrap="wrap">
-          <Title order={2} size="h4">
-            {t("nav.session")}
-          </Title>
-          <Group align="end" wrap="wrap">
-            <DateField label={t("session.date")} name="sessionDate" value={date} onChange={pick} />
-            <Button onClick={() => void load()} loading={loading} leftSection={<IconCalendarCheck size={15} aria-hidden="true" />}>
-              {t("session.load")}
-            </Button>
+    <Stack gap="md">
+      <Card>
+        <Stack gap="sm">
+          <Group justify="space-between" wrap="wrap">
+            <Title order={2} size="h4">
+              {t("nav.session")}
+            </Title>
+            <Group align="end" wrap="wrap">
+              <DateField label={t("session.date")} name="sessionDate" value={date} onChange={pick} />
+              <Button onClick={() => void load()} loading={loading} leftSection={<IconCalendarCheck size={15} aria-hidden="true" />}>
+                {t("session.load")}
+              </Button>
+            </Group>
           </Group>
-        </Group>
-        <div aria-live="polite">
-          {err && <Alert color="red" icon={<IconAlertCircle size={16} aria-hidden="true" />} title={err} />}
-        </div>
+          <div aria-live="polite">
+            {err && <Alert color="red" icon={<IconAlertCircle size={16} aria-hidden="true" />} title={err} />}
+          </div>
+        </Stack>
+      </Card>
 
-        {/* Month calendar: representative planning view, replaces the chip list. */}
+      {/* Block: month calendar, collapsible so it stops pushing the plan down. */}
+      <Card withBorder shadow="none" padding="sm" radius="md">
         <Stack gap="xs">
           <Group justify="space-between" wrap="wrap">
             <Group gap="xs">
-              <Button size="compact-sm" variant="light" aria-label={t("session.monthPrev")} onClick={() => moveMonth(-1)}>
-                <IconChevronLeft size={15} aria-hidden="true" />
+              <Button
+                size="compact-sm"
+                variant="subtle"
+                onClick={() => setCalendarOpen((o) => !o)}
+                aria-expanded={calendarOpen}
+                aria-label={t("session.upcoming")}
+              >
+                {calendarOpen ? (
+                  <IconChevronDown size={15} aria-hidden="true" />
+                ) : (
+                  <IconChevronRight size={15} aria-hidden="true" />
+                )}
               </Button>
-              <Text size="sm" fw={600} className="tabular">
-                {formatCivilDate(monthFirstDay(month), lang).replace(/^\d+\s*/, "").trim() || month}
+              <Text size="sm" fw={600}>
+                {t("session.upcoming")}
               </Text>
-              <Button size="compact-sm" variant="light" aria-label={t("session.monthNext")} onClick={() => moveMonth(1)}>
-                <IconChevronRight size={15} aria-hidden="true" />
-              </Button>
             </Group>
             <Button
               size="compact-sm"
@@ -543,6 +608,19 @@ export function SessionPanel({ products, onOpen, active }: PanelProps) {
               {t("session.monthToday")}
             </Button>
           </Group>
+          <Collapse in={calendarOpen}>
+            <Stack gap="xs">
+              <Group gap="xs">
+                <Button size="compact-sm" variant="light" aria-label={t("session.monthPrev")} onClick={() => moveMonth(-1)}>
+                  <IconChevronLeft size={15} aria-hidden="true" />
+                </Button>
+                <Text size="sm" fw={600} className="tabular">
+                  {formatCivilDate(monthFirstDay(month), lang).replace(/^\d+\s*/, "").trim() || month}
+                </Text>
+                <Button size="compact-sm" variant="light" aria-label={t("session.monthNext")} onClick={() => moveMonth(1)}>
+                  <IconChevronRight size={15} aria-hidden="true" />
+                </Button>
+              </Group>
           <div
             role="grid"
             aria-label={t("session.upcoming")}
@@ -593,98 +671,129 @@ export function SessionPanel({ products, onOpen, active }: PanelProps) {
                 </Button>
               );
             })}
-          </div>
+            </div>
+            </Stack>
+          </Collapse>
         </Stack>
+      </Card>
 
-        {data && (
+      {data && (
           <Stack gap="md">
             {!isPast && (
               <Stack gap="sm">
-            <Group gap="xs" wrap="wrap" aria-live="polite">
-              <Badge color="teal" variant="filled" className="tabular">
-                {t("session.due", { n: formatCount(due.length, lang) })}
-              </Badge>
-              <Badge color="yellow" variant="light" className="tabular">
-                {t("session.probable", { n: formatCount(probable.length, lang) })}
-              </Badge>
-              <Badge color="gray" variant="light" className="tabular">
-                {t("session.possible", { n: formatCount(possible.length, lang) })}
-              </Badge>
-            </Group>
-            {Object.keys(needByProduct).length > 0 && (
-              <Stack gap="xs">
-                <Text size="sm" fw={600}>
-                  {t("session.prep")}
-                </Text>
-                <Group gap="xs" wrap="wrap">
-                  {Object.entries(needByProduct).map(([p, need]) => {
-                    const usable = usableByProduct[p] ?? 0;
-                    const short = usable - need;
-                    return (
-                      <Badge key={p} variant="light" color={short < 0 ? "red" : "teal"} className="tabular">
-                        {productLabel(p)} ×{formatCount(need, lang)}
-                        {short < 0 ? ` · ${t("session.short", { n: formatCount(-short, lang) })}` : ""}
-                      </Badge>
-                    );
-                  })}
-                </Group>
+                {/* Block: expected children — counts header, foldable tables below. */}
+                <Card withBorder shadow="none" padding="sm" radius="md">
+                  <Stack gap="xs">
+                    <Group justify="space-between" wrap="wrap">
+                      <Text size="sm" fw={600} className="tabular">
+                        {t("session.expected", {
+                          n: formatCount(due.length + probable.length + possible.length, lang),
+                        })}
+                      </Text>
+                      {due.length + probable.length + possible.length > 0 && (
+                        <Button
+                          size="compact-sm"
+                          variant="subtle"
+                          onClick={() => setExpectedOpen((o) => !o)}
+                          aria-expanded={expectedOpen}
+                          aria-label={t("session.expected", {
+                            n: formatCount(due.length + probable.length + possible.length, lang),
+                          })}
+                        >
+                          {expectedOpen ? (
+                            <IconChevronDown size={15} aria-hidden="true" />
+                          ) : (
+                            <IconChevronRight size={15} aria-hidden="true" />
+                          )}
+                        </Button>
+                      )}
+                    </Group>
+                    {backlog && backlog.children > 0 && (
+                      <Text size="sm" c="dimmed" className="tabular">
+                        {t("session.backlog", { n: formatCount(backlog.children, lang) })}
+                      </Text>
+                    )}
+                    {due.length + probable.length + possible.length === 0 ? (
+                      <Stack gap="xs">
+                        {(data?.results?.childrenSeen ?? 0) === 0 && (
+                          <Text size="sm" c="dimmed">
+                            {t("session.empty")}
+                          </Text>
+                        )}
+                        {next && (
+                          <div>
+                            <Button size="compact-sm" variant="subtle" onClick={() => pick(next.date)}>
+                              {t("session.next", { date: formatCivilDate(next.date, lang), n: formatCount(next.children, lang) })}
+                            </Button>
+                          </div>
+                        )}
+                      </Stack>
+                    ) : (
+                      <Stack gap="xs">
+                        {expectedTiers.length === 1 ? (
+                          <Stack gap="xs">
+                            <Badge color={expectedTiers[0].color} variant={expectedTiers[0].variant} className="tabular">
+                              {expectedTiers[0].label}
+                            </Badge>
+                            <Collapse in={expectedOpen}>
+                              <PersonTable rows={expectedTiers[0].rows} showDue={expectedTiers[0].showDue} showNoShow={expectedTiers[0].showNoShow} productLabel={productLabel} actions={{ onOpen }} />
+                            </Collapse>
+                          </Stack>
+                        ) : (
+                          <Tabs value={expectedTab ?? expectedTiers[0].key} onChange={setExpectedTab}>
+                            <Tabs.List>
+                              {expectedTiers.map((tier) => (
+                                <Tabs.Tab key={tier.key} value={tier.key}>
+                                  <Badge color={tier.color} variant={tier.variant} className="tabular">
+                                    {tier.label}
+                                  </Badge>
+                                </Tabs.Tab>
+                              ))}
+                            </Tabs.List>
+                            <Collapse in={expectedOpen}>
+                              {expectedTiers.map((tier) => (
+                                <Tabs.Panel key={tier.key} value={tier.key} pt="xs">
+                                  <PersonTable rows={tier.rows} showDue={tier.showDue} showNoShow={tier.showNoShow} productLabel={productLabel} actions={{ onOpen }} />
+                                </Tabs.Panel>
+                              ))}
+                            </Collapse>
+                          </Tabs>
+                        )}
+                      </Stack>
+                    )}
+                  </Stack>
+                </Card>
+                {Object.keys(needByProduct).length > 0 && (
+                  <Card withBorder shadow="none" padding="sm" radius="md">
+                    <Stack gap="xs">
+                      <Text size="sm" fw={600}>
+                        {t("session.prep")}
+                      </Text>
+                      <Group gap="xs" wrap="wrap">
+                        {Object.entries(needByProduct).map(([p, need]) => {
+                          const usable = usableByProduct[p] ?? 0;
+                          const short = usable - need;
+                          return (
+                            <Badge key={p} variant="light" color={short < 0 ? "red" : "teal"} className="tabular">
+                              {productLabel(p)} ×{formatCount(need, lang)}
+                              {short < 0 ? ` · ${t("session.short", { n: formatCount(-short, lang) })}` : ""}
+                            </Badge>
+                          );
+                        })}
+                      </Group>
+                    </Stack>
+                  </Card>
+                )}
               </Stack>
             )}
-            {backlog && backlog.children > 0 && (
-              <Text size="sm" c="dimmed" className="tabular">
-                {t("session.backlog", { n: formatCount(backlog.children, lang) })}
-              </Text>
+            {(isPast || isToday) && data?.results && (
+              <Card withBorder shadow="none" padding="sm" radius="md">
+                {resultsSection(isToday)}
+              </Card>
             )}
-            {due.length + probable.length + possible.length === 0 ? (
-              <Stack gap="xs">
-                {(data?.results?.childrenSeen ?? 0) === 0 && (
-                  <Text size="sm" c="dimmed">
-                    {t("session.empty")}
-                  </Text>
-                )}
-                {next && (
-                  <div>
-                    <Button size="compact-sm" variant="subtle" onClick={() => pick(next.date)}>
-                      {t("session.next", { date: formatCivilDate(next.date, lang), n: formatCount(next.children, lang) })}
-                    </Button>
-                  </div>
-                )}
-              </Stack>
-            ) : (
-              <Stack gap="md">
-                {due.length > 0 && (
-                  <Stack gap="xs">
-                    <Text size="sm" fw={600} className="tabular">
-                      {t("session.due", { n: formatCount(due.length, lang) })}
-                    </Text>
-                    <PersonTable rows={due.map(toRow)} showDue={false} productLabel={productLabel} actions={{ onOpen }} />
-                  </Stack>
-                )}
-                {probable.length > 0 && (
-                  <Stack gap="xs">
-                    <Text size="sm" fw={600} className="tabular">
-                      {t("session.probable", { n: formatCount(probable.length, lang) })}
-                    </Text>
-                    <PersonTable rows={probable.map(toRow)} showDue showNoShow productLabel={productLabel} actions={{ onOpen }} />
-                  </Stack>
-                )}
-                {possible.length > 0 && (
-                  <Stack gap="xs">
-                    <Text size="sm" fw={600} className="tabular">
-                      {t("session.possible", { n: formatCount(possible.length, lang) })}
-                    </Text>
-                    <PersonTable rows={possible.map(toRow)} showDue showNoShow productLabel={productLabel} actions={{ onOpen }} />
-                  </Stack>
-                )}
-              </Stack>
-            )}
-            </Stack>
-            )}
-            {(isPast || isToday) && resultsSection(isToday)}
           </Stack>
         )}
-      </Stack>
-    </Card>
+    </Stack>
   );
 }
 
