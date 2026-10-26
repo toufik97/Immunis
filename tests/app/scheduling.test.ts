@@ -275,7 +275,9 @@ describe("appointments booking gate", () => {
         overrideReason: "mother works Wednesdays",
       },
     });
-    expect(forced.statusCode).toBe(201);
+    expect(forced.statusCode).toBe(200);
+    // Same child + date + slot: the second booking merges into the pending row, never stacks.
+    expect(JSON.parse(forced.body).merged).toBe(true);
     const overrides = db
       .prepare("SELECT what, reason FROM overrides WHERE child_id = ?")
       .all(childId) as { what: string; reason: string }[];
@@ -400,11 +402,50 @@ describe("appointment rescheduling", () => {
       payload: { dueDate: "2026-12-03", slot: "AM", expectedProducts: ["PENTA"], overrideReason: "family asked Thursday" },
     });
     expect(forced.statusCode).toBe(200);
+    // Moving onto an occupied same-slot cell merges: one row left, override still audited.
+    expect(JSON.parse(forced.body).merged).toBe(true);
     const overrides = db
       .prepare("SELECT what, reason FROM overrides WHERE child_id = ?")
       .all(childId) as { what: string; reason: string }[];
     expect(overrides).toHaveLength(1);
     expect(overrides[0].what).toContain("appointment.reschedule");
+    db.close();
+  });
+});
+
+describe("appointment delete", () => {
+  async function setup() {
+    const db = openTestDb();
+    const app = buildApp(db, pack);
+    const h = await adminHeaders(db, app);
+    const child = createChild(db, { familyName: "D", givenName: "D", birthDate: "2026-01-01" });
+    return { db, app, h, childId: child.id };
+  }
+
+  it("deletes an upcoming pending row with a reason, audited; history is untouchable", async () => {
+    const { db, app, h, childId } = await setup();
+    const future = createAppointment(db, { childId, dueDate: "2100-01-01", expectedProducts: ["PENTA"] });
+    const noReason = await app.inject({ method: "DELETE", url: `/api/appointments/${future.id}`, headers: h, payload: {} });
+    expect(noReason.statusCode).toBe(400);
+    const ok = await app.inject({
+      method: "DELETE",
+      url: `/api/appointments/${future.id}`,
+      headers: h,
+      payload: { reason: "family moved" },
+    });
+    expect(ok.statusCode).toBe(200);
+    const overrides = db.prepare("SELECT what, reason FROM overrides WHERE child_id = ?").all(childId) as {
+      what: string;
+      reason: string;
+    }[];
+    expect(overrides).toEqual([{ what: "appointment.delete", reason: "family moved" }]);
+
+    const past = createAppointment(db, { childId, dueDate: "2020-01-01", expectedProducts: [] });
+    expect((await app.inject({ method: "DELETE", url: `/api/appointments/${past.id}`, headers: h, payload: { reason: "x" } })).statusCode).toBe(400);
+    const kept = createAppointment(db, { childId, dueDate: "2100-02-01", expectedProducts: [] });
+    db.prepare("UPDATE appointments SET kept = 1 WHERE id = ?").run(kept.id);
+    expect((await app.inject({ method: "DELETE", url: `/api/appointments/${kept.id}`, headers: h, payload: { reason: "x" } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "DELETE", url: "/api/appointments/missing", headers: h, payload: { reason: "x" } })).statusCode).toBe(404);
     db.close();
   });
 });

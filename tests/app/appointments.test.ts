@@ -3,10 +3,14 @@ import { openTestDb } from "./db-helper";
 import { createChild } from "../../src/infra/repos/children";
 import { recordEncounter } from "../../src/infra/repos/encounters";
 import {
+  appendProducts,
   createAppointment,
+  deleteAppointment,
+  findPendingByChildDateSlot,
   listByChild,
   listDue,
   listNoShows,
+  unionProducts,
   updateAppointment,
 } from "../../src/infra/repos/appointments";
 import { agendaFor, noShowsFor } from "../../src/app/sessions";
@@ -87,6 +91,45 @@ describe("appointments and no-shows", () => {
     expect(listByChild(db, a.id).map((r) => r.dueDate)).toEqual(["2026-10-01", "2026-10-05"]);
     expect(listByChild(db, b.id)).toHaveLength(1);
     expect(listByChild(db, "missing")).toEqual([]);
+    db.close();
+  });
+
+  it("finds same-day same-slot pending rows but never across slots or children", () => {
+    const db = openTestDb();
+    const a = createChild(db, { familyName: "A", givenName: "A", birthDate: "2025-01-01" });
+    const b = createChild(db, { familyName: "B", givenName: "B", birthDate: "2025-01-01" });
+    const am = createAppointment(db, { childId: a.id, dueDate: "2026-11-11", slot: "AM", expectedProducts: ["PENTA"] });
+    createAppointment(db, { childId: a.id, dueDate: "2026-11-11", slot: "PM", expectedProducts: ["BCG"] });
+    createAppointment(db, { childId: b.id, dueDate: "2026-11-11", slot: "AM", expectedProducts: ["BCG"] });
+    expect(findPendingByChildDateSlot(db, a.id, "2026-11-11", "AM")?.id).toBe(am.id);
+    expect(findPendingByChildDateSlot(db, a.id, "2026-11-11", "PM")?.id).not.toBe(am.id);
+    expect(findPendingByChildDateSlot(db, b.id, "2026-11-11", "AM")?.id).not.toBe(am.id);
+    expect(findPendingByChildDateSlot(db, a.id, "2026-11-12", "AM")).toBeNull();
+    // Resolved rows never match: kept history is not a merge target.
+    db.prepare("UPDATE appointments SET kept = 1 WHERE id = ?").run(am.id);
+    expect(findPendingByChildDateSlot(db, a.id, "2026-11-11", "AM")).toBeNull();
+    db.close();
+  });
+
+  it("appends products as a union without duplicates", () => {
+    expect(unionProducts(["PENTA"], ["BCG", "PENTA"])).toEqual(["PENTA", "BCG"]);
+    const db = openTestDb();
+    const a = createChild(db, { familyName: "A", givenName: "A", birthDate: "2025-01-01" });
+    const appt = createAppointment(db, { childId: a.id, dueDate: "2026-11-11", slot: "AM", expectedProducts: ["PENTA"] });
+    const merged = appendProducts(db, appt.id, ["BCG", "PENTA"]);
+    expect(merged?.expectedProducts).toEqual(["PENTA", "BCG"]);
+    expect(listByChild(db, a.id)).toHaveLength(1);
+    expect(appendProducts(db, "missing", ["BCG"])).toBeNull();
+    db.close();
+  });
+
+  it("deletes a row outright", () => {
+    const db = openTestDb();
+    const a = createChild(db, { familyName: "A", givenName: "A", birthDate: "2025-01-01" });
+    const appt = createAppointment(db, { childId: a.id, dueDate: "2026-11-11", expectedProducts: ["PENTA"] });
+    expect(deleteAppointment(db, appt.id)).toBe(true);
+    expect(listByChild(db, a.id)).toEqual([]);
+    expect(deleteAppointment(db, appt.id)).toBe(false);
     db.close();
   });
 });

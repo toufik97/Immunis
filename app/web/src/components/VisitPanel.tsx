@@ -97,6 +97,16 @@ export default function VisitPanel({ child, products, programs, user, expectedPr
   const [editIssues, setEditIssues] = useState<SchedulingIssue[]>([]);
   const [editReason, setEditReason] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualDate, setManualDate] = useState("");
+  const [manualSlot, setManualSlot] = useState<"AM" | "PM">("AM");
+  const [manualProducts, setManualProducts] = useState<string[]>([]);
+  const [manualIssues, setManualIssues] = useState<SchedulingIssue[]>([]);
+  const [manualReason, setManualReason] = useState("");
+  const [savingManual, setSavingManual] = useState(false);
   const [correction, setCorrection] = useState<CorrectionModal | null>(null);
   const [correctionReason, setCorrectionReason] = useState("");
   const [correcting, setCorrecting] = useState(false);
@@ -168,7 +178,9 @@ export default function VisitPanel({ child, products, programs, user, expectedPr
         expectedProducts: editProducts,
         overrideReason: override ? editReason || undefined : undefined,
       });
-      setAppointments((as) => as.map((a) => (a.id === id ? updated : a)));
+      // Reschedule may merge into a same-day row: refresh instead of patching in place.
+      if ((updated as Appointment & { merged?: boolean }).merged) await fetchHistory();
+      else setAppointments((as) => as.map((a) => (a.id === id ? updated : a)));
       setEditingId(null);
       setEditIssues([]);
       setEditReason("");
@@ -258,15 +270,22 @@ export default function VisitPanel({ child, products, programs, user, expectedPr
     };
   });
 
-  // Guard against losing unsaved doses on navigation.
+  // Guard against losing unsaved doses or a visit recorded without its appointment.
+  const rdvPending = rdv !== null || skipped.length > 0;
   useEffect(() => {
-    if (doses.length === 0) return;
+    if (doses.length === 0 && !rdvPending) return;
     const handler = (e: BeforeUnloadEvent) => {
       e.preventDefault();
     };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
-  }, [doses.length]);
+  }, [doses.length, rdvPending]);
+
+  /** Leaving (X) with the post-record appointment still pending: confirm, the nurse may forget it. */
+  function handleClose(): void {
+    if (rdvPending && !window.confirm(t("visit.rdvUnsaved"))) return;
+    onClose();
+  }
 
   const showRdvCard = rdv !== null || skipped.length > 0;
 
@@ -284,11 +303,60 @@ export default function VisitPanel({ child, products, programs, user, expectedPr
   }
 
   /** Catch-up booked on its own day: the next visit is still pending. */
-  function catchupBooked(): void {
+  async function catchupBooked(): Promise<void> {
     setSkipped([]);
+    await fetchHistory();
     const done = t("visit.rdvRecorded");
     setMsg(done);
     notifications.show({ title: done, message: `${child.givenName} ${child.familyName}`, color: "teal", icon: <IconCheck size={16} aria-hidden="true" /> });
+  }
+
+  async function submitDelete(): Promise<void> {
+    if (!deletingId || !deleteReason.trim()) return;
+    setDeleting(true);
+    try {
+      await api.deleteAppointment(deletingId, deleteReason.trim());
+      setDeletingId(null);
+      setDeleteReason("");
+      await fetchHistory();
+      setMsg(t("visit.apptDeleted"));
+      onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function saveManual(override = false): Promise<void> {
+    if (!manualDate || manualProducts.length === 0) return;
+    setErr("");
+    setSavingManual(true);
+    try {
+      await api.createAppointment({
+        childId: child.id,
+        dueDate: manualDate,
+        expectedProducts: manualProducts,
+        slot: manualSlot,
+        overrideReason: override ? manualReason || undefined : undefined,
+        engineDate: manualDate,
+      });
+      setManualOpen(false);
+      setManualDate("");
+      setManualSlot("AM");
+      setManualProducts([]);
+      setManualIssues([]);
+      setManualReason("");
+      await fetchHistory();
+      setMsg(t("visit.rdvRecorded"));
+      onDone();
+    } catch (e) {
+      const iss = (e as Error & { issues?: SchedulingIssue[] }).issues;
+      if (iss && iss.length > 0 && !override) setManualIssues(iss);
+      else setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingManual(false);
+    }
   }
 
   const blockedByScreening = screening !== "VACCINATE" && doses.length > 0;
@@ -544,12 +612,109 @@ export default function VisitPanel({ child, products, programs, user, expectedPr
     <Grid>
       <Grid.Col span={{ base: 12, lg: 8 }}>
         <Stack gap="sm">
-          <ChildCard child={child} onClose={onClose} />
+          <ChildCard child={child} onClose={handleClose} />
           <Card>
             <Stack gap="xs">
-              <Title order={3} size="h5">
-                {t("visit.apptTitle")}
-              </Title>
+              <Group justify="space-between" align="center">
+                <Title order={3} size="h5">
+                  {t("visit.apptTitle")}
+                </Title>
+                {canManageAppt && (
+                  <ActionIcon
+                    variant="light"
+                    aria-label={t("visit.apptAdd")}
+                    onClick={() => {
+                      setManualDate(todayStr);
+                      setManualSlot("AM");
+                      setManualProducts([]);
+                      setManualIssues([]);
+                      setManualReason("");
+                      setManualOpen((o) => !o);
+                    }}
+                  >
+                    <IconPlus size={16} aria-hidden="true" />
+                  </ActionIcon>
+                )}
+              </Group>
+              {manualOpen && (
+                <Paper withBorder p="xs" radius="md">
+                  <Stack gap="xs">
+                    <Group align="end" wrap="wrap">
+                      <DateField
+                        label={t("visit.nextRdv")}
+                        name="apptManualDate"
+                        value={manualDate}
+                        min={todayStr}
+                        onChange={(v) => {
+                          setManualDate(v);
+                          setManualIssues([]);
+                        }}
+                      />
+                      <SegmentedControl
+                        size="xs"
+                        aria-label={t("visit.rdvSlot")}
+                        value={manualSlot}
+                        onChange={(v) => {
+                          setManualSlot(v as "AM" | "PM");
+                          setManualIssues([]);
+                        }}
+                        data={[
+                          { label: "AM", value: "AM" },
+                          { label: "PM", value: "PM" },
+                        ]}
+                      />
+                      <Button size="compact-sm" onClick={() => void saveManual()} loading={savingManual} disabled={manualProducts.length === 0}>
+                        {t("visit.rdvConfirm")}
+                      </Button>
+                      <Button size="compact-sm" variant="default" onClick={() => setManualOpen(false)}>
+                        {t("visit.apptCancel")}
+                      </Button>
+                    </Group>
+                    <MultiSelect
+                      label={t("visit.apptProducts")}
+                      name="apptManualProducts"
+                      aria-label={t("visit.apptProducts")}
+                      searchable
+                      limit={20}
+                      value={manualProducts}
+                      onChange={(v) => {
+                        setManualProducts(v);
+                        setManualIssues([]);
+                      }}
+                      data={products.map((p) => ({ value: p.id, label: p.label_fr ?? p.id }))}
+                    />
+                    {manualIssues.length > 0 && (
+                      <Alert color="yellow" title={t("visit.gateTitle")}>
+                        <List size="sm" mt="xs">
+                          {manualIssues.map((g, idx) => (
+                            <List.Item key={idx} className="tabular">
+                              {schedText(g)}{" "}
+                              <Text span size="xs" c="dimmed" translate="no">
+                                {g.code}
+                              </Text>
+                            </List.Item>
+                          ))}
+                        </List>
+                        <Stack gap="xs" mt="sm">
+                          <TextInput
+                            label={t("visit.overrideReason")}
+                            name="apptManualOverrideReason"
+                            autoComplete="off"
+                            required
+                            value={manualReason}
+                            onChange={(e) => setManualReason(e.target.value)}
+                          />
+                          <div>
+                            <Button size="sm" color="yellow" onClick={() => void saveManual(true)} loading={savingManual} disabled={!manualReason}>
+                              {t("visit.rdvOverride")}
+                            </Button>
+                          </div>
+                        </Stack>
+                      </Alert>
+                    )}
+                  </Stack>
+                </Paper>
+              )}
               {appointments.length === 0 ? (
                 <Text size="sm" c="dimmed">
                   {t("visit.apptNone")}
@@ -570,9 +735,25 @@ export default function VisitPanel({ child, products, programs, user, expectedPr
                           ))}
                         </Group>
                         {canManageAppt && editingId !== a.id && (
-                          <Button size="compact-xs" variant="default" onClick={() => startEdit(a)}>
-                            {t("visit.apptEdit")}
-                          </Button>
+                          <Menu position="bottom-end">
+                            <Menu.Target>
+                              <ActionIcon variant="subtle" aria-label={t("visit.apptTitle")}>
+                                <IconDots size={16} aria-hidden="true" />
+                              </ActionIcon>
+                            </Menu.Target>
+                            <Menu.Dropdown>
+                              <Menu.Item onClick={() => startEdit(a)}>{t("visit.apptEdit")}</Menu.Item>
+                              <Menu.Item
+                                color="red"
+                                onClick={() => {
+                                  setDeleteReason("");
+                                  setDeletingId(a.id);
+                                }}
+                              >
+                                {t("visit.apptDelete")}
+                              </Menu.Item>
+                            </Menu.Dropdown>
+                          </Menu>
                         )}
                       </Group>
                       {editingId === a.id && (
@@ -675,6 +856,29 @@ export default function VisitPanel({ child, products, programs, user, expectedPr
               )}
             </Stack>
           </Card>
+          <Modal opened={deletingId !== null} onClose={() => setDeletingId(null)} title={t("visit.apptDeleteTitle")}>
+            <Stack gap="sm">
+              <Alert color="red" icon={<IconAlertTriangle size={16} aria-hidden="true" />}>
+                {t("visit.apptDeleteWarn")}
+              </Alert>
+              <TextInput
+                label={t("visit.apptDeleteReason")}
+                name="apptDeleteReason"
+                autoComplete="off"
+                required
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+              />
+              <Group justify="end">
+                <Button variant="default" onClick={() => setDeletingId(null)}>
+                  {t("visit.apptCancel")}
+                </Button>
+                <Button color="red" onClick={() => void submitDelete()} loading={deleting} disabled={!deleteReason.trim()}>
+                  {t("visit.apptDeleteConfirm")}
+                </Button>
+              </Group>
+            </Stack>
+          </Modal>
           <Card>
             <Stack gap="sm">
               <Group justify="space-between" wrap="wrap">
@@ -1200,6 +1404,7 @@ export default function VisitPanel({ child, products, programs, user, expectedPr
                   }}
                   onBooked={() => {
                     setRdv(null);
+                    void fetchHistory();
                     setMsg(t("visit.rdvRecorded"));
                     onFinished();
                   }}

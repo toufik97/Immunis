@@ -74,6 +74,53 @@ export function updateAppointment(
   return toAppointment(db.prepare("SELECT * FROM appointments WHERE id = ?").get(id) as AppointmentRow);
 }
 
+/** Pending appointment on the same child + date + slot (same-day duplicates merge, never stack). */
+export function findPendingByChildDateSlot(
+  db: Database.Database,
+  childId: string,
+  dueDate: string,
+  slot: "AM" | "PM"
+): Appointment | null {
+  const row = db
+    .prepare(
+      "SELECT * FROM appointments WHERE child_id = ? AND due_date = ? AND (slot IS NULL OR slot = ?) AND kept IS NULL LIMIT 1"
+    )
+    .get(childId, dueDate, slot) as AppointmentRow | undefined;
+  // NULL slot is legacy AM: only match when asking for AM.
+  if (!row) return null;
+  if (row.slot !== null && row.slot !== slot) return null;
+  if (row.slot === null && slot !== "AM") return null;
+  return toAppointment(row);
+}
+
+/** Product union preserving existing order, then new ids in arrival order. */
+export function unionProducts(existing: string[], incoming: string[]): string[] {
+  const seen = new Set(existing);
+  const out = [...existing];
+  for (const p of incoming) {
+    if (p && !seen.has(p)) {
+      seen.add(p);
+      out.push(p);
+    }
+  }
+  return out;
+}
+
+/** Append products to a pending appointment (merge target for same-day duplicates). */
+export function appendProducts(db: Database.Database, id: string, products: string[]): Appointment | null {
+  const row = db.prepare("SELECT * FROM appointments WHERE id = ?").get(id) as AppointmentRow | undefined;
+  if (!row) return null;
+  const current = toAppointment(row);
+  const merged = unionProducts(current.expectedProducts, products);
+  db.prepare("UPDATE appointments SET expected_products = ? WHERE id = ?").run(JSON.stringify(merged), id);
+  return toAppointment(db.prepare("SELECT * FROM appointments WHERE id = ?").get(id) as AppointmentRow);
+}
+
+/** Delete one pending appointment; history (kept/missed/past) is immutable — enforced by callers. */
+export function deleteAppointment(db: Database.Database, id: string): boolean {
+  return db.prepare("DELETE FROM appointments WHERE id = ?").run(id).changes > 0;
+}
+
 /** All appointments for one child, oldest first (child file view). */
 export function listByChild(db: Database.Database, childId: string): Appointment[] {
   const rows = db

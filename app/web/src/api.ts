@@ -374,7 +374,7 @@ export const api = {
       headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify(body),
     });
-    const data = (await res.json()) as Appointment & { error?: string; issues?: SchedulingIssue[] };
+    const data = (await res.json()) as Appointment & { error?: string; issues?: SchedulingIssue[]; merged?: boolean };
     if (!res.ok) {
       const e = new Error(data.error ?? `Request failed (${res.status})`) as Error & {
         issues?: SchedulingIssue[];
@@ -382,8 +382,10 @@ export const api = {
       e.issues = data.issues;
       throw e;
     }
-    return data as Appointment;
+    return data as Appointment & { merged?: boolean };
   },
+  deleteAppointment: (id: string, reason: string) =>
+    req<{ ok: boolean }>(`/api/appointments/${id}`, { method: "DELETE", body: JSON.stringify({ reason }) }),
   scheduling: () =>
     req<{ rules: SchedulingRule[]; horizonDays: number | null }>("/api/scheduling"),
   suggestSlot: (from: string, products: string[], slot: "AM" | "PM" = "AM") =>

@@ -19,7 +19,7 @@ import {
   CorrectionError,
 } from "../app/encounter-correction";
 import { addLot, listLots, checkLotUsable, usableLotsFor } from "../infra/repos/stock";
-import { createAppointment, listByChild, updateAppointment } from "../infra/repos/appointments";
+import { appendProducts, createAppointment, deleteAppointment, findPendingByChildDateSlot, listByChild, updateAppointment } from "../infra/repos/appointments";
 import { growthFor } from "../app/child-growth";
 import { noShowsFor, sessionFor, agendaFor } from "../app/sessions";
 import { insertOverride, listOverridesByChild, listRecentOverrides, insertAuditLog, queryAuditLog, listAuditActions } from "../infra/repos/audit";
@@ -800,6 +800,22 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
       if (issues.length > 0 && !input.overrideReason) {
         return reply.code(409).send({ error: "Booking breaks scheduling rules", issues });
       }
+      const existing = findPendingByChildDateSlot(db, input.childId, input.dueDate, input.slot);
+      if (existing) {
+        const merged = appendProducts(db, existing.id, input.expectedProducts);
+        if (issues.length > 0) {
+          insertOverride(db, {
+            childId: input.childId,
+            author: me!.username,
+            what: `appointment.scheduling: ${issues.map((i) => i.code).join(", ")}`,
+            reason: input.overrideReason!,
+            createdAt: nowIso(),
+          });
+          log(me!, me!.username, "appointment.override", `${input.dueDate} ${input.slot}: ${input.overrideReason}`, input.childId);
+        }
+        log(me!, me!.username, "appointment.merge", `${input.childId} due ${input.dueDate} ${input.slot} merged`, input.childId);
+        return { ...(merged ?? existing), merged: true };
+      }
       const appt = createAppointment(db, input);
       if (issues.length > 0) {
         insertOverride(db, {
@@ -958,6 +974,24 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
       if (issues.length > 0 && !input.overrideReason) {
         return reply.code(409).send({ error: "Booking breaks scheduling rules", issues });
       }
+      const sibling = findPendingByChildDateSlot(db, row.child_id, input.dueDate, input.slot);
+      if (sibling && sibling.id !== id) {
+        // Reschedule lands on an existing pending row: merge products into it, drop the moved row.
+        const merged = appendProducts(db, sibling.id, input.expectedProducts);
+        deleteAppointment(db, id);
+        if (issues.length > 0) {
+          insertOverride(db, {
+            childId: row.child_id,
+            author: me!.username,
+            what: `appointment.reschedule: ${issues.map((i) => i.code).join(", ")}`,
+            reason: input.overrideReason!,
+            createdAt: nowIso(),
+          });
+          log(me!, me!.username, "appointment.override", `${row.due_date} → ${input.dueDate} ${input.slot}: ${input.overrideReason}`, row.child_id);
+        }
+        log(me!, me!.username, "appointment.merge", `${row.child_id} ${row.due_date} → ${input.dueDate} ${input.slot} merged`, row.child_id);
+        return { ...(merged ?? sibling), merged: true };
+      }
       const updated = updateAppointment(db, id, input);
       if (!updated) {
         reply.code(404).send({ error: "Appointment not found" });
@@ -976,6 +1010,43 @@ export function buildApp(db: Database.Database, pack: SchedulePack): FastifyInst
         log(me!, me!.username, "appointment.reschedule", `${row.child_id} ${row.due_date} → ${input.dueDate}`, row.child_id);
       }
       return updated;
+    } catch (e) {
+      sendError(reply, e);
+    }
+  });
+
+  // Upcoming pending rows can be deleted with a reason (audited); history never leaves the ledger.
+  app.delete("/api/appointments/:id", async (req, reply) => {
+    try {
+      const me = currentUser(req as never);
+      if (!need(reply as never, me, "appointment.manage")) return;
+      const { reason } = z.object({ reason: z.string().min(1) }).parse(req.body ?? {});
+      const id = (req.params as Record<string, string>).id;
+      const row = db.prepare("SELECT child_id, due_date, kept FROM appointments WHERE id = ?").get(id) as
+        | { child_id: string; due_date: string; kept: number | null }
+        | undefined;
+      if (!row) {
+        reply.code(404).send({ error: "Appointment not found" });
+        return;
+      }
+      if (row.kept !== null) {
+        reply.code(400).send({ error: "Resolved appointments cannot be deleted" });
+        return;
+      }
+      if (row.due_date < todayLocal()) {
+        reply.code(400).send({ error: "Past appointments cannot be deleted" });
+        return;
+      }
+      insertOverride(db, {
+        childId: row.child_id,
+        author: me!.username,
+        what: "appointment.delete",
+        reason,
+        createdAt: nowIso(),
+      });
+      deleteAppointment(db, id);
+      log(me!, me!.username, "appointment.delete", `${row.due_date}: ${reason}`, row.child_id);
+      return { ok: true };
     } catch (e) {
       sendError(reply, e);
     }
